@@ -5,25 +5,24 @@ from discord.ext import commands
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# ضع آي دي سيرفرك هنا بين القوسين بدلاً من الصفر
 MY_GUILD = discord.Object(id=1297951366261510186)
 
 @bot.event
 async def on_ready():
+    print(f'Logged in as {bot.user}')
     try:
         bot.tree.copy_global_to(guild=MY_GUILD)
         synced = await bot.tree.sync(guild=MY_GUILD)
-        print(f"تمت مزامنة {len(synced)} أمر في السيرفر فوراً.")
+        print(f"Synced {len(synced)} commands successfully.")
     except Exception as e:
-        print(e)
-    print(f'البوت شغال الآن: {bot.user}')
+        print(f"Sync error: {e}")
 
-@bot.tree.command(name="test", description="أمر تجريبي لفحص البوت")
+@bot.tree.command(name="test", description="Test bot response")
 async def test(interaction: discord.Interaction):
-    await interaction.response.send_message("شغال 100% 🎯")
+    await interaction.response.send_message("Bot is working 100%!")
 
-@bot.tree.command(name="لوحة_المطور", description="لوحة التحكم الخاصة بالمطور")
-async def developer_board(interaction: discord.Interaction):
-    await interaction.response.send_message("أهلاً بك في لوحة المطور 🛠️")
+@bot.tree.command(name="dev", description="Developer panel")
+async def dev(interaction: discord.Interaction):
+    await interaction.response.send_message("Welcome to developer panel!")
 
 bot.run(os.getenv('TOKEN'))
