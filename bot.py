@@ -14,4 +14,4 @@ async def on_ready():
 @bot.command()
 async def test(ctx):
     await ctx.send('Hello! The bot is working 100% 🎯')
-bot.run('MTU0MjgwODk1NDQyNDUyNDg4MA.GRi9CG.L7VLA_hJ0yP4aI47-EVQGa0jDFcBuCYTNhWANQ')
+bot.run('MTU0MjgwODk1NDQyNDUyNDg4MA.GmiKrE.DhDOJ-S1HNe2Q3FcBzbdufvst82CvkA8jwcRJ4')
