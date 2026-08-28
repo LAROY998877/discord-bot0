@@ -14,5 +14,4 @@ async def on_ready():
 @bot.command()
 async def test(ctx):
     await ctx.send('Hello! The bot is working 100% 🎯')
-
-bot.run(os.getenv('DISCORD_TOKEN'))
+bot.run("MTU0MjgwODk1NDQyNDUyNDg4MA.GqLRZT.vYegxdcCoSYqDW55Wt7i_oR5qOdTMGO8h8tqKE")
