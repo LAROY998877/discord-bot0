@@ -13,11 +13,10 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 DEVELOPER_ID = 1103985971638325269
 EXTRA_DEVS = set()
 
-# قاعدة بيانات وهمية لتخزين البيانات الأساسية
+# قواعد البيانات المؤقتة
 USER_ECONOMY = {}
-USER_STATS = {}
-USER_EQUIPPED = {}
 REGISTERED_USERS = {}
+USER_EQUIPPED = {}
 GUILDS_DATA = {}
 
 def get_user_economy(user_id):
@@ -41,10 +40,10 @@ class CharacterSelectView(discord.ui.View):
     @discord.ui.select(
         placeholder="اختر شخصيتك الأساسية...",
         options=[
-            discord.SelectOption(label="محارب", description="قوة دفاعية وعضلية عالية", emoji="🛡️"),
-            discord.SelectOption(label="مقاتل", description="أضرار هجومية سريعة وعالية", emoji="⚔️"),
-            discord.SelectOption(label="ساحر", description="مهارات سحرية ودمار واسع", emoji="🔮"),
-            discord.SelectOption(label="قاتل", description="سرعة فائقة وضربات حرجة", emoji="🗡️")
+            discord.SelectOption(label="محارب", description="قوة دفاعية وعضلية عالية ومتينة", emoji="🛡️"),
+            discord.SelectOption(label="مقاتل", description="أضرار هجومية سريعة وعالية جداً", emoji="⚔️"),
+            discord.SelectOption(label="ساحر", description="مهارات سحرية ودمار واسع المدى", emoji="🔮"),
+            discord.SelectOption(label="قاتل", description="سرعة فائقة وضربات حرجة قاتلة", emoji="🗡️")
         ]
     )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -66,14 +65,15 @@ async def register(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=CharacterSelectView(), ephemeral=True)
 
 
-# ==================== 2. نظام النقابات (القديم + المطور) ====================
+# ==================== 2. نظام النقابات ====================
 @bot.tree.command(name="انشاء_نقابة", description="إنشاء نقابة جديدة خاصة بك")
 @app_commands.describe(اسم_النقابة="اسم النقابة التي تريد تأسيسها")
 async def create_guild(interaction: discord.Interaction, اسم_النقابة: str):
     user_id = interaction.user.id
-    if user_id in GUILDS_DATA.values():
-        await interaction.response.send_message("❌ أنت منضم أو تمتلك نقابة بالفعل!", ephemeral=True)
-        return
+    for g_name, g_info in GUILDS_DATA.items():
+        if user_id in g_info["members"]:
+            await interaction.response.send_message("❌ أنت منضم أو تمتلك نقابة بالفعل!", ephemeral=True)
+            return
     
     GUILDS_DATA[اسم_النقابة] = {"owner": user_id, "members": [user_id]}
     await interaction.response.send_message(f"🏰 تم تأسيس نقابة **{اسم_النقابة}** بنجاح وأنت قائدها!", ephemeral=False)
@@ -94,7 +94,7 @@ async def my_guild(interaction: discord.Interaction):
     await interaction.response.send_message(f"🛡️ أنت تنتمي إلى نقابة: **{found_guild}**", ephemeral=True)
 
 
-# ==================== 3. أمر الملف الشخصي (المعدل المطلوب) ====================
+# ==================== 3. أمر الملف الشخصي (ظاهر للجميع وبدون تعديل لغيرك) ====================
 @bot.tree.command(name="الملف", description="عرض ملفك الشخصي (مرئي للعامة وبدون تعديل لغيرك)")
 async def profile(interaction: discord.Interaction):
     target = interaction.user
@@ -108,7 +108,7 @@ async def profile(interaction: discord.Interaction):
     embed.add_field(name="💰 رصيد العملات:", value=f"`{eco['coins']}` عملة", inline=False)
     embed.add_field(name="🛡️ العتاد المُركب:", value=f"`{equipped}`", inline=False)
     
-    # يظهر للعامة ولصاحبه فقط، بدون أي قوائم معاينة للآخرين
+    # يظهر للعامة ولصاحبه، بدون أي أزرار أو خيارات لمعاينة الآخرين
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
@@ -141,7 +141,7 @@ class BattleAcceptView(discord.ui.View):
         self.opponent = opponent
         self.battle_channel = battle_channel
 
-    @discord.ui.button(label="⚔️ دخول المعركة", style=discord.ButtonStyle.green)
+    @discord.ui.button(label="⚔️ دخول المعركة وقبول التحدي", style=discord.ButtonStyle.green)
     async def accept_battle(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.opponent:
             await interaction.response.send_message("❌ أنت لست المستهدف بهذا التحدي!", ephemeral=True)
@@ -202,18 +202,21 @@ async def battles(interaction: discord.Interaction, الخصم: discord.Member):
     await interaction.response.send_message(f"✅ تم إنشاء غرفة المعركة بنجاح: {battle_channel.mention}", ephemeral=True)
 
 
-# ==================== 6. المتاجر (معدات كثيرة ومختلفة المعدلات) ====================
+# ==================== 6. المتاجر (معدات هواي وبمعدلات مختلفة كلياً) ====================
 NORMAL_SHOP = {
     "سيف التدريب الخشبي": {"price": 50, "attack": 10, "desc": "سيف خفيف للتدريب الأساسي."},
     "خنجر الصياد السريع": {"price": 120, "attack": 25, "desc": "خنجر رشق سريع الطعنات."},
     "سيف الفارس الفولاذي": {"price": 300, "attack": 55, "desc": "سيف حديدي متين وقوي."},
     "رمح الحراس": {"price": 450, "attack": 75, "desc": "رمح طويل لإبعاد الأعداء."},
+    "سيف الصقور الحاد": {"price": 550, "attack": 95, "desc": "سيف سريع وخفيف بحد كالصقر."},
     "درع الجلد الطبيعي": {"price": 100, "defense": 20, "desc": "درع يحمي من الضربات الخفيفة."},
     "درع الفولاذ المقاوم": {"price": 350, "defense": 60, "desc": "درع صلب يمتص الصدمات القوية."},
     "خوذة الحراسة الملكية": {"price": 200, "defense": 35, "desc": "خوذة تحمي الرأس من الإصابات."},
     "قوس الرماة الخشبي": {"price": 250, "attack": 40, "desc": "قوس تقليدي بدقة متوسطة."},
     "فأس الحطاب الثقيلة": {"price": 500, "attack": 90, "desc": "فأس ضخمة تحدث أضراراً بالغة."},
-    "درع النحاس المرصع": {"price": 280, "defense": 45, "desc": "درع نحاسي جيد ضد الضربات الحادة."}
+    "درع النحاس المرصع": {"price": 280, "defense": 45, "desc": "درع نحاسي جيد ضد الضربات الحادة."},
+    "سيف الحرس الملكي": {"price": 700, "attack": 120, "desc": "سيف رسمي مصقول بعناية فائقة."},
+    "ترس الدفاع العسكري": {"price": 480, "defense": 85, "desc": "ترس ثقيل يعيق ضربات الأعداء."}
 }
 
 DARK_SHOP = {
@@ -221,10 +224,14 @@ DARK_SHOP = {
     "خنجر التنين الأسود": {"price": 2200, "attack": 310, "desc": "مصنوع من مخالب التنانين القديمة."},
     "سيف الموت الأبدي": {"price": 4000, "attack": 500, "desc": "يشع طاقة مظلمة تفتك بالأرواح."},
     "صولجان الخراب المظلم": {"price": 6500, "attack": 750, "desc": "سلاح الدمار الشامل في الحروب."},
+    "شفرة الفوضى الدامية": {"price": 8200, "attack": 950, "desc": "تتحكم بدماء الخصوم وتسحقهم."},
+    "رمح الشياطين الفتاك": {"price": 5300, "attack": 620, "desc": "رمح طويل مغطى بلعنات الشياطين."},
     "درع الروح التائهة": {"price": 1800, "defense": 300, "desc": "يحاط بدرع شبحي يصد الضربات السحرية."},
     "عباءة التخفي المطلق": {"price": 2500, "defense": 400, "desc": "تجعل مرتديها غير مرئي في الظلام."},
     "خوذة التنين المرعبة": {"price": 3000, "defense": 500, "desc": "تبث الرعب في قلوب الخصوم قبل النزال."},
-    "درع الفوضى المطلقة": {"price": 8000, "defense": 1200, "desc": "درع أسطوري لا يمكن اختراقه أبداً."}
+    "درع الفوضى المطلقة": {"price": 8000, "defense": 1200, "desc": "درع أسطوري لا يمكن اختراقه أبداً."},
+    "مطرقة عمالقة التيتان": {"price": 11000, "attack": 1500, "desc": "تهز الأرض وتدمر الحصون بضربة واحدة."},
+    "درع الظلال المظلم": {"price": 9500, "defense": 1400, "desc": "يعكس الهجمات ويدمر طاقة المهاجم."}
 }
 
 def format_shop_items(shop_dict):
@@ -245,4 +252,4 @@ async def dark_shop_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🖤 متجر الظلام الأسطوري", description=format_shop_items(DARK_SHOP), color=0x992d22)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-bot.run(os.getenv('TOKEN')
+bot.run(os.getenv('TOKEN'))
