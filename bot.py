@@ -17,4 +17,4 @@ async def test(ctx):
   await ctx.send('Hello! The bot is working 100% 🎉')
 
 
-bot.run("MTU0MjgwODk1NDQyNDUyNDg4MA.GzxQ0P.rMjozqeQcZaEXrBlIMsu4FVhTSoC1yt_0WXxKA")
+bot.run("MTU0MjgwODk1NDQyNDUyNDg4MA.GXpewo.kEVXf0jj3YEFdYjHnZd9OcLXVPxagxkZ5Tv9Bs")
