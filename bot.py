@@ -62,7 +62,7 @@ HEROES = {
         "image": "https://images.unsplash.com/photo-1509281373149-e957c6296406?q=80&w=1000&auto=format&fit=crop"
     },
     "blood_blade": {
-        "name": "قاطعة الدماء 🗡️ (Blood Blade)",
+        "name": "🗡️ قاطعة الدماء (Blood Blade)",
         "gender": "أنثى ♀️",
         "power": "93/100",
         "skills": "🩸 رقصة الدماء | ⚡ القفزة السريعة | 🗡️ الطعنة المزدوجة",
@@ -73,14 +73,26 @@ HEROES = {
 
 @bot.event
 async def on_ready():
-    try:
-        synced = await bot.tree.sync()
-        print(f"✅ تم الاتصال بالمستخدم {bot.user} ومزامنة {len(synced)} أمر بنجاح!")
-    except Exception as e:
-        print(f"❌ خطأ بالمزامنة: {e}")
+    print(f"🟢 البوت يعمل الآن باسم: {bot.user}")
 
-# ==================== 1. أمر الملف الشخصي ====================
-@bot.tree.command(name="الملف", description="عرض بطاقتك الشخصية بتصميم فخم وخلفية أسطورية")
+# أمر المزامنة الكتابي لتحديث الأوامر فوراً
+@bot.command(name="sync")
+async def sync_commands(ctx):
+    try:
+        bot.tree.copy_global_to(guild=ctx.guild)
+        synced = await bot.tree.sync(guild=ctx.guild)
+        await ctx.send(f"✅ تم تحديث ومزامنة `{len(synced)}` أوامر فوراً في هذا السيرفر!")
+    except Exception as e:
+        await ctx.send(f"❌ حدث خطأ أثناء المزامنة: {e}")
+
+# 1. أمر اختبار الاتصال (Ping)
+@bot.tree.command(name="ping", description="فحص سرعة استجابة البوت")
+async def ping(interaction: discord.Interaction):
+    latency = round(bot.latency * 1000)
+    await interaction.response.send_message(f"🏓 Pong! سرعة الاتصال: `{latency}ms`", ephemeral=True)
+
+# 2. أمر الملف الشخصي
+@bot.tree.command(name="الملف", description="عرض بطاقتك الشخصية بتصميم فخم")
 async def profile(interaction: discord.Interaction, العضو: discord.Member = None):
     target = العضو or interaction.user
     bg_url = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=1000&auto=format&fit=crop"
@@ -99,7 +111,7 @@ async def profile(interaction: discord.Interaction, العضو: discord.Member =
     
     await interaction.response.send_message(embed=embed)
 
-# ==================== 2. أمر استعراض الأبطال ====================
+# 3. أمر استعراض الأبطال
 @bot.tree.command(name="الابطال", description="استعراض الأبطال الأسطوريين وصورهم ومهاراتهم")
 @app_commands.choices(البطل=[
     app_commands.Choice(name="⚔️ فارس الظلام (ذكر)", value="dark_knight"),
@@ -123,7 +135,7 @@ async def heroes(interaction: discord.Interaction, البطل: app_commands.Choi
     
     await interaction.response.send_message(embed=embed)
 
-# ==================== 3. المتجر العادي ====================
+# 4. المتجر العادي
 @bot.tree.command(name="متجر_عادي", description="استعراض المعدات والأسلحة العادية بأسعار مناسبة")
 async def normal_shop(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -147,7 +159,7 @@ async def normal_shop(interaction: discord.Interaction):
     embed.set_footer(text="استخدم أموالك بحكمة لتطوير بطلتك أو بطلك!")
     await interaction.response.send_message(embed=embed)
 
-# ==================== 4. متجر الظلام (المعدات الملعونة) ====================
+# 5. متجر الظلام
 @bot.tree.command(name="متجر_الظلام", description="دخول متجر الظلام للمعدات الملعونة والأدوات المحرمة")
 async def dark_shop(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -172,7 +184,7 @@ async def dark_shop(interaction: discord.Interaction):
     embed.set_footer(text="أعلى رتبة للمعدات الملعونة: الجحيم ➔ الشيطان الأكبر ☠️")
     await interaction.response.send_message(embed=embed)
 
-# ==================== 5. ألعاب الحظ والتخمين ====================
+# 6. لعبة الحظ
 @bot.tree.command(name="حظ", description="تجربة حظك اليومي لربح الذهب")
 async def luck(interaction: discord.Interaction):
     outcomes = [
@@ -185,6 +197,7 @@ async def luck(interaction: discord.Interaction):
     embed = discord.Embed(title=title, description=desc, color=color)
     await interaction.response.send_message(embed=embed)
 
+# 7. لعبة التخمين
 @bot.tree.command(name="تخمين", description="لعبة تخمين رقم الحظ من 1 إلى 10")
 async def guess(interaction: discord.Interaction, الرقم: int):
     if الرقم < 1 or الرقم > 10:
