@@ -1,7 +1,6 @@
 import os
 import discord
 from discord.ext import commands
-from discord import app_commands
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -10,13 +9,13 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 async def on_ready():
     try:
         synced = await bot.tree.sync()
-        print(f"تم مزامنة {len(synced)} أمر بنجاح.")
+        print(f"تمت مزامنة {len(synced)} أمر بنجاح.")
     except Exception as e:
         print(e)
-    print(f'البوت يعمل الآن باسم: {bot.user}')
+    print(f'البوت شغال الآن: {bot.user}')
 
-@bot.tree.command(name="test", description="أمر تجريبي لفحص استجابة البوت عبر السلاش")
+@bot.tree.command(name="test", description="أمر تجريبي لفحص البوت")
 async def test(interaction: discord.Interaction):
-    await interaction.response.send_message('Hello! The bot is working 100% 🎯')
+    await interaction.response.send_message("شغال 100% 🎯")
 
 bot.run(os.getenv('TOKEN'))
