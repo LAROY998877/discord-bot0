@@ -24,11 +24,12 @@ def load_database():
                     "stats": {int(k): v for k, v in data.get("stats", {}).items()},
                     "equipped": {int(k): v for k, v in data.get("equipped", {}).items()},
                     "users": {int(k): v for k, v in data.get("users", {}).items()},
+                    "guilds": data.get("guilds", {}),
                     "devs": set(data.get("devs", []))
                 }
         except Exception as e:
             print(f"❌ خطأ أثناء قراءة ملف الحفظ: {e}")
-    return {"economy": {}, "stats": {}, "equipped": {}, "users": {}, "devs": set()}
+    return {"economy": {}, "stats": {}, "equipped": {}, "users": {}, "guilds": {}, "devs": set()}
 
 def save_database():
     data = {
@@ -36,6 +37,7 @@ def save_database():
         "stats": {str(k): v for k, v in USER_STATS.items()},
         "equipped": {str(k): v for k, v in USER_EQUIPPED.items()},
         "users": {str(k): v for k, v in REGISTERED_USERS.items()},
+        "guilds": GUILDS_DATA,
         "devs": list(EXTRA_DEVS)
     }
     try:
@@ -49,6 +51,7 @@ USER_ECONOMY = db["economy"]
 USER_STATS = db["stats"]
 USER_EQUIPPED = db["equipped"]
 REGISTERED_USERS = db["users"]
+GUILDS_DATA = db["guilds"]
 EXTRA_DEVS = db["devs"]
 
 def get_user_economy(user_id):
@@ -71,17 +74,17 @@ async def on_ready():
     except Exception as e:
         print(f"❌ خطأ في المزامنة: {e}")
 
-# ==================== تعريف الشخصيات (3 إناث، 3 ذكور، السفاح للمطور) ====================
+# ==================== تعريف الشخصيات ====================
 CHARACTERS = {
     "فالكيريا الظلال": {
         "gender": "أنثى",
-        "story": "فتاة نشأت بين أنقاض حرب مدمرة، تعلمت القتال تحت ضوء القمر وأقسمت على حماية المظلومين بضربات خفية كالشبح.",
+        "story": "فتاة نشأت بين أنقاض حرب مدمرة، تعلمت القتال تحت ضوء القمر وأقسمت على حماية المظلومين.",
         "skills": "سرعة فائقة، التخفي في الظلام، طعنة الخنجر القاتلة",
         "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800"
     },
     "لونا القوية": {
         "gender": "أنثى",
-        "story": "أميرة سابقة سقطت مملكتها، فاستبدلت الحرير بدرع حديدي لتستعيد عرشها بقوة وعزيمة لا تكسر.",
+        "story": "أميرة سابقة سقطت مملكتها، فاستبدلت الحرير بدرع حديدي لتستعيد عرشها بقوة.",
         "skills": "درع لا يقفد، هجوم السيف المزدوج، قيادة الجيوش",
         "image": "https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=800"
     },
@@ -93,7 +96,7 @@ CHARACTERS = {
     },
     "ثور الهائج": {
         "gender": "ذكر",
-        "story": "محارب ضخم بنيت عضلاته من صراع الوحوش البرية، لا يخشى الموت وهدفه الوحيد إثبات تفوقه في الحلبة.",
+        "story": "محارب ضخم بنيت عضلاته من صراع الوحوش البرية، لا يخشى الموت وهدفه الوحيد إثبات تفوقه.",
         "skills": "ضربة المطرقة المدمرة، قدرة تحمل عالية، صرخة الرعب",
         "image": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800"
     },
@@ -105,40 +108,31 @@ CHARACTERS = {
     },
     "راين القناص": {
         "gender": "ذكر",
-        "story": "صياد ماهر يستطيع إصابة الهدف من مسافات خيالية، عيناه لا تخطئان الفرصة مهما كانت الظروف.",
+        "story": "صياد ماهر يستطيع إصابة الهدف من مسافات خيالية، عيناه لا تخطئان الفرصة مهما كانت.",
         "skills": "رمية السهم الخارق، الرؤية الليلية، القنص السريع",
         "image": "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=800"
     },
     "السفاح": {
         "gender": "ذكر (خاص بالمطور)",
-        "story": "كيان أسطوري مرعب لا يعرف الرحمة، وُلد من رحم الظلمات المطلقة ليكون الحاكم المطلق والمدافع عن أسرار المطورين.",
+        "story": "كيان أسطوري مرعب لا يعرف الرحمة، وُلد من رحم الظلمات المطلقة ليكون الحاكم المطلق.",
         "skills": "الموت الفوري، التحكم بالأبعاد، درع العدم الأبدي",
         "image": "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=800"
     }
 }
 
-ITEMS_DATA = {
-    "سيف حديدي بسيط": {"price": 100, "type": "عادي", "char_image": "https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=800", "desc": "سيف تقليدي حاد."},
-    "درع خشبي متين": {"price": 150, "type": "عادي", "char_image": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=800", "desc": "درع لحماية أساسية."},
-    "خنجر الصياد السريع": {"price": 200, "type": "عادي", "char_image": "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=800", "desc": "خنجر للطعنات السريعة."},
-    "نصل الجحيم المحرق": {"price": 1200, "type": "🔥 رتبة الجحيم", "char_image": "https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=800", "desc": "سيف مشتعل بالحمم."},
-    "صولجان الخراب المظلم": {"price": 3500, "type": "🖤 رتبة الشيطان", "char_image": "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=800", "desc": "سلاح الدمار الشامل."}
-}
+# ==================== نظام التسجيل عبر نافذة (Modal) ====================
 
-# ==================== نظام التسجيل واختيار الشخصية ====================
-
-class CharacterSelectView(discord.ui.View):
+class CharacterSelectAfterModal(discord.ui.View):
     def __init__(self, name, age, gender):
         super().__init__(timeout=60)
         self.name = name
         self.age = age
         self.gender = gender
         
-        # تصفية الشخصيات حسب الجنس المطلوب أو إذا كان مطوراً
         options = []
         for char_name, data in CHARACTERS.items():
             if char_name == "السفاح":
-                continue # شخصية السفاح تمنح تلقائياً للمطور حصراً
+                continue
             if gender == "أنثى" and data["gender"] == "أنثى":
                 options.append(discord.SelectOption(label=char_name, description=data["story"][:80], value=char_name))
             elif gender == "ذكر" and data["gender"] == "ذكر":
@@ -167,33 +161,46 @@ class CharacterSelectView(discord.ui.View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@bot.tree.command(name="تسجيل", description="سجل بياناتك (الاسم، العمر، الجنس) لاختيار شخصيتك وبدء اللعب")
-@app_commands.choices(الجنس=[
-    app_commands.Choice(name="ذكر", value="ذكر"),
-    app_commands.Choice(name="أنثى", value="أنثى")
-])
-@app_commands.describe(الاسم="اسمك في اللعبة", العمر="عمرك", الجنس="اختر جنسك")
-async def register(interaction: discord.Interaction, الاسم: str, العمر: int, الجنس: app_commands.Choice[str]):
-    gender_val = الجنس.value
-    
-    # إذا كان المستخدم مطوراً، يمكنه الحصول على شخصية السفاح مباشرة أو اختيار شخصية أخرى
-    if interaction.user.id == DEVELOPER_ID or interaction.user.id in EXTRA_DEVS:
-        REGISTERED_USERS[interaction.user.id] = {
-            "name": الاسم,
-            "age": العمر,
-            "gender": gender_val,
-            "character": "السفاح"
-        }
-        save_database()
-        embed = discord.Embed(title=f"👑 أهلاً بك أيها المطور العظيم {الاسم}", description=f"تم تسجيلك تلقائياً بشخصية المطور الحصرية: **السفاح** 🖤\n\n📜 **القصة:** {CHARACTERS['السفاح']['story']}\n\n⚡ **المهارات:** {CHARACTERS['السفاح']['skills']}", color=0x992d22)
-        embed.set_image(url=CHARACTERS['السفاح']['image'])
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-        return
+class RegisterModal(discord.ui.Modal, title="📝 نافذة التسجيل في اللعبة"):
+    name_input = discord.ui.TextInput(label="الاسم في اللعبة", placeholder="اكتب اسمك...", max_length=50)
+    age_input = discord.ui.TextInput(label="العمر", placeholder="اكتب عمرك بالأرقام (مثال: 20)...", max_length=3)
+    gender_input = discord.ui.TextInput(label="الجنس", placeholder="اكتب (ذكر) أو (أنثى)...", max_length=5)
 
-    # للمستخدمين العاديين، إظهار قائمة اختيار الشخصيات حسب الجنس
-    view = CharacterSelectView(الاسم, العمر, gender_val)
-    embed = discord.Embed(title="✨ مرحباً بك في عالم المغامرات", description="يرجى اختيار شخصيتك المناسبة من القائمة أدناه:", color=0x3498DB)
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    async def on_submit(self, interaction: discord.Interaction):
+        name = self.name_input.value
+        try:
+            age = int(self.age_input.value)
+        except ValueError:
+            await interaction.response.send_message("❌ العمر يجب أن يكون رقماً صحيحاً!", ephemeral=True)
+            return
+            
+        gender = self.gender_input.value.strip()
+        if gender not in ["ذكر", "أنثى"]:
+            await interaction.response.send_message("❌ الجنس يجب أن يكون إما (ذكر) أو (أنثى) فقط!", ephemeral=True)
+            return
+
+        # إذا كان المطور
+        if interaction.user.id == DEVELOPER_ID or interaction.user.id in EXTRA_DEVS:
+            REGISTERED_USERS[interaction.user.id] = {
+                "name": name,
+                "age": age,
+                "gender": gender,
+                "character": "السفاح"
+            }
+            save_database()
+            embed = discord.Embed(title=f"👑 أهلاً بك أيها المطور العظيم {name}", description=f"تم تسجيلك تلقائياً بشخصية المطور الحصرية: **السفاح** 🖤\n\n📜 **القصة:** {CHARACTERS['السفاح']['story']}\n\n⚡ **المهارات:** {CHARACTERS['السفاح']['skills']}", color=0x992d22)
+            embed.set_image(url=CHARACTERS['السفاح']['image'])
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        view = CharacterSelectAfterModal(name, age, gender)
+        embed = discord.Embed(title="✨ مرحباً بك في عالم المغامرات", description=f"الاسم: **{name}** | العمر: **{age}** | الجنس: **{gender}**\n\nاختر شخصيتك المناسبة من القائمة أدناه:", color=0x3498DB)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+@bot.tree.command(name="تسجيل", description="فتح قائمة التسجيل التفاعلية (Modal) لإدخال الاسم، العمر، والجنس")
+async def register(interaction: discord.Interaction):
+    await interaction.response.send_modal(RegisterModal())
 
 
 @bot.tree.command(name="تغيير_الشخصية", description="تغيير شخصيتك الحالية مقابل 500 عملة")
@@ -216,13 +223,164 @@ async def change_character(interaction: discord.Interaction, الجنس: app_com
     save_database()
     
     user_data = REGISTERED_USERS[interaction.user.id]
-    view = CharacterSelectView(user_data["name"], user_data["age"], الجنس.value)
+    view = CharacterSelectAfterModal(user_data["name"], user_data["age"], الجنس.value)
     
     embed = discord.Embed(title="🔄 تغيير الشخصية", description="تم خصم 500 عملة بنجاح. اختر شخصيتك الجديدة:", color=0xE67E22)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-# ==================== الأوامر الأساسية (مشروطة بالتسجيل) ====================
+# ==================== نظام النقابات (Guilds) ====================
+
+@bot.tree.command(name="انشاء_نقابة", description="إنشاء نقابة جديدة مقابل 299 عملة")
+@app_commands.describe(اسم_الننقابة="اسم النقابة الفريد")
+async def create_guild(interaction: discord.Interaction, اسم_الننقابة: str):
+    if interaction.user.id not in REGISTERED_USERS:
+        await interaction.response.send_message("❌ يجب عليك التسجيل أولاً باستخدام `/تسجيل`!", ephemeral=True)
+        return
+        
+    for g_name, g_data in GUILDS_DATA.items():
+        if g_data["leader_id"] == interaction.user.id:
+            await interaction.response.send_message("❌ أنت تمتلك نقابة بالفعل ولا يمكنك إنشاء أخرى!", ephemeral=True)
+            return
+        if g_name == اسم_الننقابة:
+            await interaction.response.send_message("❌ اسم النقابة هذا موجود مسبقاً، اختر اسمًا آخر!", ephemeral=True)
+            return
+
+    eco = get_user_economy(interaction.user.id)
+    if eco["coins"] < 299:
+        await interaction.response.send_message("❌ رصيدك غير كافي! تحتاج إلى `299` عملة لإنشاء نقابة.", ephemeral=True)
+        return
+
+    eco["coins"] -= 299
+    
+    GUILDS_DATA[اسم_الننقابة] = {
+        "leader_id": interaction.user.id,
+        "level": 1,
+        "exp": 0,
+        "treasury_coins": 0,
+        "treasury_items": {},
+        "members": [interaction.user.id]
+    }
+    save_database()
+
+    embed = discord.Embed(title="🏰 تم إنشاء النقابة بنجاح!", description=f"اسم النقابة: **{اسم_الننقابة}**\nالقائد: {interaction.user.mention}\nالمستوى الحالي: `1` (الحد الأقصى 500)", color=0xF1C40F)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="تبرع_للنقابة", description="التبرع بالعملات أو العتاد لنقابتك لرفع مستواها (أقصى لفل 500)")
+@app_commands.choices(نوع_التبرع=[
+    app_commands.Choice(name="💰 عملات معدنية", value="coins"),
+    app_commands.Choice(name="🛡️ عتاد / معدات", value="item")
+])
+@app_commands.describe(نوع_التبرع="اختر نوع التبرع", الكمية_أو_اسم_العتاد="اكتب عدد العملات أو اسم العتاد الذي تملكه في حقيبتك")
+async def donate_guild(interaction: discord.Interaction, نوع_التبرع: app_commands.Choice[str], الكمية_أو_اسم_العتاد: str):
+    if interaction.user.id not in REGISTERED_USERS:
+        await interaction.response.send_message("❌ يجب عليك التسجيل أولاً!", ephemeral=True)
+        return
+
+    # ابحث عن النقابة التي ينتمي لها المستخدم
+    user_guild = None
+    for g_name, g_data in GUILDS_DATA.items():
+        if interaction.user.id in g_data["members"]:
+            user_guild = g_name
+            break
+
+    if not user_guild:
+        await interaction.response.send_message("❌ أنت لست عضواً في أي نقابة!", ephemeral=True)
+        return
+
+    guild = GUILDS_DATA[user_guild]
+    
+    if guild["level"] >= 500:
+        await interaction.response.send_message("🎉 لقد وصلت نقابتكم إلى الحد الأقصى للمستوى (`500`) بالفعل!", ephemeral=True)
+        return
+
+    exp_gained = 0
+
+    if نوع_التبرع.value == "coins":
+        try:
+            amount = int(الكمية_أو_اسم_العتاد)
+        except ValueError:
+            await interaction.response.send_message("❌ يجيب كتابة رقم صحيح للعملات المتبرع بها!", ephemeral=True)
+            return
+
+        eco = get_user_economy(interaction.user.id)
+        if eco["coins"] < amount:
+            await interaction.response.send_message(f"❌ لا تملك هذا العدد من العملات في رصيدك! (`{eco['coins']}` متاح)", ephemeral=True)
+            return
+
+        eco["coins"] -= amount
+        guild["treasury_coins"] += amount
+        exp_gained = amount // 10  # كل 10 عملات تعطي 1 خبرة للنقابة
+    else:
+        item_name = الكمية_أو_اسم_العتاد.strip()
+        stats = get_user_stats(interaction.user.id)
+        if item_name not in stats or stats[item_name] <= 0:
+            await interaction.response.send_message(f"❌ أنت لا تملك قطعة العتاد `{item_name}` في حقيبتك!", ephemeral=True)
+            return
+
+        stats[item_name] -= 1
+        if stats[item_name] <= 0:
+            del stats[item_name]
+
+        if item_name not in guild["treasury_items"]:
+            guild["treasury_items"][item_name] = 0
+        guild["treasury_items"][item_name] += 1
+        exp_gained = 50  # كل قطعة عتاد تمنح 50 نقطة خبرة للنقابة
+
+    # نظام رفع لفل النقابة (كل 500 نقطة خبرة ترفع مستوى النقابة بحد أقصى 500)
+    guild["exp"] += exp_gained
+    required_exp_for_next_level = guild["level"] * 500
+    
+    level_ups = 0
+    while guild["exp"] >= required_exp_for_next_level and guild["level"] < 500:
+        guild["exp"] -= required_exp_for_next_level
+        guild["level"] += 1
+        level_ups += 1
+        required_exp_for_next_level = guild["level"] * 500
+
+    save_database()
+
+    msg = f"✅ تم التبرع بنجاح لنقابة **{user_guild}**!\n📈 اكتسبة النقابة `{exp_gained}` نقطة خبرة."
+    if level_ups > 0:
+        msg += f"\n🎉 **مبروك! ارتفع مستوى النقابة وأصبحت في المستوى `{guild['level']}`!**"
+        
+    await interaction.response.send_message(msg, ephemeral=True)
+
+
+@bot.tree.command(name="معلومات_الننقابة", description="عرض تفاصيل ومستوى نقابتك وخزنتها")
+async def guild_info(interaction: discord.Interaction):
+    if interaction.user.id not in REGISTERED_USERS:
+        await interaction.response.send_message("❌ يجب عليك التسجيل أولاً!", ephemeral=True)
+        return
+
+    user_guild = None
+    for g_name, g_data in GUILDS_DATA.items():
+        if interaction.user.id in g_data["members"]:
+            user_guild = g_name
+            break
+
+    if not user_guild:
+        await interaction.response.send_message("❌ أنت لست منضماً لأي نقابة حالياً!", ephemeral=True)
+        return
+
+    g = GUILDS_DATA[user_guild]
+    leader = await bot.fetch_user(g["leader_id"])
+    
+    items_list = "\n".join([f"- {it}: {cnt}" for it, cnt in g["treasury_items"].items()]) if g["treasury_items"] else "خزنة العتاد فارغة."
+
+    embed = discord.Embed(title=f"🏰 معلومات نقابة: {user_guild}", color=0x9B59B6)
+    embed.add_field(name="👑 قائد النقابة", value=leader.mention if leader else "غير معروف", inline=True)
+    embed.add_field(name="⭐ مستوى النقابة", value=f"`{g['level']}` / 500", inline=True)
+    embed.add_field(name="📊 نقاط الخبرة (EXP)", value=f"`{g['exp']}` / {g['level'] * 500}", inline=True)
+    embed.add_field(name="💰 عملات الخزنة", value=f"`{g['treasury_coins']}` عملة", inline=True)
+    embed.add_field(name="👥 عدد الأعضاء", value=f"`{len(g['members'])}` أعضاء", inline=True)
+    embed.add_field(name="🛡️ عتاد الخزنة", value=items_list, inline=False)
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ==================== الأوامر الأساسية ====================
 
 @bot.tree.command(name="الملف", description="عرض ملفك الشخصي وشخصيتك والمهارات والعتاد")
 async def profile(interaction: discord.Interaction):
@@ -266,120 +424,5 @@ async def inventory(interaction: discord.Interaction):
     embed.add_field(name="📦 المعدات المملوكة:", value=gear_text, inline=False)
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-# ==================== نظام حلبة المعارك (1v1, 2v2, 3v3) ====================
-
-class BattleAcceptView(discord.ui.View):
-    def __init__(self, challenger, opponents, mode, bet):
-        super().__init__(timeout=30)
-        self.challenger = challenger
-        self.opponents = opponents
-        self.mode = mode
-        self.bet = bet
-        self.accepted_users = set()
-
-    @discord.ui.button(label="⚔️ قبول التحدي ودخول المعركة", style=discord.ButtonStyle.green)
-    async def accept_battle(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user not in self.opponents:
-            await interaction.response.send_message("❌ أنت لست مقصوداً بهذا التحدي!", ephemeral=True)
-            return
-            
-        if interaction.user in self.accepted_users:
-            await interaction.response.send_message("⚠️ لقد وافقت مسبقاً!", ephemeral=True)
-            return
-            
-        if self.bet > 0:
-            eco = get_user_economy(interaction.user.id)
-            if eco["coins"] < self.bet:
-                await interaction.response.send_message(f"❌ رصيدك غير كافي لدفع الرهان ({self.bet} عملة)!", ephemeral=True)
-                return
-
-        self.accepted_users.add(interaction.user)
-        
-        if len(self.accepted_users) == len(self.opponents):
-            winning_team = random.choice([1, 2])
-            total_pot = self.bet * (len(self.opponents) + 1) if self.bet > 0 else 0
-            
-            if winning_team == 1:
-                winner_text = f"👑 الفائز: **{self.challenger.display_name}** وفريقه!"
-                if self.bet > 0:
-                    get_user_economy(self.challenger.id)["coins"] += total_pot
-                    save_database()
-                result_embed = discord.Embed(title=f"🏟️ نتائج معركة الحلبة ({self.mode})", description=f"🔥 انتصار ساحق للبطل!\n\n{winner_text}\n💰 الجائزة: `{total_pot}` عملة", color=0xE74C3C)
-            else:
-                winner_text = f"👑 الفائزون: **الخصوم** بقيادة {', '.join([u.display_name for u in self.opponents])}"
-                if self.bet > 0:
-                    for op in self.opponents:
-                        get_user_economy(op.id)["coins"] += (total_pot // len(self.opponents))
-                    save_database()
-                result_embed = discord.Embed(title=f"🏟️ نتائج معركة الحلبة ({self.mode})", description=f"🔥 معركة دموية انتهت بفوز الخصوم!\n\n{winner_text}", color=0xE74C3C)
-                
-            result_embed.set_image(url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800")
-            for child in self.children:
-                child.disabled = True
-            await interaction.response.edit_message(embed=result_embed, view=self)
-            self.stop()
-        else:
-            await interaction.response.send_message(f"✅ تم تسجيل موافقة **{interaction.user.display_name}**.", ephemeral=True)
-
-
-@bot.tree.command(name="المعارك", description="حلبة المعارك الأسطورية (1v1, 2v2, 3v3) مع الرهانات")
-@app_commands.choices(النمط=[
-    app_commands.Choice(name="⚔️ مبارزة فردية (1 ضد 1)", value="1v1"),
-    app_commands.Choice(name="🛡️ معركة ثنائية (2 ضد 2)", value="2v2"),
-    app_commands.Choice(name="🔥 حرب ثلاثية (3 ضد 3)", value="3v3")
-])
-@app_commands.describe(النمط="اختر النمط", الخصم_الأول="الخصم الأول", الخصم_الثاني="الخصم الثاني", الخصم_الثالث="الخصم الثالث", الرهان="قيمة الرهان بالعملات")
-async def battles(
-    interaction: discord.Interaction, 
-    النمط: app_commands.Choice[str], 
-    الخصم_الأول: discord.Member, 
-    الخصم_الثاني: discord.Member = None, 
-    الخصم_الثالث: discord.Member = None,
-    الرهان: int = 0
-):
-    if interaction.user.id not in REGISTERED_USERS:
-        await interaction.response.send_message("❌ يجب عليك التسجيل أولاً باستخدام أمر `/تسجيل` !", ephemeral=True)
-        return
-
-    mode = النمط.value
-    opponents = []
-    
-    if mode == "1v1":
-        opponents = [الخصم_الأول]
-    elif mode == "2v2":
-        if not الخصم_الثاني:
-            await interaction.response.send_message("❌ نظام 2v2 يتطلب خصمين!", ephemeral=True)
-            return
-        opponents = [الخصم_الأول, الخصم_الثاني]
-    elif mode == "3v3":
-        if not الخصم_الثاني or not الخصم_الثالث:
-            await interaction.response.send_message("❌ نظام 3v3 يتطلب ثلاثة خصوم!", ephemeral=True)
-            return
-        opponents = [الخصم_الأول, الخصم_الثاني, الخصم_الثالث]
-        
-    if interaction.user in opponents or interaction.user == الخصم_الأول:
-        await interaction.response.send_message("❌ لا يمكنك تحدي نفسك!", ephemeral=True)
-        return
-
-    if الرهان > 0:
-        challenger_eco = get_user_economy(interaction.user.id)
-        if challenger_eco["coins"] < الرهان:
-            await interaction.response.send_message(f"❌ رصيدك غير كافي لدخول المعركة بهذا الرهان (`{الرهان}` عملة).", ephemeral=True)
-            return
-        challenger_eco["coins"] -= الرهان
-        save_database()
-
-    opponents_mention = ", ".join([op.mention for op in opponents])
-    embed = discord.Embed(
-        title=f"🏟️ تحدي حلبة المعارك | {mode}",
-        description=f"المتحدي: {interaction.user.mention}\n ضد: {opponents_mention}\n\n💰 الرهان: `{الرهان}` عملة\n\n*(أمام الخصوم 30 ثانية للقبول)*",
-        color=0xE67E22
-    )
-    embed.set_image(url="https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=800")
-    
-    view = BattleAcceptView(interaction.user, opponents, mode, الرهان)
-    await interaction.response.send_message(content=opponents_mention, embed=embed, view=view)
 
 bot.run(os.getenv('TOKEN'))
