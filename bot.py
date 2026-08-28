@@ -1,3 +1,4 @@
+import os
 import discord
 from discord.ext import commands
 
@@ -14,4 +15,4 @@ async def on_ready():
 async def test(ctx):
     await ctx.send('Hello! The bot is working 100% 🎯')
 
-bot.run('MTU0MjgwODk1NDQyNDUyNDg4MA.GR-Hft.XU6Lp5gOHm0LQP27yqD9xA5UFTEeSymTy7N3WAا')
+bot.run(os.getenv('TOKEN'))
