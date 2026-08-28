@@ -9,25 +9,65 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# بيانات الأبطال والصور
+# ==================== قاعدة بيانات الأبطال (7 أبطال) ====================
 HEROES = {
+    # الأبطال الذكور
     "dark_knight": {
         "name": "⚔️ فارس الظلام (Dark Knight)",
-        "desc": "مقاتل أسطوري يمتلك قوة هجومية ساحقة في المعارك الليلية.",
+        "gender": "ذكر ♂️",
         "power": "98/100",
+        "skills": "🔥 ضربة الظل القاتلة | 🛡️ درع الأرواح | ⚡ اندفاع الجحيم",
+        "desc": "مقاتل أسطوري يستمد قوته من ظلال المعارك ويهشم دروع الأعداء.",
         "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1000&auto=format&fit=crop"
-    },
-    "dragon_empress": {
-        "name": "🐉 سيدة التنانين (Dragon Empress)",
-        "desc": "تتحكم بالنيران الأسطورية وتملك درعاً متيناً لا يُقهر.",
-        "power": "95/100",
-        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=1000&auto=format&fit=crop"
     },
     "golden_samurai": {
         "name": "⚡ الساموراي الذهبي (Golden Samurai)",
-        "desc": "صاحب السرعة الخاطفة ودقة الضربات القاتلة بالسيف.",
+        "gender": "ذكر ♂️",
         "power": "92/100",
+        "skills": "🗡️ قطع البرق | 🌀 إعصار الشفرات | 👁️ التركيز المطلق",
+        "desc": "صاحب السرعة الخاطفة ودقة الضربات القاتلة بالسيف الذهبي.",
         "image": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000&auto=format&fit=crop"
+    },
+    "soul_reaper": {
+        "name": "🔮 صائد الأرواح (Soul Reaper)",
+        "gender": "ذكر ♂️",
+        "power": "96/100",
+        "skills": "☠️ ملمس الموت | 🌌 ثقب الفراغ | 🩸 امتصاص الحياة",
+        "desc": "سيّاد الأرواح من الأبعاد المظلمة، يقتات على طاقة الخصوم.",
+        "image": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1000&auto=format&fit=crop"
+    },
+    # البطلات الإناث
+    "dragon_empress": {
+        "name": "🐉 سيدة التنانين (Dragon Empress)",
+        "gender": "أنثى ♀️",
+        "power": "95/100",
+        "skills": "🔥 زئير التنين | 🛡️ درع الحرشوف | ☄️ نيزك الجمر",
+        "desc": "تتحكم بالنيران الأسطورية وتستدعي التنانين لحماية حلفائها.",
+        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=1000&auto=format&fit=crop"
+    },
+    "frost_queen": {
+        "name": "❄️ أميرة الجليد (Frost Queen)",
+        "gender": "أنثى ♀️",
+        "power": "94/100",
+        "skills": "🧊 التجميد المطلق | 🌪️ العاصفة الثلجية | 💎 رمح الصقيع",
+        "desc": "تحكم الساحات بجمود الجليد وتجمد الأعداء قبل اقترابهم.",
+        "image": "https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=1000&auto=format&fit=crop"
+    },
+    "shadow_witch": {
+        "name": "🔮 ساحرة الظلال (Shadow Witch)",
+        "gender": "أنثى ♀️",
+        "power": "97/100",
+        "skills": "🌑 اللعنة السوداء | 👁️ الرؤية المظلمة | 👻 استدعاء الأطياف",
+        "desc": "تنسج السحر الأسود من أعماق الظلام وتضعف قدرات الخصوم.",
+        "image": "https://images.unsplash.com/photo-1509281373149-e957c6296406?q=80&w=1000&auto=format&fit=crop"
+    },
+    "blood_blade": {
+        "name": "قاطعة الدماء 🗡️ (Blood Blade)",
+        "gender": "أنثى ♀️",
+        "power": "93/100",
+        "skills": "🩸 رقصة الدماء | ⚡ القفزة السريعة | 🗡️ الطعنة المزدوجة",
+        "desc": "محاربة سريعة جداً تعتمد على سفك الدماء لزيادة سرعتها وقوتها.",
+        "image": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=1000&auto=format&fit=crop"
     }
 }
 
@@ -35,19 +75,19 @@ HEROES = {
 async def on_ready():
     try:
         synced = await bot.tree.sync()
-        print(f"✅ تم الاتصال باسم {bot.user} ومزامنة {len(synced)} أمر سلاش بنجاح!")
+        print(f"✅ تم الاتصال بالمستخدم {bot.user} ومزامنة {len(synced)} أمر بنجاح!")
     except Exception as e:
-        print(f"❌ خطأ أثناء المزامنة: {e}")
+        print(f"❌ خطأ بالمزامنة: {e}")
 
-# 1. أمر الملف الشخصي
-@bot.tree.command(name="الملف", description="عرض بطاقتك الشخصية بتصميم فخم")
+# ==================== 1. أمر الملف الشخصي ====================
+@bot.tree.command(name="الملف", description="عرض بطاقتك الشخصية بتصميم فخم وخلفية أسطورية")
 async def profile(interaction: discord.Interaction, العضو: discord.Member = None):
     target = العضو or interaction.user
     bg_url = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=1000&auto=format&fit=crop"
     
     embed = discord.Embed(
         title=f"👑 الملف الشخصي | {target.display_name}",
-        description="✨ **البطاقة التعريفية الرسمية**",
+        description="✨ **البطاقة التعريفية الرسمية داخل السيرفر**",
         color=0xD4AF37
     )
     embed.set_thumbnail(url=target.display_avatar.url)
@@ -59,26 +99,80 @@ async def profile(interaction: discord.Interaction, العضو: discord.Member =
     
     await interaction.response.send_message(embed=embed)
 
-# 2. أمر الأبطال
-@bot.tree.command(name="الابطال", description="استعراض الأبطال الأسطوريين وصورهم الفخمة")
+# ==================== 2. أمر استعراض الأبطال ====================
+@bot.tree.command(name="الابطال", description="استعراض الأبطال الأسطوريين وصورهم ومهاراتهم")
 @app_commands.choices(البطل=[
-    app_commands.Choice(name="⚔️ فارس الظلام", value="dark_knight"),
-    app_commands.Choice(name="🐉 سيدة التنانين", value="dragon_empress"),
-    app_commands.Choice(name="⚡ الساموراي الذهبي", value="golden_samurai")
+    app_commands.Choice(name="⚔️ فارس الظلام (ذكر)", value="dark_knight"),
+    app_commands.Choice(name="⚡ الساموراي الذهبي (ذكر)", value="golden_samurai"),
+    app_commands.Choice(name="🔮 صائد الأرواح (ذكر)", value="soul_reaper"),
+    app_commands.Choice(name="🐉 سيدة التنانين (أنثى)", value="dragon_empress"),
+    app_commands.Choice(name="❄️ أميرة الجليد (أنثى)", value="frost_queen"),
+    app_commands.Choice(name="🔮 ساحرة الظلال (أنثى)", value="shadow_witch"),
+    app_commands.Choice(name="🗡️ قاطعة الدماء (أنثى)", value="blood_blade")
 ])
 async def heroes(interaction: discord.Interaction, البطل: app_commands.Choice[str]):
-    selected_hero = HEROES[البطل.value]
+    selected = HEROES[البطل.value]
     
     embed = discord.Embed(
-        title=selected_hero["name"],
-        description=f"📜 **الوصف:** {selected_hero['desc']}\n⚡ **مستوى القوة:** `{selected_hero['power']}`",
-        color=discord.Color.purple()
+        title=selected["name"],
+        description=f"👤 **الجنس:** {selected['gender']}\n⚡ **مستوى القوة:** `{selected['power']}`\n\n📜 **الوصف:** {selected['desc']}\n\n🔥 **المهارات الخاصة:**\n`{selected['skills']}`",
+        color=0x9B59B6
     )
-    embed.set_image(url=selected_hero["image"])
+    embed.set_image(url=selected["image"])
+    embed.set_footer(text="قائمة أبطال النخبة الأسطورية ⚔️")
     
     await interaction.response.send_message(embed=embed)
 
-# 3. لعبة الحظ
+# ==================== 3. المتجر العادي ====================
+@bot.tree.command(name="متجر_عادي", description="استعراض المعدات والأسلحة العادية بأسعار مناسبة")
+async def normal_shop(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🛒 المتجر العادي للمعدات",
+        description="معدات وأسلحة موثوقة لتعزيز قدراتك في المعارك بأسعار معقولة:\n",
+        color=0x3498DB
+    )
+    
+    items = [
+        ("🗡️ سيف الفولاذ الخفيف", "⚙️ الرتبة: `عادي` | 🪙 السعر: 150 ذهبة", "يزيد الهجوم +20"),
+        ("🛡️ درع الحديد المقوى", "⚙️ الرتبة: `عادي` | 🪙 السعر: 200 ذهبة", "يزيد الدفاع +25"),
+        ("🏹 قوس الصياد السريع", "✨ الرتبة: `نادر` | 🪙 السعر: 450 ذهبة", "يزيد سرعة الهجوم +15%"),
+        ("💍 خاتم القوة السحرية", "✨ الرتبة: `نادر` | 🪙 السعر: 600 ذهبة", "يزيد طاقة السحر +40"),
+        ("🪖 خوذة الفارس الملكي", "🌟 الرتبة: `أسطوري` | 🪙 السعر: 1,200 ذهبة", "تمنح حماية ضد الضربات الحرجة"),
+        ("👟 حذاء الريح الخاطف", "🌟 الرتبة: `أسطوري` | 🪙 السعر: 1,500 ذهبة", "يزيد سرعة المراوغة +30%")
+    ]
+    
+    for name, details, eff in items:
+        embed.add_field(name=name, value=f"{details}\n✨ **التأثير:** {eff}\n---", inline=False)
+        
+    embed.set_footer(text="استخدم أموالك بحكمة لتطوير بطلتك أو بطلك!")
+    await interaction.response.send_message(embed=embed)
+
+# ==================== 4. متجر الظلام (المعدات الملعونة) ====================
+@bot.tree.command(name="متجر_الظلام", description="دخول متجر الظلام للمعدات الملعونة والأدوات المحرمة")
+async def dark_shop(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="💀 متجر الظلام الملعون",
+        description="⚠️ **تحذير:** هذه المعدات تحتوي على طاقات ملعونة وقوة تدميرية هائلة!\n",
+        color=0x992D22
+    )
+    
+    dark_items = [
+        ("🗡️ خنجر الأرواح الملعون", "🟣 الرتبة: `مقدس` | 🪙 السعر: 4,000 ذهبة", "يمتص 20% من صحة الخصم عند كل ضربة"),
+        ("🛡️ درع الجماجم السوداء", "🟣 الرتبة: `مقدس` | 🪙 السعر: 6,500 ذهبة", "يعكس 15% من الضرر الوارد إلى المهاجم"),
+        ("🔮 صولجان الهلاك الأبدي", "🔥 الرتبة: `الجحيم` | 🪙 السعر: 12,000 ذهبة", "يطلق حرقاً جهنمياً يستمر طوال المعركة"),
+        ("🩸 عباءة دماء الشياطين", "🔥 الرتبة: `الجحيم` | 🪙 السعر: 18,000 ذهبة", "تخفي صاحبها وتزيد الضرر الحرج بنسبة 100%"),
+        ("👑 تاج العرش المظلم", "⚡ الرتبة: `الشيطان الأكبر` | 🪙 السعر: 35,000 ذهبة", "يضاعف جميع مهارات البطل ويستدعي طيفاً مساعداً"),
+        ("💍 خاتم الفناء المطلق", "⚡ الرتبة: `الشيطان الأكبر` | 🪙 السعر: 50,000 ذهبة", "يمنح فرصة 10% للقضاء على الخصم بضربة واحدة")
+    ]
+    
+    for name, details, eff in dark_items:
+        embed.add_field(name=name, value=f"{details}\n🩸 **اللعنة/التأثير:** {eff}\n---", inline=False)
+        
+    embed.set_thumbnail(url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1000&auto=format&fit=crop")
+    embed.set_footer(text="أعلى رتبة للمعدات الملعونة: الجحيم ➔ الشيطان الأكبر ☠️")
+    await interaction.response.send_message(embed=embed)
+
+# ==================== 5. ألعاب الحظ والتخمين ====================
 @bot.tree.command(name="حظ", description="تجربة حظك اليومي لربح الذهب")
 async def luck(interaction: discord.Interaction):
     outcomes = [
@@ -91,7 +185,6 @@ async def luck(interaction: discord.Interaction):
     embed = discord.Embed(title=title, description=desc, color=color)
     await interaction.response.send_message(embed=embed)
 
-# 4. لعبة التخمين
 @bot.tree.command(name="تخمين", description="لعبة تخمين رقم الحظ من 1 إلى 10")
 async def guess(interaction: discord.Interaction, الرقم: int):
     if الرقم < 1 or الرقم > 10:
