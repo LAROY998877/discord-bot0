@@ -76,7 +76,7 @@ class NormalShopView(discord.ui.View):
         stats[item_name] = stats.get(item_name, 0) + 1
         
         embed = discord.Embed(title=f"✅ تم شراء ({item_name}) بنجاح!", description=item["desc"], color=0x3498DB)
-        embed.set_image(url=item["image"])  # عرض الصورة الكبيرة الخاصة بالسلاح مباشرة
+        embed.set_image(url=item["image"])
         embed.add_field(name="💰 رصيدك الباقي:", value=f"`{eco['coins']}` عملة")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -103,26 +103,24 @@ class DarkShopView(discord.ui.View):
         stats[item_name] = stats.get(item_name, 0) + 1
         
         embed = discord.Embed(title=f"🔥 تم اقتناء ({item_name}) بنجاح!", description=f"**الرتبة:** {item['type']}\n{item['desc']}", color=0x8E44AD)
-        embed.set_image(url=item["image"])  # عرض الصورة الأسطورية المرعبة للسلاح
+        embed.set_image(url=item["image"])
         embed.add_field(name="💰 رصيدك الباقي:", value=f"`{eco['coins']}` عملة")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-# ==================== ميزة الحقيبة وتجهيز المعدات (Inventory & Equip) ====================
+# ==================== ميزة الحقيبة وتجهيز المعدات ====================
 
 class InventoryEquipView(discord.ui.View):
     def __init__(self, user_stats_dict):
         super().__init__(timeout=60)
         self.user_stats_dict = user_stats_dict
         
-        # إنشاء خيارات القائمة بناءً على ما يملكه اللاعب في حقيبته فقط
         options = []
         for gear_name in user_stats_dict.keys():
             if gear_name in ITEMS_DATA:
                 item = ITEMS_DATA[gear_name]
                 options.append(discord.SelectOption(label=gear_name, description=f"الرتبة: {item['type']} | العدد: {user_stats_dict[gear_name]}", value=gear_name))
         
-        # إضافة خيار في حال كانت الحقيبة فارغة لتجنب خطأ ديسكورد
         if not options:
             options.append(discord.SelectOption(label="حقيبتك فارغة تماماً", description="توجه للمتاجر للتسوق أولاً", value="empty"))
             
@@ -143,7 +141,7 @@ class InventoryEquipView(discord.ui.View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-# ==================== أوامر البوت الأساسية ====================
+# ==================== الأوامر الأساسية (مخصصة للمستخدم فقط وبدون خيار العضو) ====================
 
 @bot.tree.command(name="المتجر_العادي", description="استعرض المتجر العادي وتصفح صور الأسلحة بضغطة زر")
 async def normal_shop(interaction: discord.Interaction):
@@ -157,10 +155,9 @@ async def dark_shop(interaction: discord.Interaction):
     embed.set_image(url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800")
     await interaction.response.send_message(embed=embed, view=DarkShopView(), ephemeral=True)
 
-@bot.tree.command(name="الحقيبة", description="عرض حقيبتك وتركيب المعدات والسلح النشط")
-async def inventory(interaction: discord.Interaction, العضو: discord.Member = None):
-    await interaction.response.defer()
-    target = العضو or interaction.user
+@bot.tree.command(name="الحقيبة", description="عرض حقيبتك الشخصية وتركيب المعدات والسلح النشط")
+async def inventory(interaction: discord.Interaction):
+    target = interaction.user
     stats = get_user_stats(target.id)
     equipped = USER_EQUIPPED.get(target.id, "لا يوجد سلاح مركب حالياً")
     
@@ -176,25 +173,33 @@ async def inventory(interaction: discord.Interaction, العضو: discord.Member
         
     embed.add_field(name="📦 جميع المعدات المملوكة:", value=gear_text, inline=False)
     
-    # إذا كانت الحقيبة تخصك، نضع لك زر القائمة لتركيب السلاح مباشرة
-    if target.id == interaction.user.id and stats:
-        await interaction.followup.send(embed=embed, view=InventoryEquipView(stats))
+    if stats:
+        await interaction.response.send_message(embed=embed, view=InventoryEquipView(stats), ephemeral=True)
     else:
-        await interaction.followup.send(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@bot.tree.command(name="الملف", description="عرض رصيدك وملفك الشخصي")
-async def profile(interaction: discord.Interaction, العضو: discord.Member = None):
-    await interaction.response.defer()
-    target = العضو or interaction.user
+@bot.tree.command(name="الملف", description="عرض ملفك الشخصي وشخصيتك مع العتاد المُركب")
+async def profile(interaction: discord.Interaction):
+    target = interaction.user
     eco = get_user_economy(target.id)
-    equipped = USER_EQUIPPED.get(target.id, "لا يوجد")
+    equipped = USER_EQUIPPED.get(target.id, None)
     
     embed = discord.Embed(title=f"👑 الملف الشخصي | {target.display_name}", color=0xE67E22)
-    embed.set_thumbnail(url=target.display_avatar.url)
+    
+    # إذا كان المستخدم مركب سلاح، نعرض صورة السلاح كصورة رئيسية للشخصية، وإذا لم يكن مركباً نعرض صورته الشخصية
+    if equipped and equipped in ITEMS_DATA:
+        item = ITEMS_DATA[equipped]
+        embed.set_image(url=item["image"])  # صورة السلاح/الشخصية الأسطورية
+        equipped_text = f"⚔️ **{equipped}** ({item['type']})"
+    else:
+        equipped_text = "لا يوجد سلاح مركب حالياً"
+        embed.set_thumbnail(url=target.display_avatar.url)
+        
     embed.add_field(name="💰 رصيد العملات:", value=f"`{eco['coins']}` عملة", inline=False)
-    embed.add_field(name="⚔️ السلاح المُركب حالياً:", value=f"`{equipped}`", inline=False)
-    await interaction.followup.send(embed=embed)
+    embed.add_field(name="🛡️ العتاد المرتدى (الشخصية):", value=equipped_text, inline=False)
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # لوحة المطور لإهداء العتاد
