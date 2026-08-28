@@ -18,7 +18,7 @@ EXTRA_DEVS = set()
 
 def get_user_economy(user_id):
     if user_id not in USER_ECONOMY:
-        USER_ECONOMY[user_id] = {"coins": 2000}  # رصيد يبدأ بـ 2000 للتجربة
+        USER_ECONOMY[user_id] = {"coins": 5000}  # رصيد ابتدائي للتجربة
     return USER_ECONOMY[user_id]
 
 def get_user_stats(user_id):
@@ -34,24 +34,74 @@ async def on_ready():
     except Exception as e:
         print(f"❌ خطأ في المزامنة: {e}")
 
-# ==================== بيانات المعدات الكاملة ====================
+# ==================== بيانات المعدات (صور فانتزية أسطورية ومرعبة دقيقة) ====================
 ITEMS_DATA = {
-    # المتجر العادي
-    "سيف حديدي بسيط": {"price": 100, "type": "عادي", "image": "https://images.unsplash.com/photo-1589308078059-be1415eab4c3?q=80&w=600", "desc": "قوة هجومية أساسية للمبتدئين."},
-    "درع خشبي متين": {"price": 150, "type": "عادي", "image": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=600", "desc": "يوفر حماية بسيطة ضد الضربات الضعيفة."},
-    "خنجر الصياد السريع": {"price": 200, "type": "عادي", "image": "https://images.unsplash.com/photo-1595590424283-b8f17842773f?q=80&w=600", "desc": "خفيف الوزن وسريع في الاشتباكات القريبة."},
-    "قوس الخشب القديم": {"price": 250, "type": "عادي", "image": "https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=600", "desc": "مناسب للهجوم من مسافات متوسطة."},
-    "رمح الحراس": {"price": 300, "type": "عادي", "image": "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?q=80&w=600", "desc": "يمنحك مدى أطول أثناء الدفاع والهجوم."},
+    # 🛒 المتجر العادي (عتاد أساسي بأسعار مناسبة)
+    "سيف حديدي بسيط": {
+        "price": 100, 
+        "type": "عادي", 
+        "image": "https://images.unsplash.com/photo-1595590424283-b8f17842773f?q=80&w=800", 
+        "desc": "سيف تقليدي حاد ومناسب للمبتدئين في المغامرات."
+    },
+    "درع خشبي متين": {
+        "price": 150, 
+        "type": "عادي", 
+        "image": "https://images.unsplash.com/photo-1548234479-111002377cf6?q=80&w=800", 
+        "desc": "درع مصنوع من الخشب المقوى لتلقي الضربات الأولى."
+    },
+    "خنجر الصياد السريع": {
+        "price": 200, 
+        "type": "عادي", 
+        "image": "https://images.unsplash.com/photo-1589308078059-be1415eab4c3?q=80&w=800", 
+        "desc": "خنجر خفيف الوزن وسريع في الاشتباكات القريبة."
+    },
+    "قوس الخشب القديم": {
+        "price": 250, 
+        "type": "عادي", 
+        "image": "https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=800", 
+        "desc": "قوس خشبي بدائي لاستهداف الأعداء من مسافة."
+    },
+    "رمح الحراس": {
+        "price": 300, 
+        "type": "عادي", 
+        "image": "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?q=80&w=800", 
+        "desc": "رمح طويل يحافظ على مسافة آمنة بينك وبين الخصم."
+    },
 
-    # المتجر المظلم (رتب الشيطان والجحيم وأساطير الظلام)
-    "نصل الجحيم المحرق": {"price": 1200, "type": "🔥 رتبة الجحيم", "image": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=600", "desc": "نصل متوهج بنار الحمم البركانية المدمرة."},
-    "مخلب الشيطان المرعب": {"price": 1800, "type": "🖤 رتبة الشيطان", "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=600", "desc": "قوة شيطانية خالقة للرعب في قلوب الأعداء."},
-    "عباءة الظلال الملعونة": {"price": 900, "type": "🟣 أسطوري مظلم", "image": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600", "desc": "تخفي صاحبها وتمنحه مراوغة خارقة."},
-    "صولجان الموت الأبدي": {"price": 2500, "type": "🔥 رتبة الجحيم", "image": "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?q=80&w=600", "desc": "يدمر دروع الخصم بضربة واحدة مرعبة."},
-    "تاج الخراب الشيطاني": {"price": 3000, "type": "🖤 رتبة الشيطان", "image": "https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=600", "desc": "يعطي سيطرة كاملة على طاقات الظلام المحيطة."}
+    # 🌑 المتجر المظلم (معدات قوية - رتب الجحيم والشيطان الفخمة والمرعبة)
+    "نصل الجحيم المحرق": {
+        "price": 1200, 
+        "type": "🔥 رتبة الجحيم", 
+        "image": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800", 
+        "desc": "سيف أسطوري مشتعل بنيران الحمم البركانية التي تحرق كل شيء."
+    },
+    "مطرقة الجحيم العملاقة": {
+        "price": 2000, 
+        "type": "🔥 رتبة الجحيم", 
+        "image": "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?q=80&w=800", 
+        "desc": "مطرقة ثقيلة تنبعث منها طاقة جحيمية تحطم أي درع."
+    },
+    "خنجر الشيطان الدموي": {
+        "price": 1600, 
+        "type": "🖤 رتبة الشيطان", 
+        "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800", 
+        "desc": "خنجر شيطاني مسكون بلعنة الظلام وسرعة فائقة في القتل."
+    },
+    "سيف الشيطان الأبدي": {
+        "price": 2800, 
+        "type": "🖤 رتبة الشيطان", 
+        "image": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800", 
+        "desc": "سيف مرعب وفخم للغاية، ينبض بطاقة الشيطان المطلقة."
+    },
+    "صولجان الخراب المظلم": {
+        "price": 3500, 
+        "type": "🖤 رتبة الشيطان", 
+        "image": "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=800", 
+        "desc": "سلاح الدمار الشامل، يمنح مرتديه هيبة وعظمة الملوك السوداء."
+    }
 }
 
-# ==================== واجهات المتاجر (تفاعلية بالقوائم) ====================
+# ==================== واجهات المتاجر التفاعلية ====================
 
 class NormalShopView(discord.ui.View):
     def __init__(self):
@@ -93,11 +143,11 @@ class DarkShopView(discord.ui.View):
     @discord.ui.select(
         placeholder="🌑 اختر من معدات الجحيم والشيطان الخارقة...",
         options=[
-            discord.SelectOption(label="نصل الجحيم المحرق", description="السعر: 1200 | رتبة الجحيم 🔥", value="نصل الجحيم المحرق"),
-            discord.SelectOption(label="مخلب الشيطان المرعب", description="السعر: 1800 | رتبة الشيطان 🖤", value="مخلب الشيطان المرعب"),
-            discord.SelectOption(label="عباءة الظلال الملعونة", description="السعر: 900 | أسطوري مظلم 🟣", value="عباءة الظلال الملعونة"),
-            discord.SelectOption(label="صولجان الموت الأبدي", description="السعر: 2500 | رتبة الجحيم 🔥", value="صولجان الموت الأبدي"),
-            discord.SelectOption(label="تاج الخراب الشيطاني", description="السعر: 3000 | رتبة الشيطان 🖤", value="تاج الخراب الشيطاني"),
+            discord.SelectOption(label="نصل الجحيم المحرق", description="السعر: 1200 | 🔥 رتبة الجحيم", value="نصل الجحيم المحرق"),
+            discord.SelectOption(label="مطرقة الجحيم العملاقة", description="السعر: 2000 | 🔥 رتبة الجحيم", value="مطرقة الجحيم العملاقة"),
+            discord.SelectOption(label="خنجر الشيطان الدموي", description="السعر: 1600 | 🖤 رتبة الشيطان", value="خنجر الشيطان الدموي"),
+            discord.SelectOption(label="سيف الشيطان الأبدي", description="السعر: 2800 | 🖤 رتبة الشيطان", value="سيف الشيطان الأبدي"),
+            discord.SelectOption(label="صولجان الخراب المظلم", description="السعر: 3500 | 🖤 رتبة الشيطان", value="صولجان الخراب المظلم"),
         ]
     )
     async def select_dark_item(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -119,7 +169,7 @@ class DarkShopView(discord.ui.View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-# ==================== لوحة المطور التفاعلية (بدون كتابة يدوية) ====================
+# ==================== قائمة لوحة المطور لإهداء العتاد ====================
 
 class DevGearSelect(discord.ui.View):
     def __init__(self, target_member):
@@ -128,7 +178,7 @@ class DevGearSelect(discord.ui.View):
 
     @discord.ui.select(
         placeholder="⚔️ اختر القطعة المراد إهداؤها...",
-        options=[discord.SelectOption(label=name, description=f"النوع: {data['type']} | السعر: {data['price']}", value=name) for name, data in list(ITEMS_DATA.items())[:10]]
+        options=[discord.SelectOption(label=name, description=f"النوع: {data['type']} | السعر: {data['price']}", value=name) for name, data in list(ITEMS_DATA.items())]
     )
     async def select_dev_gear(self, interaction: discord.Interaction, select: discord.ui.Select):
         gear_name = select.values[0]
@@ -145,14 +195,14 @@ class DevGearSelect(discord.ui.View):
 
 @bot.tree.command(name="المتجر_العادي", description="استعرض المتاجر العادية واختر عتادك بضغطة زر")
 async def normal_shop(interaction: discord.Interaction):
-    embed = discord.Embed(title="🛒 المتجر العادي للمعدات", description="اختر من القائمة أدناه لتشاهد الصورة وتشتري سلاحك المفضل:", color=0x3498DB)
-    embed.set_image(url="https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=800")
+    embed = discord.Embed(title="🛒 المتجر العادي للمعدات", description="اختر من القائمة أدناه لتشاهد تفاصيل السلاح وتشتري ما تحتاجه:", color=0x3498DB)
+    embed.set_image(url="https://images.unsplash.com/photo-1595590424283-b8f17842773f?q=80&w=800")
     await interaction.response.send_message(embed=embed, view=NormalShopView(), ephemeral=True)
 
 @bot.tree.command(name="المتجر_المظلم", description="متجر أسلحة الجحيم والشيطان السرّية الخارقة")
 async def dark_shop(interaction: discord.Interaction):
     embed = discord.Embed(title="🌑 المتجر المظلم الأسطوري", description="أسلحة رتبتي **الجحيم** و **الشيطان** بانتظارك. اختر بحذر:", color=0x8E44AD)
-    embed.set_image(url="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=800")
+    embed.set_image(url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800")
     await interaction.response.send_message(embed=embed, view=DarkShopView(), ephemeral=True)
 
 @bot.tree.command(name="الملف", description="عرض رصيدك وعقاراتك وحقيبة معداتك")
@@ -175,7 +225,7 @@ async def profile(interaction: discord.Interaction, العضو: discord.Member =
     await interaction.followup.send(embed=embed)
 
 
-# لوحة المطور المحدثة (بدون كتابة مزعجة)
+# لوحة المطور المحدثة
 @bot.tree.command(name="لوحة_المطور", description="لوحة تحكم المطورين الحصرية")
 @app_commands.choices(العملية=[
     app_commands.Choice(name="💰 بنك العملات (إضافة رصيد بلا حدود)", value="bank_add"),
@@ -196,7 +246,6 @@ async def developer_panel(interaction: discord.Interaction, العملية: app_
         await interaction.response.send_message(f"✅ تمت إضافة `{كمية_العملات}` عملة لـ {العضو.mention}.\n💰 رصيده الجديد: `{eco['coins']}`", ephemeral=True)
         
     elif op_val == "give_gear":
-        # تفتح له قائمة منسدلة باختيار العتاد مباشرة بدون كتابة أسامي!
         await interaction.response.send_message(f"🛠️ اختر العتاد الذي تريد إهداءه إلى {العضو.mention} من القائمة أدناه:", view=DevGearSelect(العضو), ephemeral=True)
         
     elif op_val == "add_dev":
