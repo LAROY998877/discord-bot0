@@ -4,16 +4,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-# 1. إعداد الصلاحيات وتعريف البوت
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# ==================== قاعدة بيانات الأبطال الجدد (3 ذكور و 3 إناث) ====================
 HEROES = {
-    # الأبطال الذكور (3)
     "zealot_knight": {
         "name": "⚔️ زيالوت - فارس النور الأخير",
         "gender": "ذكر ♂️",
@@ -38,7 +35,6 @@ HEROES = {
         "desc": "محارب استوطن فوهات البركان حتى امتزج جسده بنيران الصهارة الملتهبة.",
         "image": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1000&auto=format&fit=crop"
     },
-    # البطلات الإناث (3)
     "lyra_storm": {
         "name": "⚡ ليرا - حارسة العواصف",
         "gender": "أنثى ♀️",
@@ -65,8 +61,6 @@ HEROES = {
     }
 }
 
-# قاعدة بيانات مؤقتة لتخزين مستويات التطوير للاعبين (حد أقصى لا نهائي)
-# يتم حفظ مستويات المعدات هنا لكل مستخدم: {user_id: {"دقة": level, ...}}
 PLAYER_STATS = {}
 
 def get_user_stats(user_id):
@@ -77,12 +71,10 @@ def get_user_stats(user_id):
         }
     return PLAYER_STATS[user_id]
 
-# ==================== الأحداث (Events) ====================
 @bot.event
 async def on_ready():
     print(f"🟢 البوت يعمل الآن بكفاءة باسم: {bot.user}")
 
-# ==================== أمر المزامنة والتنظيف (Sync) ====================
 @bot.command(name="sync")
 async def sync_commands(ctx):
     try:
@@ -94,15 +86,15 @@ async def sync_commands(ctx):
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ أثناء المزامنة: {e}")
 
-# ==================== الأوامر التفاعلية (Slash Commands) ====================
-
 @bot.tree.command(name="ping", description="فحص سرعة استجابة البوت")
 async def ping(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     latency = round(bot.latency * 1000)
-    await interaction.response.send_message(f"🏓 Pong! سرعة الاتصال: `{latency}ms`", ephemeral=True)
+    await interaction.followup.send(f"🏓 Pong! سرعة الاتصال: `{latency}ms`")
 
 @bot.tree.command(name="الملف", description="عرض بطاقتك الشخصية ومعدلاتك الحالية")
 async def profile(interaction: discord.Interaction, العضو: discord.Member = None):
+    await interaction.response.defer()
     target = العضو or interaction.user
     stats = get_user_stats(target.id)
     
@@ -128,18 +120,19 @@ async def profile(interaction: discord.Interaction, العضو: discord.Member =
     embed.add_field(name="🆔 الآيدي:", value=f"`{target.id}`", inline=True)
     embed.add_field(name="🎭 الرتبة العليا:", value=target.top_role.mention, inline=True)
     
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
-@bot.tree.command(name="الابطال", description="استعراض الأبطال الستة الجدد (قصصهم، مهاراتهم، وقوتهم)")
+@bot.tree.command(name="الابطال", description="استعراض الأبطال الستة الجدد")
 @app_commands.choices(البطل=[
     app_commands.Choice(name="⚔️ زيالوت (فارس النور - ذكر)", value="zealot_knight"),
-    app_commands.Choice(name="👥 كاي (ششبح الضباب - ذكر)", value="kai_phantom"),
+    app_commands.Choice(name="👥 كاي (شبح الضباب - ذكر)", value="kai_phantom"),
     app_commands.Choice(name="🔥 إجنيس (سيد الحمم - ذكر)", value="ignis_flame"),
     app_commands.Choice(name="⚡ ليرا (حارسة العواصف - أنثى)", value="lyra_storm"),
     app_commands.Choice(name="🌙 سيلين (عرافة القمر - أنثى)", value="selene_moon"),
     app_commands.Choice(name="🗡️ فورتيكسا (قاطعة الفولاذ - أنثى)", value="vortexa_blade")
 ])
 async def heroes(interaction: discord.Interaction, البطل: app_commands.Choice[str]):
+    await interaction.response.defer()
     selected = HEROES[البطل.value]
     
     embed = discord.Embed(
@@ -150,7 +143,7 @@ async def heroes(interaction: discord.Interaction, البطل: app_commands.Choi
     embed.set_image(url=selected["image"])
     embed.set_footer(text="أبطال الأساطير الجدد ⚔️")
     
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="تطوير_المعدات", description="تطوير ورفع مستوى أي معدة من معداتك بلا حدود")
 @app_commands.choices(المعدة=[
@@ -164,11 +157,12 @@ async def heroes(interaction: discord.Interaction, البطل: app_commands.Choi
     app_commands.Choice(name="💥 الهجوم المتوحش", value="الهجوم المتوحش")
 ])
 async def upgrade_gear(interaction: discord.Interaction, المعدة: app_commands.Choice[str]):
+    await interaction.response.defer()
     user_id = interaction.user.id
     stats = get_user_stats(user_id)
     
     gear_key = المعدة.value
-    stats[gear_key] += 1  # رفع المستوى بمقدار 1 (تطوير لا نهائي)
+    stats[gear_key] += 1
     new_level = stats[gear_key]
     
     embed = discord.Embed(
@@ -176,27 +170,24 @@ async def upgrade_gear(interaction: discord.Interaction, المعدة: app_comma
         description=f"لقد قمت بترقية معدتك **{المعدة.name}**!\n\n⭐ **المستوى الحالي الجديد:** `{new_level}` (بلا حدود)",
         color=discord.Color.green()
     )
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
-# ==================== أمر خاص بالمطور فقط ====================
-# ملاحظة: استبدل YOUR_DEVELOPER_ID_HERE بـ الآيدي (ID) الخاص بحسابك على دسكورد
-DEVELOPER_ID = 1103985971638325269  # ضع آيدي حسابك الشخصي هنا
+DEVELOPER_ID = 000000000000000000  # ضع آيدي حسابك الشخصي هنا
 
 @bot.tree.command(name="المطور_اضافة_امر", description="أمر خاص بالمطور فقط لإضافة خصائص برمجية للمستقبل")
 @app_commands.describe(الكود_أو_الميزة="اكتب وصف الميزة أو الأمر البرمجي المراد إضافته")
 async def dev_only_command(interaction: discord.Interaction, الكود_أو_الميزة: str):
-    # التحقق مما إذا كان المستخدم هو المطور
     if interaction.user.id != DEVELOPER_ID:
         await interaction.response.send_message("❌ عذراً، هذا الأمر مخصص **لمطور البوت فقط** ولا يحق لك استخدامه!", ephemeral=True)
         return
     
+    await interaction.response.defer(ephemeral=True)
     embed = discord.Embed(
         title="🛠️ لوحة تحكم المطورين",
         description=f"تم استقبال الميزة أو الكود الجديد بنجاح وإضافته للنظام الآلي:\n\n> `{الكود_أو_الميزة}`",
         color=discord.Color.dark_embed()
     )
     embed.set_footer(text="لوحة المطور السيادية 🔒")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
-# تشغيل البوت
 bot.run(os.getenv('TOKEN'))
