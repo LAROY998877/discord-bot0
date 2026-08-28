@@ -12,38 +12,40 @@ class FakhamaBot(commands.Bot):
         super().__init__(command_prefix='!', intents=intents)
 
     async def setup_hook(self):
-        # مزامنة الأوامر تلقائياً مع سيرفرات ديسكورد عند التشغيل
         synced = await self.tree.sync()
-        print(f"✅ تمت مزامنة {len(synced)} أمر سلاش بنجاح!")
+        print(f"✅ تمت مزامنة {len(synced)} أمر بنجاح!")
 
 bot = FakhamaBot()
 
-# ==================== 1. أمر الملف الشخصي الفخم ====================
+# طباعة أي خطأ يحدث داخل الكونسول لتسهيل معرفته
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: Exception):
+    print(f"❌ خطأ أثناء تنفيذ الأمر: {error}")
+    if not interaction.response.is_done():
+        await interaction.response.send_message("❌ حدث خطأ أثناء تنفيذ الأمر، يرجى المحاولة لاحقاً.", ephemeral=True)
+
+# ==================== 1. أمر الملف الشخصي ====================
 @bot.tree.command(name="الملف", description="عرض بطاقتك الشخصية بتصميم فخم وخلفية سينمائية")
 async def profile(interaction: discord.Interaction, العضو: discord.Member = None):
+    await interaction.response.defer()
     target = العضو or interaction.user
-    
-    # رابط خلفية فخمة وعالية الدقة
     background_url = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=1000&auto=format&fit=crop"
     
     embed = discord.Embed(
         title=f"👑 الملف الشخصي | {target.display_name}",
         description="✨ **البطاقة التعريفية الرسمية داخل السيرفر**",
-        color=discord.Color.from_rgb(212, 175, 55)  # لون ذهبي فخم
+        color=discord.Color.from_rgb(212, 175, 55)
     )
-    
     embed.set_thumbnail(url=target.display_avatar.url)
-    embed.add_field(name="🆔 الآيدي (ID):", value=f"`{target.id}`", inline=True)
+    embed.add_field(name="🆔 الآيدي:", value=f"`{target.id}`", inline=True)
     embed.add_field(name="📅 انضمامك للسيرفر:", value=f"<t:{int(target.joined_at.timestamp())}:R>", inline=True)
     embed.add_field(name="🚀 إنشاء الحساب:", value=f"<t:{int(target.created_at.timestamp())}:R>", inline=True)
     embed.add_field(name="🎭 أعلى رتبة:", value=target.top_role.mention, inline=False)
-    
     embed.set_image(url=background_url)
-    embed.set_footer(text="نظام البطاقات الفخمة 🛡️", icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
     
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
-# ==================== 2. أمر عرض الأبطال ====================
+# ==================== 2. أمر الأبطال ====================
 HEROES = {
     "فارس_الظلام": {
         "name": "⚔️ فارس الظلام (Dark Knight)",
@@ -71,22 +73,23 @@ HEROES = {
     app_commands.Choice(name="🐉 سيدة التنانين", value="سيدة_التنانين"),
     app_commands.Choice(name="⚡ الساموراي الذهبي", value="الساموراي_الذهبي")
 ])
-async def heroes(interaction: discord.Interaction, البطل: str):
-    hero = HEROES[البطل]
+async def heroes(interaction: discord.Interaction, البطل: app_commands.Choice[str]):
+    await interaction.response.defer()
+    selected_hero = HEROES[البطل.value]
     
     embed = discord.Embed(
-        title=hero["name"],
-        description=f"📜 **الوصف:** {hero['desc']}\n⚡ **مستوى القوة:** `{hero['power']}`",
+        title=selected_hero["name"],
+        description=f"📜 **الوصف:** {selected_hero['desc']}\n⚡ **مستوى القوة:** `{selected_hero['power']}`",
         color=discord.Color.purple()
     )
-    embed.set_image(url=hero["image"])
-    embed.set_footer(text="أبطال النخبة الأسطورية ⚔️")
+    embed.set_image(url=selected_hero["image"])
     
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
-# ==================== 3. لعبة عجلة الحظ والذهب ====================
+# ==================== 3. لعبة الحظ ====================
 @bot.tree.command(name="حظ", description="تجربة حظك اليومي لربح الذهب")
 async def luck(interaction: discord.Interaction):
+    await interaction.response.defer()
     outcomes = [
         ("🏆 فوز أسطوري!", "حصلت على 500 قطعة ذهبية 🪙", discord.Color.gold()),
         ("🎉 فوز ممتاز!", "حصلت على 150 قطعة ذهبية 🪙", discord.Color.green()),
@@ -94,9 +97,9 @@ async def luck(interaction: discord.Interaction):
         ("⚡ تعادل!", "لم تكسب ولم تخسر أي شيء.", discord.Color.blue())
     ]
     title, desc, color = random.choice(outcomes)
-    
     embed = discord.Embed(title=title, description=desc, color=color)
-    await interaction.response.send_message(embed=embed)
+    
+    await interaction.followup.send(embed=embed)
 
 # ==================== 4. لعبة التخمين ====================
 @bot.tree.command(name="تخمين", description="لعبة تخمين رقم الحظ من 1 إلى 10")
@@ -112,11 +115,5 @@ async def guess(interaction: discord.Interaction, الرقم: int):
         embed = discord.Embed(title="❌ إجابة خاطئة!", description=f"تخمينك كان `{الرقم}` والرقم السري الصحيح هو `{secret_num}`.", color=discord.Color.red())
         
     await interaction.response.send_message(embed=embed)
-
-# ==================== أمر المزامنة اليدوي (احتياطي) ====================
-@bot.command()
-async def sync(ctx):
-    synced = await bot.tree.sync()
-    await ctx.send(f"✅ تمت مزامنة {len(synced)} أمر بنجاح!")
 
 bot.run(os.getenv('TOKEN'))
