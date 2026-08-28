@@ -12,19 +12,19 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 # الآيدي الخاص بك (المطور الأساسي)
 DEVELOPER_ID = 1103985971638325269
 
-# قواعد البيانات المؤقتة (العملات، العتاد، والمطورين المساعدين)
-USER_ECONOMY = {}  # لتخزين العملات والبنك
-USER_STATS = {}    # لتخزين العتاد والمستويات
-EXTRA_DEVS = set() # لأسماء وأيديk المطورين المساعدين الذين تضيفهم
+# قواعد البيانات المؤقتة
+USER_ECONOMY = {}  # العملات والبنك
+USER_STATS = {}    # عتاد اللاعبين
+EXTRA_DEVS = set() # المطورين المساعدين
 
 def get_user_economy(user_id):
     if user_id not in USER_ECONOMY:
-        USER_ECONOMY[user_id] = {"coins": 1000}
+        USER_ECONOMY[user_id] = {"coins": 500}  # يبدأ بـ 500 عملة
     return USER_ECONOMY[user_id]
 
 def get_user_stats(user_id):
     if user_id not in USER_STATS:
-        USER_STATS[user_id] = {"سيف الأساطير": 1, "درع الملوك": 1}
+        USER_STATS[user_id] = {}
     return USER_STATS[user_id]
 
 @bot.event
@@ -35,15 +35,89 @@ async def on_ready():
     except Exception as e:
         print(f"❌ خطأ في المزامنة: {e}")
 
-# 1. أمر فحص السرعة
-@bot.tree.command(name="ping", description="فحص سرعة استجابة البوت")
-async def ping(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    latency = round(bot.latency * 1000)
-    await interaction.followup.send(f"🏓 Pong! سرعة الاتصال: `{latency}ms`")
+# ==================== أقسام المتاجر والتفاعلات ====================
 
-# 2. أمر الملف الشخصي والبنك البسيط
-@bot.tree.command(name="الملف", description="عرض عملاتك ورصيدك ومعداتك")
+# 1. قائمة اختيار المتجر العادي
+class NormalShopView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+
+    @discord.ui.select(
+        placeholder="🛒 اختر العتاد العادي للشراء...",
+        options=[
+            discord.SelectOption(label="سيف حديدي بسيط", description="السعر: 100 عملة | عتاد مبتدئ", value="سيف حديدي بسيط:100"),
+            discord.SelectOption(label="درع خشبي متين", description="السعر: 150 عملة | حماية أساسية", value="درع خشبي متين:150"),
+            discord.SelectOption(label="خنجر الصياد", description="السعر: 200 عملة | خفة وسرعة", value="خنجر الصياد:200"),
+        ]
+    )
+    async def select_normal_gear(self, interaction: discord.Interaction, select: discord.ui.Select):
+        item_data = select.values[0].split(":")
+        item_name = item_data[0]
+        item_price = int(item_data[1])
+        
+        eco = get_user_economy(interaction.user.id)
+        if eco["coins"] < item_price:
+            await interaction.response.send_message(f"❌ رصيدك غير كافي! تحتاج إلى `{item_price}` عملة.", ephemeral=True)
+            return
+            
+        eco["coins"] -= item_price
+        stats = get_user_stats(interaction.user.id)
+        stats[item_name] = stats.get(item_name, 0) + 1
+        
+        await interaction.response.send_message(f"✅ اشتريت **{item_name}** بنجاح من المتجر العادي!\n💰 الباقي في رصيدك: `{eco['coins']}` عملة.", ephemeral=True)
+
+
+# 2. قائمة اختيار المتجر المظلم (بأعلى الرتب: الشيطان والجحيم)
+class DarkShopView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+
+    @discord.ui.select(
+        placeholder="🌑 اختر من أسلحة الجحيم والظلام...",
+        options=[
+            discord.SelectOption(label="نصل الجحيم المحرق", description="السعر: 1000 عملة | 🔴 رتبه: الجحيم 🔥", value="نصل الجحيم المحرق:1000"),
+            discord.SelectOption(label="مخلب الشيطان المرعب", description="السعر: 1500 عملة | 🖤 رتبه: الشيطان ⚡", value="مخلب الشيطان المرعب:1500"),
+            discord.SelectOption(label="عباءة الظلال الملعونة", description="السعر: 800 عملة | 🟣 رتبه: أسطوري مظلم", value="عباءة الظلال الملعونة:800"),
+        ]
+    )
+    async def select_dark_gear(self, interaction: discord.Interaction, select: discord.ui.Select):
+        item_data = select.values[0].split(":")
+        item_name = item_data[0]
+        item_price = int(item_data[1])
+        
+        eco = get_user_economy(interaction.user.id)
+        if eco["coins"] < item_price:
+            await interaction.response.send_message(f"❌ رصيدك لا يكفي لشراء عتاد رتبة الجحيم أو الشيطان! تحتاج `{item_price}` عملة.", ephemeral=True)
+            return
+            
+        eco["coins"] -= item_price
+        stats = get_user_stats(interaction.user.id)
+        stats[item_name] = stats.get(item_name, 0) + 1
+        
+        await interaction.response.send_message(f"🔥 تم اقتناء **{item_name}** بنجاح من المتجر المظلم!\n⚡ لقد أصبحت تمتلك قوة مرعبة!\n💰 رصيدك الحالي: `{eco['coins']}` عملة.", ephemeral=True)
+
+
+# ==================== الأوامر العامة وأمر المطور ====================
+
+@bot.tree.command(name="المتجر_العادي", description="استعرض واشتري العتاد العادي بأسعار مناسبة")
+async def normal_shop(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🛒 المتجر العادي للمعدات",
+        description="اختر من القائمة أدناه العتاد المناسب لمغامرتك بأسعار اقتصادية ومناسبة للجميع.",
+        color=0x3498DB
+    )
+    await interaction.response.send_message(embed=embed, view=NormalShopView(), ephemeral=True)
+
+@bot.tree.command(name="المتجر_المظلم", description="متجر الأسلحة الخارقة (رتب الشيطان والجحيم)")
+async def dark_shop(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🌑 المتجر المظلم السرّي",
+        description="هنا حيث تستوطن القوة الحقيقية. أسلحة رتبتي **الجحيم** و **الشيطان** بانتظارك!",
+        color=0x8E44AD
+    )
+    await interaction.response.send_message(embed=embed, view=DarkShopView(), ephemeral=True)
+
+@bot.tree.command(name="الملف", description="عرض رصيدك، عملاتك، ومعداتك")
 async def profile(interaction: discord.Interaction, العضو: discord.Member = None):
     await interaction.response.defer()
     target = العضو or interaction.user
@@ -55,14 +129,17 @@ async def profile(interaction: discord.Interaction, العضو: discord.Member =
         color=0xD4AF37
     )
     embed.set_thumbnail(url=target.display_avatar.url)
-    embed.add_field(name="💰 رصيد البنك والعملات:", value=f"`{eco['coins']}` عملة", inline=False)
+    embed.add_field(name="💰 رصيد العملات:", value=f"`{eco['coins']}` عملة", inline=False)
     
-    gear_text = "\n".join([f"🔹 {gear}: مستوى `{lvl}`" for gear, lvl in stats.items()])
-    embed.add_field(name="⚔️ العتاد والمستويات:", value=gear_text, inline=False)
-    
+    if stats:
+        gear_text = "\n".join([f"⚔️ {gear} (العدد: {count})" for gear, count in stats.items()])
+    else:
+        gear_text = "لا توجد معدات حالياً. تسوق الآن!"
+        
+    embed.add_field(name="🎒 حقيبة المعدات:", value=gear_text, inline=False)
     await interaction.followup.send(embed=embed)
 
-# 3. لوحة المطور السيادية (سرية بالكامل ولا تفتح إلا لك أو لمن تضيفهم)
+# لوحة المطور السيادية (بنك، عتاد، وإضافة مطورين)
 @bot.tree.command(name="لوحة_المطور", description="لوحة التحكم الخاصة بالمطورين فقط")
 @app_commands.choices(العملية=[
     app_commands.Choice(name="💰 بنك العملات (إضافة عملات بلا حدود)", value="bank_add"),
@@ -70,9 +147,9 @@ async def profile(interaction: discord.Interaction, العضو: discord.Member =
     app_commands.Choice(name="👥 إضافة شخص جديد لقائمة المطورين", value="add_dev")
 ])
 @app_commands.describe(
-    العملية="اختر العملية المراد تنفيذها",
+    العملية="اختر العملية",
     العضو="اختر العضو المستهدف",
-    الكمية_أو_الاسم="اكتب عدد العملات، أو اسم العتاد، أو اتركها حسب الطلب"
+    الكمية_أو_الاسم="اكتب عدد العملات أو اسم العتاد"
 )
 async def developer_panel(
     interaction: discord.Interaction, 
@@ -80,16 +157,13 @@ async def developer_panel(
     العضو: discord.Member, 
     الكمية_أو_الاسم: str
 ):
-    # التحقق هل المستخدم هو المطور الأساسي أو أحدهم مضاف مسبقاً
     if interaction.user.id != DEVELOPER_ID and interaction.user.id not in EXTRA_DEVS:
-        await interaction.response.send_message("❌ عذراً، هذه اللوحة مخصصة للمطورين فقط ولا يمكنك الوصول إليها!", ephemeral=True)
+        await interaction.response.send_message("❌ عذراً، هذه اللوحة مخصصة للمطورين فقط!", ephemeral=True)
         return
     
     await interaction.response.defer(ephemeral=True)
-    
     op_val = العملية.value
     target_id = العضو.id
-    
     embed = discord.Embed(title="🛠️ لوحة تحكم المطور السيادية", color=0x2b2d31)
     
     if op_val == "bank_add":
@@ -97,24 +171,20 @@ async def developer_panel(
             amount = int(الكمية_أو_الاسم)
             eco = get_user_economy(target_id)
             eco["coins"] += amount
-            embed.description = f"✅ **تمت العملية بنجاح!**\nتمت إضافة `{amount}` عملة إلى رصيد البنك الخاص بـ {العضو.mention}.\n💰 الرصيد الجديد: `{eco['coins']}`"
+            embed.description = f"✅ تمت إضافة `{amount}` عملة لـ {العضو.mention}.\n💰 الرصيد الجديد: `{eco['coins']}`"
         except ValueError:
-            embed.description = "❌ يرجى إدخال رقم صحيح في خانة الكمية والاسم!"
+            embed.description = "❌ يرجى إدخال رقم صحيح للعملات!"
             
     elif op_val == "give_gear":
         stats = get_user_stats(target_id)
         gear_name = الكمية_أو_الاسم
-        if gear_name in stats:
-            stats[gear_name] += 1
-        else:
-            stats[gear_name] = 1
-        embed.description = f"✅ **تم إهداء العتاد بنجاح!**\nتم منح العتاد (`{gear_name}`) برفع مستواه لـ {العضو.mention}."
+        stats[gear_name] = stats.get(gear_name, 0) + 1
+        embed.description = f"✅ تم إهداء العتاد (`{gear_name}`) إلى {العضو.mention} بنجاح."
         
     elif op_val == "add_dev":
         EXTRA_DEVS.add(target_id)
-        embed.description = f"🛡️ **تمت إضافة مطور جديد!**\nتم منح {العضو.mention} صلاحيات الدخول إلى لوحة المطورين."
+        embed.description = f"🛡️ تم منح {العضو.mention} صلاحيات لوحة المطورين."
 
     await interaction.followup.send(embed=embed, ephemeral=True)
 
-# تشغيل البوت
 bot.run(os.getenv('TOKEN'))
