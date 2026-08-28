@@ -7,29 +7,20 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-MY_GUILD = discord.Object(id=1297951366261510186)
-
-# أمر السلاش الجديد باسم مختلف تماماً
-@discord.app_commands.command(name="ping", description="فحص استجابة البوت")
+# أمر السلاش
+@bot.tree.command(name="ping", description="فحص استجابة البوت")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("🏓 Pong! البوت شغال 100%")
 
-@bot.event
-async def on_ready():
-    print(f'Logged in as {bot.user}')
+# أمر عادي لمزامنة أوامر السلاش فوراً في السيرفر الحالي
+@bot.command()
+async def sync(ctx):
     try:
-        # 1. مسح جميع الأوامر العامة القديمة
-        bot.tree.clear_commands(guild=None)
-        await bot.tree.sync()
-        
-        # 2. مسح أوامر السيرفر وإضافة الأمر الجديد
-        bot.tree.clear_commands(guild=MY_GUILD)
-        bot.tree.add_command(ping, guild=MY_GUILD)
-        
-        synced = await bot.tree.sync(guild=MY_GUILD)
-        print(f"تم مسح القديم ومزامنة {len(synced)} أمر جديد.")
+        bot.tree.copy_global_to(guild=ctx.guild)
+        synced = await bot.tree.sync(guild=ctx.guild)
+        await ctx.send(f"✅ تمت مزامنة {len(synced)} أمر في هذا السيرفر بنجاح!")
     except Exception as e:
-        print(f"خطأ: {e}")
+        await ctx.send(f"❌ حدث خطأ أثناء المزامنة: {e}")
 
 @bot.command()
 async def t(ctx):
