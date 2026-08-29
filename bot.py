@@ -121,7 +121,7 @@ class RegisterModal(discord.ui.Modal, title="نظام التسجيل الإجب�
         db_connection.commit()
 
         await interaction.response.send_message(
-            f"✅ **تم تسجيلك بنجاح!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك استخدام أمر `/الابطال` وقوائم المنيو بحرية!",
+            f"✅ **تم تسجيلك بنجاح!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك استخدام الأوامر وقوائم المنيو بحرية!",
             ephemeral=True,
         )
 
@@ -132,7 +132,58 @@ async def register_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 4. بيانات الأبطال (القصص، القوة، الصور)
+# 4. شخصية "السفاح" (خاصة بالمطورين فقط)
+# ==========================================
+
+
+@bot.tree.command(name="السفاح", description="[خاص بالمطورين] استدعاء شخصية السفاح المرعبة")
+async def assassin_command(interaction: discord.Interaction):
+    # التأكد من أن المستخدم مطور أو مالك السيرفر
+    cursor.execute("SELECT COUNT(*) FROM developers")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(
+            "INSERT OR IGNORE INTO developers (user_id) VALUES (?)",
+            (interaction.user.id,),
+        )
+        db_connection.commit()
+
+    if (
+        not is_dev(interaction.user.id)
+        and interaction.user.id != interaction.guild.owner_id
+    ):
+        await interaction.response.send_message(
+            "❌ **خطأ أمني:** هذا الأمر مرعب وخاص بالمطورين المعتمدين فقط ولا يمكن للعامة استخدامه!",
+            ephemeral=True,
+        )
+        return
+
+    embed = discord.Embed(
+        title="🩸 السفاح - كابوس الظلال المطلق",
+        description=(
+            "**📖 القصة المرعبة:**\n"
+            "في أعمق قيعان الجحيم الرقمي، حيث تتساقط أرواح الأكواد التالفة، وُلد السفاح.\n"
+            "كيان شيطاني لا يرحم، يرتدي قناعاً متآكلاً من الديحان، ويحمل منجلًا مصبوغًا بدماء من حاولوا عبثاً اختراق الأنظمة الإمبراطورية.\n"
+            "لا صرخات تنفع أمامه، ولا دفاعات تصد ضرباته.. إنه الحارس الشخصي للمطورين والجلاد الأكبر لكل متطفل!\n\n"
+            "📊 **معدلات القوة المرعبة:**\n"
+            "• قوة الفتاك: `999,999` 🔪\n"
+            "• رعب الدمار: `لا نهائي` 💀\n"
+            "• نسبة النجاة منه: `0%`\n\n"
+            "⚠️ *تحذير: حضور هذا الكيان يعني أن الإمبراطورية تحت السيطرة المطلقة للمطور.*"
+        ),
+        color=discord.Color.dark_red(),
+    )
+    embed.set_image(
+        url="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500"
+    )
+    embed.set_footer(
+        text=f"استدعاء سري بواسطة المطور: {interaction.user.display_name}"
+    )
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ==========================================
+# 5. نظام الأبطال العاديين (6 أبطال)
 # ==========================================
 HEROES_DATA = {
     "arthur": {
@@ -239,7 +290,6 @@ class HeroSelectDropdown(discord.ui.Select):
         hero = HEROES_DATA[choice]
         user_id = interaction.user.id
 
-        # حفظ البطل المختار في قاعدة البيانات تلقائياً
         cursor.execute(
             "UPDATE user_data SET hero_name = ? WHERE user_id = ?",
             (hero["title"], user_id),
@@ -299,7 +349,7 @@ async def heroes_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 5. واجهات المنيو الأخرى (البنك، المتصدرين، المطورين)
+# 6. الأوامر الأخرى (البنك والمطورين)
 # ==========================================
 
 
@@ -332,27 +382,6 @@ class BankMenuView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(
-        label="المنحة اليومية", style=discord.ButtonStyle.primary, emoji="🎁", row=0
-    )
-    async def daily_gift(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        user_id = interaction.user.id
-        cursor.execute(
-            "UPDATE user_data SET balance = balance + 100, floors = floors + 1 WHERE user_id = ?",
-            (user_id,),
-        )
-        db_connection.commit()
-        cursor.execute(
-            "SELECT balance FROM user_data WHERE user_id = ?", (user_id,)
-        )
-        new_balance = cursor.fetchone()[0]
-        await interaction.response.send_message(
-            f"🎉 استلمت المنحة الملكية! رصيدك الآن: `{new_balance}` 💎",
-            ephemeral=True,
-        )
-
 
 @bot.tree.command(name="البنك", description="فتح منيو المصرف الإمبراطوري")
 async def bank_panel(interaction: discord.Interaction):
@@ -371,7 +400,6 @@ async def bank_panel(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-# لوحة المطورين مع الرصد التلقائي للأوامر
 class DevPanelView(discord.ui.View):
 
     def __init__(self, author_id):
@@ -468,7 +496,7 @@ async def add_developer(interaction: discord.Interaction, member: discord.Member
 
 
 # ==========================================
-# 6. تشغيل البوت
+# 7. تشغيل البوت
 # ==========================================
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
