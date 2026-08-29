@@ -1,50 +1,70 @@
-import os
 import sqlite3
 import discord
-from discord.ext.commands import Bot
+from discord.ext import commands
 
-# 1. التأكد من إنشاء مجلد الـ Volume تلقائياً
-os.makedirs("/data", exist_ok=True)
+# 1. إعداد اتصال قاعدة البيانات (SQLite) وإنشاء الجدول إذا لم يكن موجوداً
+db_connection = sqlite3.connect("bot_database.db")
+cursor = db_connection.cursor()
 
-# 2. إعداد قاعدة البيانات داخل الـ Volume
-DB_FILE = "/data/database.db"
-conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-cursor = conn.cursor()
-
-# إنشاء الجداول الأساسية
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-        user_id TEXT PRIMARY KEY,
-        name TEXT,
-        age INTEGER,
-        gender TEXT,
-        hero TEXT
+cursor.execute(
+    """
+    CREATE TABLE IF NOT EXISTS user_data (
+        user_id INTEGER PRIMARY KEY,
+        username TEXT,
+        points INTEGER DEFAULT 0
     )
-''')
+"""
+)
+db_connection.commit()
 
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS economy (
-        user_id TEXT PRIMARY KEY,
-        balance INTEGER DEFAULT 0
-    )
-''')
-
-conn.commit()
-
-# 3. إعدادات ديسكورد بوت
-TOKEN = os.getenv("DISCORD_TOKEN")
-
+# 2. إعداد البوت
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
+
 
 @bot.event
 async def on_ready():
-    print(f"--- البوت متصل الآن بنجاح باسم {bot.user} ---")
+    print(f"تم تسجيل الدخول بنجاح باسم {bot.user}")
 
-# تشغيل البوت
-if TOKEN:
-    bot.run(TOKEN)
-else:
-    print("خطأ: لم يتم العثور على توكن البوت (DISCORD_TOKEN) في المتغيرات!")
+
+# 3. أمر لحفظ أو تحديث بيانات المستخدم في قاعدة البيانات
+@bot.command(name="حفظ", help="يقوم بحفظ أو تحديث نقاطك في قاعدة بيانات SQLite")
+async def save_data(ctx, points: int):
+    user_id = ctx.author.id
+    username = str(ctx.author)
+
+    # التحقق من وجود المستخدم مسبقاً أو تحديث بياناته
+    cursor.execute(
+        """
+        INSERT INTO user_data (user_id, username, points) 
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id) 
+        DO UPDATE SET points = ?, username = ?
+    """,
+        (user_id, username, points, points, username),
+    )
+    db_connection.commit()
+
+    await ctx.send(
+        f"تم حفظ بياناتك بنجاح يا {ctx.author.mention}! النقاط المسجلة: {points}"
+    )
+
+
+# 4. أمر لاسترجاع البيانات المخزنة من قاعدة البيانات
+@bot.command(name="بياناتي", help="يعرض بياناتك المخزنة في قاعدة البيانات")
+async def get_data(ctx):
+    user_id = ctx.author.id
+
+    cursor.execute("SELECT points FROM user_data WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+
+    if result:
+        await ctx.send(f"رصيدك المحفوظ في قاعدة البيانات هو: {result[0]} نقطة.")
+    else:
+        await ctx.send("لا توجد بيانات مخزنة لك حتى الآن. استخدم أمر `!حفظ` أولاً.")
+
+
+# ضع التوكن الخاص بك هنا
+# bot.run("YOUR_BOT_TOKEN")
