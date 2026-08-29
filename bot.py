@@ -1,11 +1,12 @@
-print("--- البوت بدأ بالعمل الآن ---")
 import os
 import sqlite3
+import discord
+from discord.ext.commands import Bot
 
-# التأكد من إنشاء مجلد الـ Volume تلقائياً قبل الاتصال بقاعدة البيانات
+# 1. التأكد من إنشاء مجلد الـ Volume تلقائياً
 os.makedirs("/data", exist_ok=True)
 
-# مسار قاعدة البيانات داخل الـ Volume
+# 2. إعداد قاعدة البيانات داخل الـ Volume
 DB_FILE = "/data/database.db"
 conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 cursor = conn.cursor()
@@ -29,3 +30,21 @@ cursor.execute('''
 ''')
 
 conn.commit()
+
+# 3. إعدادات ديسكورد بوت
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+bot = Bot(command_prefix="!", intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f"--- البوت متصل الآن بنجاح باسم {bot.user} ---")
+
+# تشغيل البوت
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("خطأ: لم يتم العثور على توكن البوت (DISCORD_TOKEN) في المتغيرات!")
