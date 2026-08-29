@@ -19,7 +19,6 @@ DB_FILE = "database.db"
 conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 cursor = conn.cursor()
 
-# إنشاء الجداول إذا لم تكن موجودة مع إضافة حقول التوفير والمنحة اليومية
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS users (
         user_id TEXT PRIMARY KEY,
@@ -82,7 +81,6 @@ def update_economy(user_id, eco):
                    (eco["coins"], eco["gems"], json.dumps(eco["inventory"]), eco["gear_level"], eco["max_floor"], eco.get("loan_debt", 0), eco.get("savings", 0), eco.get("last_daily", ""), str(user_id)))
     conn.commit()
 
-# تعريف الأبطال
 HEROES_DATA = {
     "ثورن": {"gender": "ذكر", "title": "عملاق الجبال", "story": "محارب شجاع درعه مصنوع من حجر النيزك.", "power": "صلابة حديدية", "skills": "ضربة الأرض", "art": "[ ثورن 🏔️ ]"},
     "كايدن": {"gender": "ذكر", "title": "سياف اللهيب", "story": "أقسم على الانتقام بسيفه المشتعل بنيران التنين.", "power": "إشعال النيران", "skills": "سيف اللهيب", "art": "[ كايدن 🔥 ]"},
@@ -100,21 +98,16 @@ HEROES_DATA = {
 async def on_ready():
     try:
         synced = await bot.tree.sync()
-        print(f"🟢 تم تسجيل {len(synced)} أمر بنجاح مع البنك الفاخر المحدث!")
+        print(f"🟢 تم تسجيل {len(synced)} أمر بنجاح!")
     except Exception as e:
         print(f"❌ خطأ في المزامنة: {e}")
-
-# ==================== 1. نظام التسجيل واختيار البطل ====================
-class HeroSelectView(discord.ui.View):
-    def __init__(self, gender: str, name_val: str, age_val: int):
-        super().__init__(timeout=60)
-        options = [discord.SelectOption(label=h_name, description=h_data["title"], emoji="⚔️") for h_name, h_data in HEROES_DATA.items() if h_data["gender"] == gender]
-        self.add_item(HeroDropdown(options, name_val, age_val, gender))
 
 class HeroDropdown(discord.ui.Select):
     def __init__(self, options, name_val, age_val, gender):
         super().__init__(placeholder="اختر بطلك الأسطوري المفضّل...", options=options)
-        self.name_val, self.age_val, self.gender = name_val, age_val, gender
+        self.name_val = name_val
+        self.age_val = age_val
+        self.gender = gender
 
     async def callback(self, interaction: discord.Interaction):
         chosen_hero = self.values[0]
@@ -127,6 +120,12 @@ class HeroDropdown(discord.ui.Select):
         embed.add_field(name="⚡ القدرة", value=h_info['power'], inline=True)
         embed.add_field(name="🌀 المهارة", value=h_info['skills'], inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class HeroSelectView(discord.ui.View):
+    def __init__(self, gender: str, name_val: str, age_val: int):
+        super().__init__(timeout=60)
+        options = [discord.SelectOption(label=h_name, description=h_data["title"], emoji="⚔️") for h_name, h_data in HEROES_DATA.items() if h_data["gender"] == gender]
+        self.add_item(HeroDropdown(options, name_val, age_val, gender))
 
 class RegistrationModal(discord.ui.Modal, title="📝 استمارة التسجيل الأسطورية"):
     def __init__(self, gender: str):
@@ -159,7 +158,7 @@ async def register(interaction: discord.Interaction):
         return
     await interaction.response.send_message("🎮 مرحباً بك! يرجى اختيار جنس الشخصية للبدء:", view=GenderSelectView(), ephemeral=True)
 
-# ==================== 2. نظام البنك الفاخر والراقي جداً ====================
+# ==================== نظام البنك الفاخر ====================
 class LoanModal(discord.ui.Modal, title="🏛️ خزنة القروض الإمبراطورية الفاخرة"):
     loan_amount_input = discord.ui.TextInput(label="مبلغ القرض المطلوب", placeholder="أدخل المبلغ (الحد الأقصى 50,000 عملة)...", max_length=6)
 
@@ -330,7 +329,6 @@ class LuxuryBankView(discord.ui.View):
             await interaction.response.send_message("⏳ لقد استلمت منحتك الملكية اليومية بالفعل! عُد غداً في منتصف الليل لتلقي المزيد من العطايا.", ephemeral=True)
             return
 
-        # مكافأة المنحة الفاخرة
         bonus_coins = 2500
         bonus_gems = 10
         eco["coins"] += bonus_coins
@@ -340,7 +338,7 @@ class LuxuryBankView(discord.ui.View):
 
         embed = discord.Embed(
             title="🎁 صُرفت المنحة الإمبراطورية اليومية بنجاح",
-            description=f"بصفتك مواطناً من طبقة النبلاء، تفضل البنك المركزي بمنحك هديتك الملكية اليومية!",
+            description="بصفتك مواطناً من طبقة النبلاء، تفضل البنك المركزي بمنحك هديتك الملكية اليومية!",
             color=0xF1C40F
         )
         embed.add_field(name="🪙 عملات مضافة", value=f"+{bonus_coins:,} عملة", inline=True)
@@ -365,7 +363,7 @@ async def bank(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed, view=LuxuryBankView(), ephemeral=False)
 
-# ==================== 3. نظام التحويل المباشر بالفخامة الجديدة (منشن أو يوزر الشخص) ====================
+# ==================== نظام التحويل ====================
 @bot.tree.command(name="تحويل", description="تحويل عملات مباشرة لمستخدم آخر عبر المنشن أو اختيار العضو بكل سلاسة")
 @app_commands.describe(member="الشخص المراد التحويل إليه (منشن)", amount="المبلغ المراد تحويله")
 async def transfer_slash(interaction: discord.Interaction, member: discord.Member, amount: int):
@@ -410,7 +408,7 @@ async def transfer_slash(interaction: discord.Interaction, member: discord.Membe
     embed.add_field(name="🪙 المبلغ المرسل", value=f"`{amount:,}` عملة", inline=True)
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
-# ==================== 4. نظام الطوابق والمعارك (مع فحص القروض وبيع العتاد) ====================
+# ==================== نظام الطوابق والمعارك ====================
 class FloorInputModal(discord.ui.Modal, title="⚔️ بوابة صعود الطوابق الإمبراطورية"):
     floor_input = discord.ui.TextInput(label="أدخل رقم الطابق المطلوب صعوده", placeholder="اكتب رقماً من 1 إلى 10000...", max_length=5)
 
@@ -428,7 +426,6 @@ class FloorInputModal(discord.ui.Modal, title="⚔️ بوابة صعود الط
         user_id = interaction.user.id
         eco = get_user_economy(user_id)
 
-        # فحص القرض وتفعيل عقوبة بيع المعدات عند التخلف
         if eco.get("loan_debt", 0) > 0:
             debt = eco["loan_debt"]
             eco["gear_level"] = 1
@@ -486,8 +483,8 @@ class FloorInputModal(discord.ui.Modal, title="⚔️ بوابة صعود الط
             monster_bar = "█" * int((monster_hp / monster_max_hp) * 10) + "░" * (10 - int((monster_hp / monster_max_hp) * 10))
 
             battle_embed = discord.Embed(title=f"🔥 معركة شرسة في الطابق {target_floor} (الجولة {round_num}/4)", description=f"المواجهة مشتعلة بين البطل والوحش **{monster_name}**!", color=0x992D22)
-            battle_embed.add_field(name=f"🛡️ صحة البطل ({interaction.user.display_name})", value=`{hero_bar}`\n❤️ الدم المتبقي: **{hero_hp:,} / {hero_max_hp:,}**\n💥 ضربتك: `-{hero_dmg:,}`", inline=False)
-            battle_embed.add_field(name=f"👹 صحة الوحش ({monster_name})", value=`{monster_bar}`\n🩸 الدم المتبقي: **{monster_hp:,} / {monster_max_hp:,}**\n⚡ ضربته: `-{monster_dmg:,}`", inline=False)
+            battle_embed.add_field(name=f"🛡️ صحة البطل ({interaction.user.display_name})", value=f"`{hero_bar}`\n❤️ الدم المتبقي: **{hero_hp:,} / {hero_max_hp:,}**\n💥 ضربتك: `-{hero_dmg:,}`", inline=False)
+            battle_embed.add_field(name=f"👹 صحة الوحش ({monster_name})", value=f"`{monster_bar}`\n🩸 الدم المتبقي: **{monster_hp:,} / {monster_max_hp:,}**\n⚡ ضربته: `-{monster_dmg:,}`", inline=False)
             await msg.edit(embed=battle_embed)
 
             if monster_hp <= 0 or hero_hp <= 0:
@@ -579,7 +576,7 @@ class TowerPanelView(discord.ui.View):
             await interaction.response.send_message("❌ لم تقم بالتسجيل بعد!", ephemeral=True)
             return
         eco = get_user_economy(interaction.user.id)
-        embed = discord.Embed(title="🏰 لوحة حالة برج المغامرات والعتاد", description=f"ملخص بيانات المغامر:", color=0x3498DB)
+        embed = discord.Embed(title="🏰 لوحة حالة برج المغامرات والعتاد", description="ملخص بيانات المغامر:", color=0x3498DB)
         embed.add_field(name="⚡ مستوى العتاد الحالي", value=f"**{eco.get('gear_level', 1)} / 10,000**", inline=True)
         embed.add_field(name="🏆 أعلى طابق", value=f"الطابق **{eco.get('max_floor', 1)}**", inline=True)
         embed.add_field(name="🪙 الرصيد الحر", value=f"{eco['coins']:,} عملة", inline=True)
