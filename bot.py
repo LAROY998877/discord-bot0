@@ -9,10 +9,11 @@ intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# قواعد البيانات
+# قواعد البيانات الشاملة لكل الأنظمة القديمة والجديدة
 REGISTERED_USERS = {}
 USER_ECONOMY = {}          # {user_id: {"coins": int, "inventory": [], "hero": str}}
 GUILDS_DATA = {}           # {guild_name: {"owner": id, "level": 1, "exp": 0, "bank_coins": 0, "bank_items": [], "members": [id]}}
+DEVELOPER_LOGS = []        # سجلات لوحة المطور
 
 def get_user_economy(user_id):
     if user_id not in USER_ECONOMY:
@@ -281,7 +282,7 @@ async def create_guild(interaction: discord.Interaction, اسم_النقابة: 
     await interaction.response.send_message(f"🏰 تم تأسيس نقابة **{اسم_النقابة}** بنجاح مقابل خصم 299 عملة وأنت قائدها!", ephemeral=False)
 
 
-# ==================== 5. تبرع بالعملات والعتاد للنقابة (بحد أقصى مستوى 500) ====================
+# ==================== 5. تبرع النقابة (عملات وعتاد - بحد أقصى مستوى 500) ====================
 @bot.tree.command(name="تبرع_نقابة", description="التبرع بالعملات أو العتاد لخزينة نقابتك")
 @app_commands.choices(نوع_التبرع=[
     app_commands.Choice(name="💰 تبرع بالعملات", value="coins"),
@@ -342,7 +343,61 @@ async def donate_guild(interaction: discord.Interaction, نوع_التبرع: ap
         await interaction.response.send_message(f"✅ تم التبرع بالقطعة `{item_name}` لخزينة نقابة **{user_guild}** بنجاح!", ephemeral=False)
 
 
-# ==================== 6. أمر الملف الشخصي ====================
+# ==================== 6. لوحة المطور (Developer Dashboard) ====================
+@bot.tree.command(name="لوحة_المطور", description="عرض لوحة التحكم الخاصة بالمطور وإحصائيات البوت")
+async def dev_dashboard(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ عذراً، هذا الأمر مخصص للمطور/المدير فقط!", ephemeral=True)
+        return
+
+    embed = discord.Embed(title="🛠️ لوحة تحكم المطور", description="إحصائيات النظام العامة:", color=0xE74C3C)
+    embed.add_field(name="👥 عدد المستخدمين المسجلين", value=f"`{len(REGISTERED_USERS)}`", inline=True)
+    embed.add_field(name="🏰 عدد النقابات المؤسسة", value=f"`{len(GUILDS_DATA)}`", inline=True)
+    embed.add_field(name="🟢 حالة البوت", value="`متصل ويعمل بكفاءة`", inline=False)
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ==================== 7. المتجر (Shop) ====================
+class ShopView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+
+    @discord.ui.select(
+        placeholder="اختر غرضاً لشرائه من المتجر...",
+        options=[
+            discord.SelectOption(label="سيف أسطوري", description="السعر: 300 عملة", emoji="⚔️"),
+            discord.SelectOption(label="درع التنين", description="السعر: 500 عملة", emoji="🛡️"),
+            discord.SelectOption(label="جرعة شفاء", description="السعر: 100 عملة", emoji="🧪")
+        ]
+    )
+    async def select_shop_item(self, interaction: discord.Interaction, select: discord.ui.Select):
+        user_id = interaction.user.id
+        if user_id not in REGISTERED_USERS:
+            await interaction.response.send_message("❌ يجب عليك التسجيل أولاً باستخدام `/تسجيل`!", ephemeral=True)
+            return
+
+        eco = get_user_economy(user_id)
+        item = select.values[0]
+        
+        prices = {"سيف أسطوري": 300, "درع التنين": 500, "جرعة شفاء": 100}
+        cost = prices.get(item, 100)
+
+        if eco["coins"] < cost:
+            await interaction.response.send_message(f"❌ رصيدك غير كافٍ لشراء `{item}`! تحتاج إلى {cost} عملة.", ephemeral=True)
+            return
+
+        eco["coins"] -= cost
+        eco["inventory"].append(item)
+        await interaction.response.send_message(f"🛍️ تم شراء `{item}` بنجاح وتم إضافته إلى حقيبتك!", ephemeral=True)
+
+@bot.tree.command(name="المتجر", description="فتح متجر اللعبة لشراء الأسلحة والدروع")
+async def shop(interaction: discord.Interaction):
+    embed = discord.Embed(title="🛒 متجر المغامرين", description="اختر ما يناسبك من المعدات والأغراض:", color=0xF1C40F)
+    await interaction.response.send_message(embed=embed, view=ShopView(), ephemeral=True)
+
+
+# ==================== 8. أمر الملف الشخصي ====================
 @bot.tree.command(name="الملف", description="عرض ملفك الشخصي وبطلك المسجل")
 async def profile(interaction: discord.Interaction):
     if interaction.user.id not in REGISTERED_USERS:
