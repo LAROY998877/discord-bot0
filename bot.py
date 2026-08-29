@@ -94,7 +94,7 @@ async def my_guild(interaction: discord.Interaction):
     await interaction.response.send_message(f"🛡️ أنت تنتمي إلى نقابة: **{found_guild}**", ephemeral=True)
 
 
-# ==================== 3. أمر الملف الشخصي (ظاهر للجميع وبدون تعديل لغيرك) ====================
+# ==================== 3. أمر الملف الشخصي ====================
 @bot.tree.command(name="الملف", description="عرض ملفك الشخصي (مرئي للعامة وبدون تعديل لغيرك)")
 async def profile(interaction: discord.Interaction):
     target = interaction.user
@@ -108,7 +108,6 @@ async def profile(interaction: discord.Interaction):
     embed.add_field(name="💰 رصيد العملات:", value=f"`{eco['coins']}` عملة", inline=False)
     embed.add_field(name="🛡️ العتاد المُركب:", value=f"`{equipped}`", inline=False)
     
-    # يظهر للعامة ولصاحبه، بدون أي أزرار أو خيارات لمعاينة الآخرين
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
@@ -133,7 +132,7 @@ async def developer_panel(interaction: discord.Interaction, الإجراء: app_
         await interaction.response.send_message(f"👑 تم تعيين {اللاعب.mention} كمطور إضافي بنجاح!", ephemeral=True)
 
 
-# ==================== 5. نظام المعارك (روم خاص ومشاهدة للجميع) ====================
+# ==================== 5. نظام المعارك ====================
 class BattleAcceptView(discord.ui.View):
     def __init__(self, challenger, opponent, battle_channel):
         super().__init__(timeout=30)
@@ -177,7 +176,7 @@ async def battles(interaction: discord.Interaction, الخصم: discord.Member):
 
     guild = interaction.guild
     overwrites = {
-        guild.default_role: discord.PermissionOverwrite(read_messages=True, send_messages=False), # المشاهدون للقراءة فقط
+        guild.default_role: discord.PermissionOverwrite(read_messages=True, send_messages=False),
         interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
         الخصم: discord.PermissionOverwrite(read_messages=True, send_messages=True),
     }
@@ -202,7 +201,7 @@ async def battles(interaction: discord.Interaction, الخصم: discord.Member):
     await interaction.response.send_message(f"✅ تم إنشاء غرفة المعركة بنجاح: {battle_channel.mention}", ephemeral=True)
 
 
-# ==================== 6. المتاجر (معدات هواي وبمعدلات مختلفة كلياً) ====================
+# ==================== 6. المتاجر ====================
 NORMAL_SHOP = {
     "سيف التدريب الخشبي": {"price": 50, "attack": 10, "desc": "سيف خفيف للتدريب الأساسي."},
     "خنجر الصياد السريع": {"price": 120, "attack": 25, "desc": "خنجر رشق سريع الطعنات."},
@@ -213,10 +212,7 @@ NORMAL_SHOP = {
     "درع الفولاذ المقاوم": {"price": 350, "defense": 60, "desc": "درع صلب يمتص الصدمات القوية."},
     "خوذة الحراسة الملكية": {"price": 200, "defense": 35, "desc": "خوذة تحمي الرأس من الإصابات."},
     "قوس الرماة الخشبي": {"price": 250, "attack": 40, "desc": "قوس تقليدي بدقة متوسطة."},
-    "فأس الحطاب الثقيلة": {"price": 500, "attack": 90, "desc": "فأس ضخمة تحدث أضراراً بالغة."},
-    "درع النحاس المرصع": {"price": 280, "defense": 45, "desc": "درع نحاسي جيد ضد الضربات الحادة."},
-    "سيف الحرس الملكي": {"price": 700, "attack": 120, "desc": "سيف رسمي مصقول بعناية فائقة."},
-    "ترس الدفاع العسكري": {"price": 480, "defense": 85, "desc": "ترس ثقيل يعيق ضربات الأعداء."}
+    "فأس الحطاب الثقيلة": {"price": 500, "attack": 90, "desc": "فأس ضخمة تحدث أضراراً بالغة."}
 }
 
 DARK_SHOP = {
@@ -225,13 +221,9 @@ DARK_SHOP = {
     "سيف الموت الأبدي": {"price": 4000, "attack": 500, "desc": "يشع طاقة مظلمة تفتك بالأرواح."},
     "صولجان الخراب المظلم": {"price": 6500, "attack": 750, "desc": "سلاح الدمار الشامل في الحروب."},
     "شفرة الفوضى الدامية": {"price": 8200, "attack": 950, "desc": "تتحكم بدماء الخصوم وتسحقهم."},
-    "رمح الشياطين الفتاك": {"price": 5300, "attack": 620, "desc": "رمح طويل مغطى بلعنات الشياطين."},
     "درع الروح التائهة": {"price": 1800, "defense": 300, "desc": "يحاط بدرع شبحي يصد الضربات السحرية."},
     "عباءة التخفي المطلق": {"price": 2500, "defense": 400, "desc": "تجعل مرتديها غير مرئي في الظلام."},
-    "خوذة التنين المرعبة": {"price": 3000, "defense": 500, "desc": "تبث الرعب في قلوب الخصوم قبل النزال."},
-    "درع الفوضى المطلقة": {"price": 8000, "defense": 1200, "desc": "درع أسطوري لا يمكن اختراقه أبداً."},
-    "مطرقة عمالقة التيتان": {"price": 11000, "attack": 1500, "desc": "تهز الأرض وتدمر الحصون بضربة واحدة."},
-    "درع الظلال المظلم": {"price": 9500, "defense": 1400, "desc": "يعكس الهجمات ويدمر طاقة المهاجم."}
+    "درع الفوضى المطلقة": {"price": 8000, "defense": 1200, "desc": "درع أسطوري لا يمكن اختراقه أبداً."}
 }
 
 def format_shop_items(shop_dict):
