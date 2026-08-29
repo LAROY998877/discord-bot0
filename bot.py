@@ -36,7 +36,8 @@ cursor.execute('''
         gems INTEGER,
         inventory TEXT,
         gear_level INTEGER,
-        max_floor INTEGER
+        max_floor INTEGER,
+        loan_debt INTEGER DEFAULT 0
     )
 ''')
 
@@ -67,25 +68,26 @@ def save_user_profile(user_id, name, age, gender, hero):
     conn.commit()
 
 def get_user_economy(user_id):
-    cursor.execute("SELECT coins, gems, inventory, gear_level, max_floor FROM economy WHERE user_id = ?", (str(user_id),))
+    cursor.execute("SELECT coins, gems, inventory, gear_level, max_floor, loan_debt FROM economy WHERE user_id = ?", (str(user_id),))
     row = cursor.fetchone()
     if not row:
         default_inv = json.dumps(["سيف التدريب الخشبي", "درع الجلد الطبيعي"])
-        cursor.execute("INSERT OR REPLACE INTO economy (user_id, coins, gems, inventory, gear_level, max_floor) VALUES (?, ?, ?, ?, ?, ?)",
-                       (str(user_id), 1000, 20, default_inv, 1, 1))
+        cursor.execute("INSERT OR REPLACE INTO economy (user_id, coins, gems, inventory, gear_level, max_floor, loan_debt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                       (str(user_id), 1000, 20, default_inv, 1, 1, 0))
         conn.commit()
-        return {"coins": 1000, "gems": 20, "inventory": ["سيف التدريب الخشبي", "درع الجلد الطبيعي"], "gear_level": 1, "max_floor": 1}
+        return {"coins": 1000, "gems": 20, "inventory": ["سيف التدريب الخشبي", "درع الجلد الطبيعي"], "gear_level": 1, "max_floor": 1, "loan_debt": 0}
     return {
         "coins": row[0],
         "gems": row[1],
         "inventory": json.loads(row[2]),
         "gear_level": row[3],
-        "max_floor": row[4]
+        "max_floor": row[4],
+        "loan_debt": row[5] if row[5] is not None else 0
     }
 
 def update_economy(user_id, eco):
-    cursor.execute("UPDATE economy SET coins = ?, gems = ?, inventory = ?, gear_level = ?, max_floor = ? WHERE user_id = ?",
-                   (eco["coins"], eco["gems"], json.dumps(eco["inventory"]), eco["gear_level"], eco["max_floor"], str(user_id)))
+    cursor.execute("UPDATE economy SET coins = ?, gems = ?, inventory = ?, gear_level = ?, max_floor = ?, loan_debt = ? WHERE user_id = ?",
+                   (eco["coins"], eco["gems"], json.dumps(eco["inventory"]), eco["gear_level"], eco["max_floor"], eco.get("loan_debt", 0), str(user_id)))
     conn.commit()
 
 # تعريف الأبطال
@@ -106,7 +108,7 @@ HEROES_DATA = {
 async def on_ready():
     try:
         synced = await bot.tree.sync()
-        print(f"🟢 تم تسجيل {len(synced)} أمر بنجاح وبقاعدة بيانات SQLite الدائمة!")
+        print(f"🟢 تم تسجيل {len(synced)} أمر بنجاح مع نظام البنك وقاعدة بيانات SQLite!")
     except Exception as e:
         print(f"❌ خطأ في المزامنة: {e}")
 
@@ -125,7 +127,7 @@ class HeroDropdown(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         chosen_hero = self.values[0]
         save_user_profile(interaction.user.id, self.name_val, self.age_val, self.gender, chosen_hero)
-        eco = get_user_economy(interaction.user.id)
+        get_user_economy(interaction.user.id) # إنشاء محفظة افتراضية
         
         h_info = HEROES_DATA[chosen_hero]
         embed = discord.Embed(title="🎉 تم التسجيل واختيار البطل بنجاح!", description=f"أهلاً بك في عالم المغامرة يا **{self.name_val}**!", color=0x9B59B6)
@@ -165,70 +167,186 @@ async def register(interaction: discord.Interaction):
         return
     await interaction.response.send_message("🎮 مرحباً بك! يرجى اختيار جنس الشخصية للبدء:", view=GenderSelectView(), ephemeral=True)
 
-# ==================== 2. لوحة المطور الفخمة جداً ====================
-class DevDashboardSelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="فتح بطل السفاح الأسطوري السري", description="امنح نفسك قوة السفاح المطلقة", emoji="💀"),
-            discord.SelectOption(label="حقن عملات عادية لا نهائية", description="إضافة 999,999 عملة عادية لرصيدك", emoji="🪙"),
-            discord.SelectOption(label="حقن جواهر الظلام النادرة", description="إضافة 9,999 جوهرة نادرة", emoji="💎"),
-            discord.SelectOption(label="ترقية العتاد للحد الأقصى (10000)", description="رفع مستوى عتادك إلى القمة الفورية", emoji="⚡"),
-            discord.SelectOption(label="إحصائيات النظام السيادية", description="عرض بيانات الخادم والمستخدمين", emoji="👑")
-        ]
-        super().__init__(placeholder="✦ اختر أمراً سيادياً من قمة لوحة المطور...", options=options)
+# ==================== 2. نظام البنك (تحويل، قروض، سداد، بيع عتاد عند التخلف) ====================
+class LoanModal(discord.ui.Modal, title="🏦 طلب قرض مصرفي"):
+    loan_amount_input = discord.ui.TextInput(label="مبلغ القرض المطلوب", placeholder="أدخل المبلغ (الحد الأقصى 20,000 عملة)...", max_length=6)
 
-    async def callback(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            amount = int(self.loan_amount_input.value)
+        except ValueError:
+            await interaction.response.send_message("❌ يجب إدخال رقم صحيح!", ephemeral=True)
+            return
+
+        if not (100 <= amount <= 20000):
+            await interaction.response.send_message("❌ مبلغ القرض يجب أن يكون بين **100 و 20,000** عملة!", ephemeral=True)
+            return
+
         user_id = interaction.user.id
         eco = get_user_economy(user_id)
-        profile = get_user_profile(user_id)
 
-        if self.values[0] == "فتح بطل السفاح الأسطوري السري":
-            if not profile:
-                save_user_profile(user_id, interaction.user.display_name, 25, "سري", "السفاح")
-            else:
-                save_user_profile(user_id, profile["name"], profile["age"], profile["gender"], "السفاح")
-            
-            await interaction.response.send_message("💀 **[سيادة المطور]**: تم حقن بطل «السفاح» الأسطوري السري في ملفاتك الشخصية بقوة إفناء مطلقة!", ephemeral=True)
+        if eco.get("loan_debt", 0) > 0:
+            await interaction.response.send_message(f"❌ لديك قرض سابق لم تقم بسداده بقيمة `{eco['loan_debt']:,}` عملة! يجب سداده أولاً.", ephemeral=True)
+            return
 
-        elif self.values[0] == "حقن عملات عادية لا نهائية":
-            eco["coins"] += 999999
-            update_economy(user_id, eco)
-            await interaction.response.send_message("🪙 **[سيادة المطور]**: تم ضخ 999,999 عملة عادية بنجاح إلى خزنتك السيادية!", ephemeral=True)
+        eco["loan_debt"] = amount
+        eco["coins"] += amount
+        update_economy(user_id, eco)
 
-        elif self.values[0] == "حقن جواهر الظلام النادرة":
-            eco["gems"] += 9999
-            update_economy(user_id, eco)
-            await interaction.response.send_message("💎 **[سيادة المطور]**: تم إضافة 9,999 جوهرة ظلام نادرة إلى رصيدك المطلق!", ephemeral=True)
+        warning_text = (
+            f"⚠️ **تحذير مصرفي هام وخطير جداً!**\n"
+            f"لقد استلمت قرضاً بقيمة **{amount:,}** عملة.\n"
+            f"**تنبيه:** إذا لم تقم بسداد هذا القرض بالكامل قبل خوضك لأي معركة أو استخدام عتادك، **سيقوم البنك ببيع معداتك وعتادك بالكامل ومصادرة مستواك لتسوية الدين** فوراً دون إنذار آخر!"
+        )
 
-        elif self.values[0] == "ترقية العتاد للحد الأقصى (10000)":
-            eco["gear_level"] = 10000
-            update_economy(user_id, eco)
-            await interaction.response.send_message("⚡ **[سيادة المطور]**: تم رفع مستوى العتاد فوراً إلى الحد الأقصى الأسطوري **10,000**!", ephemeral=True)
+        embed = discord.Embed(title="🏦 تمت الموافقة على القرض الإمبراطورية", description=warning_text, color=0xE74C3C)
+        embed.add_field(name="🪙 الرصيد المضاف", value=f"+{amount:,} عملة", inline=True)
+        embed.add_field(name="💳 الدين المترتب عليك", value=f"{amount:,} عملة", inline=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        elif self.values[0] == "إحصائيات النظام السيادية":
-            cursor.execute("SELECT COUNT(*) FROM users")
-            users_count = cursor.fetchone()[0]
-            embed_stats = discord.Embed(title="👑 النظام السيادي المركزي للإحصائيات", description="تقرير أداء الخادم العام:", color=0xFFD700)
-            embed_stats.add_field(name="👥 المغامرون المسجلون", value=f"`{users_count}` بطل", inline=True)
-            embed_stats.add_field(name="⚙️ الحالة التشغيلية", value="🟢 نشط ومؤمن عبر قاعدة بيانات SQLite", inline=True)
-            await interaction.response.send_message(embed=embed_stats, ephemeral=True)
+class TransferModal(discord.ui.Modal, title="💸 تحويل عملات لشخص آخر"):
+    target_id_input = discord.ui.TextInput(label="آي دي (ID) المستلم", placeholder="الصق ايدي الشخص هنا...", max_length=25)
+    amount_input = discord.ui.TextInput(label="المبلغ المراد تحويله", placeholder="أدخل المبلغ...", max_length=10)
 
-class DevDashboardView(discord.ui.View):
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            target_id = self.target_id_input.value.strip()
+            amount = int(self.amount_input.value)
+        except ValueError:
+            await interaction.response.send_message("❌ تأكد من صحة الآي دي والمبلغ المدخل!", ephemeral=True)
+            return
+
+        if amount <= 0:
+            await interaction.response.send_message("❌ يجب أن يكون المبلغ أكبر من صفر!", ephemeral=True)
+            return
+
+        if str(interaction.user.id) == target_id:
+            await لنفسه = True # تعبير مجازي
+            await interaction.response.send_message("❌ لا يمكنك تحويل العملات لنفسك!", ephemeral=True)
+            return
+
+        sender_id = interaction.user.id
+        sender_eco = get_user_economy(sender_id)
+
+        if sender_eco["coins"] < amount:
+            await interaction.response.send_message(f"❌ رصيدك لا يكفي! رصيدك الحالي: `{sender_eco['coins']:,}` عملة.", ephemeral=True)
+            return
+
+        # التحقق من وجود المستلم
+        target_eco = get_user_economy(target_id)
+        if not get_user_profile(target_id):
+            await interaction.response.send_message("❌ هذا المستخدم غير مسجل في النظام البنكي أو الأسطوري!", ephemeral=True)
+            return
+
+        # تنفيذ التحويل
+        sender_eco["coins"] -= amount
+        target_eco["coins"] += amount
+
+        update_economy(sender_id, sender_eco)
+        update_economy(target_id, target_eco)
+
+        embed = discord.Embed(title="💸 تم التحويل بنجاح!", description=f"تم إرسال `{amount:,} عملة` بنجاح إلى المغامر صاحب الآي دي: `{target_id}`", color=0x2ECC71)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class BankView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=60)
-        self.add_item(DevDashboardSelect())
+        super().__init__(timeout=120)
 
-@bot.tree.command(name="لوحة_المطور", description="لوحة التحكم الإمبراطورية الفخمة الخاصة بالمطور الحصري")
-async def dev_dashboard(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ عذراً، هذه اللوحة محصورة بالكامل لمطور النظام والمشرفين السياديين!", ephemeral=True)
-        return
+    @discord.ui.button(label="طلب قرض مصرفي", style=discord.ButtonStyle.danger, emoji="💳")
+    async def request_loan(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not get_user_profile(interaction.user.id):
+            await interaction.response.send_message("❌ يجب عليك التسجيل أولاً عبر `/تسجيل` لاستخدام البنك!", ephemeral=True)
+            return
+        await interaction.response.send_modal(LoanModal())
+
+    @discord.ui.button(label="سداد القرض بالكامل", style=discord.ButtonStyle.green, emoji="💵")
+    async def repay_loan(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = interaction.user.id
+        profile = get_user_profile(user_id)
+        if not profile:
+            await interaction.response.send_message("❌ يجب عليك التسجيل أولاً!", ephemeral=True)
+            return
+
+        eco = get_user_economy(user_id)
+        debt = eco.get("loan_debt", 0)
+
+        if debt <= 0:
+            await interaction.response.send_message("🎉 ليس لديك أي ديون معلقة في البنك!", ephemeral=True)
+            return
+
+        if eco["coins"] < debt:
+            await interaction.response.send_message(f"❌ رصيدك لا يكفي لسداد القرض! ديونك: `{debt:,}` عملة | رصيدك: `{eco['coins']:,}` عملة.", ephemeral=True)
+            return
+
+        eco["coins"] -= debt
+        eco["loan_debt"] = 0
+        update_economy(user_id, eco)
+
+        embed = discord.Embed(title="🎉 تم سداد القرض بنجاح!", description=f"لقد قمت بسداد كامل ديونك للبنك بقيمة `{debt:,}` عملة. أصبح سجلك المالي نظيفاً!", color=0x2ECC71)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="تحويل عملات لشخص", style=discord.ButtonStyle.blurple, emoji="💸")
+    async def transfer_coins(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not get_user_profile(interaction.user.id):
+            await interaction.response.send_message("❌ يجب عليك التسجيل أولاً!", ephemeral=True)
+            return
+        await interaction.response.send_modal(TransferModal())
+
+@bot.tree.command(name="البنك", description="فتح واجهة البنك الإمبراطورية (قروض، سداد، وتحويل)")
+async def bank(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    eco = get_user_economy(user_id)
     
-    embed = discord.Embed(title="⚡ ⟪ المـَنْصـَة السـِّيـادِيـة لـِلـْمـُطـَوِّر ⟫ ⚡", description="أنت الآن في قمة السيطرة المطلقة على النظام الإمبراطوري. اختر من القائمة الفخمة أدناه الإجراء الذي ترغب بتنفيذه:", color=0x000000)
-    embed.set_thumbnail(url=interaction.user.display_avatar.url)
-    await interaction.response.send_message(embed=embed, view=DevDashboardView(), ephemeral=True)
+    embed = discord.Embed(
+        title="🏦 ⟪ المـَصـْرِف الإمـْبـرَاطـُوري الـْمـَرْكَزِي ⟫ 🏦",
+        description="مرحباً بك في بنك الأبراج العظيم. يمكنك هنا إدارة رصيدك، طلب القروض، سداد الديون، أو تحويل العملات للمغامرين الآخرين.",
+        color=0xF1C40F
+    )
+    embed.add_field(name="🪙 رصيدك الحالي", value=f"`{eco['coins']:,}` عملة", inline=True)
+    embed.add_field(name="💳 الديون / القروض المعلقة", value=f"`{eco.get('loan_debt', 0):,}` عملة", inline=True)
+    embed.set_footer(text="⚠️ تذكير: عدم سداد القروض يعرض معداتك وعتادك للبيع الفوري والمصادرة!")
+    
+    await interaction.response.send_message(embed=embed, view=BankView(), ephemeral=False)
 
-# ==================== 3. نظام الطوابق والمعارك (لغاية 10000) ====================
+@bot.tree.command(name="تحويل", description="تحويل عملات مباشرة إلى مستخدم آخر عبر الآي دي")
+@app_commands.describe(member="الشخص المراد التحويل له", amount="المبلغ المراد تحويله")
+async def transfer_slash(interaction: discord.Interaction, member: discord.Member, amount: int):
+    sender_id = interaction.user.id
+    target_id = member.id
+
+    if not get_user_profile(sender_id):
+        await interaction.response.send_message("❌ يجب عليك التسجيل أولاً عبر `/تسجيل`!", ephemeral=True)
+        return
+
+    if not get_user_profile(target_id):
+        await interaction.response.send_message(f"❌ المستخدم {member.mention} غير مسجل في النظام الأسطوري!", ephemeral=True)
+        return
+
+    if sender_id == target_id:
+        await interaction.response.send_message("❌ لا يمكنك تحويل العملات لنفسك!", ephemeral=True)
+        return
+
+    if amount <= 0:
+        await interaction.response.send_message("❌ يجب أن يكون المبلغ أكبر من صفر!", ephemeral=True)
+        return
+
+    sender_eco = get_user_economy(sender_id)
+    if sender_eco["coins"] < amount:
+        await interaction.response.send_message(f"❌ رصيدك الحالي لا يكفي! لديك `{sender_eco['coins']:,}` عملة فقط.", ephemeral=True)
+        return
+
+    target_eco = get_user_economy(target_id)
+
+    sender_eco["coins"] -= amount
+    target_eco["coins"] += amount
+
+    update_economy(sender_id, sender_eco)
+    update_economy(target_id, target_eco)
+
+    embed = discord.Embed(title="💸 تمت عملية التحويل بنجاح", description=f"قمت بتحويل `{amount:,}` عملة إلى {member.mention} بكل سلاسة!", color=0x2ECC71)
+    await interaction.response.send_message(embed=embed, ephemeral=False)
+
+# ==================== 3. نظام الطوابق والمعارك (مع فحص القروض وبيع العتاد عند التخلف) ====================
 class FloorInputModal(discord.ui.Modal, title="⚔️ بوابة صعود الطوابق الإمبراطورية"):
     floor_input = discord.ui.TextInput(label="أدخل رقم الطابق المطلوب صعوده", placeholder="اكتب رقماً من 1 إلى 10000...", max_length=5)
 
@@ -245,6 +363,24 @@ class FloorInputModal(discord.ui.Modal, title="⚔️ بوابة صعود الط
 
         user_id = interaction.user.id
         eco = get_user_economy(user_id)
+
+        # 🚨 فحص القرض غير السداد (تفعيل العقوبة: بيع المعدات والعتاد لتسوية الدين)
+        if eco.get("loan_debt", 0) > 0:
+            debt = eco["loan_debt"]
+            # عقوبة المصادرة وبيع العتاد
+            eco["gear_level"] = 1  # إعادة مستوى العتاد للصفر/الأساس
+            eco["inventory"] = ["سيف التدريب الخشبي (تم بيعه لتسوية الدين)", "درع الجلد الطبيعي"]
+            eco["loan_debt"] = 0  # تسوية الدين مقابل بيع العتاد
+            update_economy(user_id, eco)
+
+            punish_embed = discord.Embed(
+                title="🚨 تنبيه مصرفي إمبراطوري: مصادرة وبيع العتاد!",
+                description=f"لقد حاولت دخول المعركة وعليك قرض متأخر بقيمة `{debt:,}` عملة ولم تقم بسداده!\n\n"
+                            f"⚖️ **تم تطبيق العقوبة:** تدخل البنك الإمبراطوري وقام ببيع عتادك بالكامل ومصادرة مستواك لتسوية الدين المترتب عليك. تم إعادة عتادك للمستوى `1`.",
+                color=0xE74C3C
+            )
+            await interaction.response.send_message(embed=punish_embed, ephemeral=True)
+            return
 
         if 1 <= target_floor <= 500:
             difficulty = "🟢 سهل"
@@ -385,6 +521,7 @@ class TowerPanelView(discord.ui.View):
         embed.add_field(name="🏆 أعلى طابق", value=f"الطابق **{eco.get('max_floor', 1)}**", inline=True)
         embed.add_field(name="🪙 العملات العادية", value=f"{eco['coins']:,} عملة", inline=True)
         embed.add_field(name="💎 جواهر الظلام", value=f"{eco['gems']} جوهرة", inline=True)
+        embed.add_field(name="💳 الديون البنكية", value=f"{eco.get('loan_debt', 0):,} عملة", inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="الطابق", description="فتح القائمة الإمبراطورية لصعود الطوابق وتطوير العتاد")
@@ -416,6 +553,7 @@ async def profile(interaction: discord.Interaction):
     embed.add_field(name="🪙 العملات العادية", value=f"{eco['coins']:,} عملة", inline=True)
     embed.add_field(name="💎 جواهر الظلام", value=f"{eco['gems']} جوهرة", inline=True)
     embed.add_field(name="⚒️ مستوى العتاد", value=f"{eco.get('gear_level', 1)} / 10,000", inline=True)
+    embed.add_field(name="💳 الديون المعلقة", value=f"{eco.get('loan_debt', 0):,} عملة", inline=True)
     embed.add_field(name="🏰 أعلى طابق", value=f"الطابق {eco.get('max_floor', 1)}", inline=True)
     
     await interaction.response.send_message(embed=embed, ephemeral=False)
