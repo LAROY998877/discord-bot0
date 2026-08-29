@@ -17,7 +17,7 @@ cursor.execute(
         age INTEGER,
         gender TEXT,
         is_registered INTEGER DEFAULT 0,
-        balance INTEGER DEFAULT 100,
+        balance INTEGER DEFAULT 5000,
         equipment_score INTEGER DEFAULT 10,
         floors INTEGER DEFAULT 1,
         hero_name TEXT DEFAULT 'لم يتم الاختيار',
@@ -132,7 +132,7 @@ async def register_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 3. الملف الشخصي (ظاهر للكل ولكن التعديل لصاحبه فقط عبر منيو التحكم)
+# 3. الملف الشخصي (ظاهر للكل مع تحكم خاص بصاحب الملف فقط)
 # ==========================================
 
 
@@ -270,7 +270,6 @@ async def profile_command(
     )
     embed.set_thumbnail(url=target.display_avatar.url)
 
-    # التحقق من إخفاء الألقاب
     display_title = "مخفي 🔒" if hide_titles == 1 else f"`{title}`"
     embed.add_field(name="🏷️ اللقب الشخصي", value=display_title, inline=False)
 
@@ -278,7 +277,6 @@ async def profile_command(
     embed.add_field(name="🎂 العمر", value=f"`{age}`", inline=True)
     embed.add_field(name="🚻 الجنس", value=f"`{gender}`", inline=True)
 
-    # التحقق من إخفاء المعدلات
     if hide_stats == 1:
         embed.add_field(
             name="📊 المعدلات والقوة",
@@ -304,7 +302,6 @@ async def profile_command(
         )
     )
 
-    # إرسال الرسالة للجميع (ليس ephemeral) مع إرفاق منيو التحكم الخاص بصاحب الملف فقط
     view = ProfileControlView(target.id)
     await interaction.response.send_message(embed=embed, view=view)
 
@@ -358,7 +355,7 @@ async def assassin_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 5. الأبطال الأسطوريين (صور فانتزي)
+# 5. الأبطال الأسطوريين
 # ==========================================
 HEROES_DATA = {
     "arthur": {
@@ -467,10 +464,10 @@ async def heroes_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 6. المتاجر (المتجر العادي + متجر الظلام)
+# 6. المتاجر (المتجر العادي + متجر الظلام - معدات كثيرة جداً)
 # ==========================================
 
-# 1. المتجر العادي
+# 1. المتجر العادي (تعدّد كبير ومقسّم بعناية)
 NORMAL_SHOP_ITEMS = {
     "sword": {
         "title": "سيف اللهب الأبدي (Flame Blade)",
@@ -479,12 +476,47 @@ NORMAL_SHOP_ITEMS = {
         "desc": "سيف أسطوري مشتغل بنيران التنانين القديمة، يحرق دروع الأعداء بضربة واحدة.",
         "image": "https://images.unsplash.com/photo-1589241062272-c0a000071dfa?w=800",
     },
+    "hammer": {
+        "title": "مطرقة الرعد الكونية (Thunder Hammer)",
+        "price": "320 💎",
+        "damage": "+600 قوة تحطيم",
+        "desc": "مطرقة ثقيلة مصممة من نيازك ساطعة، تحدث هلعاً في ساحات القتال.",
+        "image": "https://images.unsplash.com/photo-1601933470077-0afdd71f5424?w=800",
+    },
+    "bow": {
+        "title": "قوس الضوء المقدس (Holy Bow)",
+        "price": "280 💎",
+        "damage": "+450 دقة وبصيرة",
+        "desc": "يطلق سهاماً من الطاقة الصافية التي تخترق أعتى الحصون وتلاحق الهدف.",
+        "image": "https://images.unsplash.com/photo-1514539079130-25950c84af65?w=800",
+    },
     "shield": {
         "title": "درع التنين الأسطوري (Dragon Shield)",
         "price": "350 💎",
         "damage": "+800 دفاع مطلق",
         "desc": "درع من حراشف أقدم تنين في الممالك السحرية، يعكس سحر وسهام الأعداء.",
         "image": "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800",
+    },
+    "spear": {
+        "title": "رمح البرق السريع (Lightning Spear)",
+        "price": "300 💎",
+        "damage": "+550 طعنة خاطفة",
+        "desc": "رمح يلمع ببرق الصواعق، يمزق صفوف الأعداء بسرعة الصوت.",
+        "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800",
+    },
+    "axe": {
+        "title": "فأس الجليد العظيم (Frost Axe)",
+        "price": "290 💎",
+        "damage": "+520 تجميد وتكسير",
+        "desc": "فأس محفور من جبال الجليد الأبدي، يجمد الأعداء في مكانهم.",
+        "image": "https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800",
+    },
+    "dagger": {
+        "title": "خنجر الظل الخفي (Shadow Dagger)",
+        "price": "220 💎",
+        "damage": "+400 سرعة اغتيال",
+        "desc": "خنجر قصير لا يرى بالعين المجردة، يوجه ضربات حرجة قاتلة.",
+        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?w=800",
     },
 }
 
@@ -495,19 +527,49 @@ class NormalShopDropdown(discord.ui.Select):
         options = [
             discord.SelectOption(
                 label="سيف اللهب الأبدي",
-                description="السعر: 250 💎 | سيف ناري أسطوري",
+                description="السعر: 250 💎 | هجوم ناري قوي",
                 emoji="⚔️",
                 value="sword",
             ),
             discord.SelectOption(
+                label="مطرقة الرعد الكونية",
+                description="السعر: 320 💎 | قوة تحطيم مهولة",
+                emoji="🔨",
+                value="hammer",
+            ),
+            discord.SelectOption(
+                label="قوس الضوء المقدس",
+                description="السعر: 280 💎 | دقة وبصيرة عالية",
+                emoji="🏹",
+                value="bow",
+            ),
+            discord.SelectOption(
                 label="درع التنين الأسطوري",
-                description="السعر: 350 💎 | درع دفاعي مطلق",
+                description="السعر: 350 💎 | دفاع مطلق ضد السحر",
                 emoji="🛡️",
                 value="shield",
             ),
+            discord.SelectOption(
+                label="رمح البرق السريع",
+                description="السعر: 300 💎 | طعنة خاطفة بالبرق",
+                emoji="⚡",
+                value="spear",
+            ),
+            discord.SelectOption(
+                label="فأس الجليد العظيم",
+                description="السعر: 290 💎 | تجميد شامل للأعداء",
+                emoji="🪓",
+                value="axe",
+            ),
+            discord.SelectOption(
+                label="خنجر الظل الخفي",
+                description="السعر: 220 💎 | اغتيال سريع وخفي",
+                emoji="🗡️",
+                value="dagger",
+            ),
         ]
         super().__init__(
-            placeholder="اختر معدة من المتجر العادي...",
+            placeholder="اختر معدة أو سلاحاً من المتجر العادي...",
             min_values=1,
             max_values=1,
             options=options,
@@ -552,7 +614,7 @@ async def shop_command(interaction: discord.Interaction):
 
     embed = discord.Embed(
         title="🛍️ المتجر العادي الإمبراطوري",
-        description="تصفح الأسلحة والمعدات القياسية المتاحة للشراء وتجهيزها:",
+        description="تصفح الترسانة الواسعة من الأسلحة والمعدات القياسية المتاحة للشراء:",
         color=discord.Color.gold(),
     )
     embed.set_image(
@@ -562,7 +624,7 @@ async def shop_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-# 2. متجر الظلام (Dark Shop)
+# 2. متجر الظلام (Dark Shop - مجموعة ضخمة جداً من المعدات المحرمة)
 DARK_SHOP_ITEMS = {
     "dark_blade": {
         "title": "شفرة الموت المظلمة (Dark Death Blade)",
@@ -577,6 +639,41 @@ DARK_SHOP_ITEMS = {
         "damage": "+1500 تحطيم مظلم",
         "desc": "مطرقة نحس صُنعت في سراديب العوالم السفلى، هجماتها تسبب شلل تام للخصم.",
         "image": "https://images.unsplash.com/photo-1601933470077-0afdd71f5424?w=800",
+    },
+    "abyss_scythe": {
+        "title": "منجل الهاوية الأبدي (Abyss Scythe)",
+        "price": "950 💎",
+        "damage": "+1800 حصد الأرواح",
+        "desc": "منجل عملاق يقطر طاقة سوداء، يحصد أرواح جماعات الأعداء بضربة واحدة.",
+        "image": "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800",
+    },
+    "blood_bow": {
+        "title": "قوس الدم القرمزي (Blood Bow)",
+        "price": "700 💎",
+        "damage": "+1100 سهام دموية",
+        "desc": "قوس مشبع بدماء الشياطين القديمة، يطلق سهاماً تلتصق بقلب العدو.",
+        "image": "https://images.unsplash.com/photo-1514539079130-25950c84af65?w=800",
+    },
+    "necromancer_staff": {
+        "title": "عصا مستحضر الأرواح (Necro Staff)",
+        "price": "850 💎",
+        "damage": "+1400 سحر أسود مرعب",
+        "desc": "عصا تعود لعصور الظلام الأولى، تستدعي أطيافاً وجيشاً من الموتى لقتالك.",
+        "image": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800",
+    },
+    "void_shield": {
+        "title": "درع الفراغ المطلق (Void Shield)",
+        "price": "900 💎",
+        "damage": "+2000 امتصاص الضرر",
+        "desc": "درع مظلم يفتح ثقباً أسود يمتص هجمات الأعداء ويثنيهم عن التقدم.",
+        "image": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800",
+    },
+    "infernal_daggers": {
+        "title": "خناجر الجحيم المزدوجة (Infernal Daggers)",
+        "price": "750 💎",
+        "damage": "+1300 سرعة وحرق شيطاني",
+        "desc": "خنجران تشتعلان بنيران لا تنطفئ، تسرع من حركات القاتل وتخترق أعتى الدروع.",
+        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?w=800",
     },
 }
 
@@ -596,6 +693,36 @@ class DarkShopDropdown(discord.ui.Select):
                 description="السعر: 800 💎 | مطرقة دمار شامل",
                 emoji="🔨",
                 value="shadow_hammer",
+            ),
+            discord.SelectOption(
+                label="منجل الهاوية الأبدي",
+                description="السعر: 950 💎 | منجل حصد الأرواح الجماعي",
+                emoji="🪓",
+                value="abyss_scythe",
+            ),
+            discord.SelectOption(
+                label="قوس الدم القرمزي",
+                description="السعر: 700 💎 | سهام دموية خارقة",
+                emoji="🏹",
+                value="blood_bow",
+            ),
+            discord.SelectOption(
+                label="عصا مستحضر الأرواح",
+                description="السعر: 850 💎 | سحر أسود واستدعاء",
+                emoji="🪄",
+                value="necromancer_staff",
+            ),
+            discord.SelectOption(
+                label="درع الفراغ المطلق",
+                description="السعر: 900 💎 | امتصاص كامل للهجمات",
+                emoji="🛡️",
+                value="void_shield",
+            ),
+            discord.SelectOption(
+                label="خناجر الجحيم المزدوجة",
+                description="السعر: 750 💎 | سرعة وحرق شيطاني",
+                emoji="⚔️",
+                value="infernal_daggers",
             ),
         ]
         super().__init__(
@@ -644,7 +771,7 @@ async def dark_shop_command(interaction: discord.Interaction):
 
     embed = discord.Embed(
         title="🌑 متجر الظلام السري",
-        description="تحذير: الأسلحة هنا تنبض بطاقة مظلمة وممحوة. اختر بحذر:",
+        description="تحذير: الأسلحة هنا تنبض بطاقة مظلمة وممحوة قوية جداً. اختر بحذر:",
         color=discord.Color.dark_red(),
     )
     embed.set_image(
