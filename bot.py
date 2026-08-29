@@ -1,6 +1,7 @@
 import os
 import json
 import random
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -16,7 +17,7 @@ DB_FILE = "database.json"
 
 # قواعد البيانات
 REGISTERED_USERS = {}
-USER_ECONOMY = {}          # {user_id: {"coins": int, "gems": int, "inventory": [], "hero": str, "max_floor": int}}
+USER_ECONOMY = {}          # {user_id: {"coins": int, "gems": int, "inventory": [], "hero": str, "max_floor": int, "gear_level": int}}
 GUILDS_DATA = {}           # {guild_name: {"owner": id, "level": 1, "exp": 0, "bank_coins": 0, "bank_items": [], "members": [id]}}
 
 def load_data():
@@ -46,30 +47,33 @@ def save_data():
 
 def get_user_economy(user_id):
     if user_id not in USER_ECONOMY:
-        USER_ECONOMY[user_id] = {"coins": 1000, "gems": 20, "inventory": ["سيف التدريب الخشبي", "درع الجلد الطبيعي"], "hero": None, "max_floor": 1}
+        USER_ECONOMY[user_id] = {
+            "coins": 1000, 
+            "gems": 20, 
+            "inventory": ["سيف التدريب الخشبي", "درع الجلد الطبيعي"], 
+            "hero": None, 
+            "max_floor": 1,
+            "gear_level": 1
+        }
         save_data()
+    if "gear_level" not in USER_ECONOMY[user_id]:
+        USER_ECONOMY[user_id]["gear_level"] = 1
     return USER_ECONOMY[user_id]
 
 # تعريف الأبطال (3 ذكور + 6 إناث + بطل السفاح السري)
 HEROES_DATA = {
-    # الأبطال الذكور (3)
     "ثورن": {"gender": "ذكر", "title": "عملاق الجبال", "story": "محارب شجاع درعه مصنوع من حجر النيزك.", "power": "صلابة حديدية", "skills": "ضربة الأرض", "art": "[ ثورن 🏔️ ]"},
     "كايدن": {"gender": "ذكر", "title": "سياف اللهيب", "story": "أقسم على الانتقام بسيفه المشتعل بنيران التنين.", "power": "إشعال النيران", "skills": "سيف اللهيب", "art": "[ كايدن 🔥 ]"},
     "زيك": {"gender": "ذكر", "title": "مهندس الموت", "story": "استخدم التكنولوجيا المحرمة لدمج التروس بجسده.", "power": "التحكم التقني", "skills": "مدفع البلازما", "art": "[ زيك ⚙️ ]"},
-    
-    # الأبطال الإناث (6)
     "لونا": {"gender": "أنثى", "title": "حارسة النجوم", "story": "وُدت تحت ضوء نيزك أزرق نادر لإنقاذ عالمها.", "power": "الضوء القمري", "skills": "انفجار نيزكي", "art": "[ لونا 🌙 ]"},
     "فيكتوريا": {"gender": "أنثى", "title": "فارس العاصفة", "story": "امتزجت روحها بالبرق لتصبح عاصفة بشرية.", "power": "الكهرباء والسرعة", "skills": "صاعقة البرق", "art": "[ فيكتوريا ⚡ ]"},
     "سراب": {"gender": "أنثى", "title": "سيدة الظلال", "story": "تعلقت بفنون التخفي حتى أصبحت شبحاً لا يرى.", "power": "الانتقال الآني", "skills": "طعنة الظل", "art": "[ سراب 👥 ]"},
     "أوريرا": {"gender": "أنثى", "title": "أميرة الفجر", "story": "ابنة الشمس الأولى التي تستمد قوتها من خيوط الفجر الأولى.", "power": "شعاع الشمس الأبدي", "skills": "تطهير النور المقدس", "art": "[ أوريرا ☀️ ]"},
     "ساكورا": {"gender": "أنثى", "title": "زهرة الساموراي", "story": "مقاتلة شرسة تدمج رقة بتلات الكرز بحد السيف القاتل.", "power": "رياح البتلات القاتلة", "skills": "رقصة الكرز القاتلة", "art": "[ ساكورا 🌸 ]"},
     "ميرال": {"gender": "أنثى", "title": "ساحرة الزمن", "story": "تتحكم في نسيج الزمن لتلعب بأعصاب أعدائها في المعارك.", "power": "إبطاء وتجميد الزمن", "skills": "شق الأبعاد والزمن", "art": "[ ميرال ⏳ ]"},
-    
-    # بطل المطور السري
     "السفاح": {"gender": "سري", "title": "حاصد الأرواح السري", "story": "كائن أسطوري مرعب مخصص للمطور حصرياً بقوة مطلقة.", "power": "إفناء الوجود المطلق", "skills": "لمسة الموت والدمار", "art": "[ 💀 السفاح المرعب 💀 ]"}
 }
 
-# معدات متجر الظلام (تُشترى بجواهر الظلام 💎)
 DARK_SHOP_ITEMS = {
     "خنجر الشيطان الأبدي": {"price_gems": 10, "rank": "🔴 الشيطان", "power": "قوة تدميرية +999"},
     "سيف الموت الشيطاني": {"price_gems": 18, "rank": "🔴 الشيطان", "power": "قوة تدميرية +1300"},
@@ -86,7 +90,6 @@ DARK_SHOP_ITEMS = {
     "شفرات الموت المطلق": {"price_gems": 90, "rank": "⚔️ السفاح", "power": "دمار شامل +6000"}
 }
 
-# معدات المتجر العادي (تُشترى بالعملات العادية 🪙)
 NORMAL_SHOP_ITEMS = {
     "سيف حديدي حاد": {"price": 200, "power": "هجوم +150"},
     "درع الفولاذ المقاوم": {"price": 350, "power": "دفاع +200"},
@@ -169,144 +172,307 @@ async def register(interaction: discord.Interaction):
     await interaction.response.send_message("🎮 مرحباً بك! يرجى اختيار جنس الشخصية للبدء:", view=GenderSelectView(), ephemeral=True)
 
 
-# ==================== 2. لوحة المطور (مع بطل السفاح السري) ====================
+# ==================== 2. لوحة المطور الفخمة جداً ====================
 class DevDashboardSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="الحصول على بطل السفاح الأسطوري السري", description="فتح واستخدام بطل 'السفاح' الخارق للمطور", emoji="💀"),
-            discord.SelectOption(label="الحصول على عملات عادية لا نهائية", description="إضافة 999,999 عملة عادية", emoji="🪙"),
-            discord.SelectOption(label="الحصول على جواهر ظلام لا نهائية", description="إضافة 9,999 جوهرة نادرة", emoji="💎"),
-            discord.SelectOption(label="الحصول على عتاد سري", description="إضافة معدات نادرة لحقيبتك", emoji="⚔️"),
-            discord.SelectOption(label="عرض إحصائيات النظام", description="معرفة عدد اللاعبين والنقابات", emoji="📊")
+            discord.SelectOption(label="فتح بطل السفاح الأسطوري السري", description="امنح نفسك قوة السفاح المطلقة", emoji="💀"),
+            discord.SelectOption(label="حقن عملات عادية لا نهائية", description="إضافة 999,999 عملة عادية لرصيدك", emoji="🪙"),
+            discord.SelectOption(label="حقن جواهر الظلام النادرة", description="إضافة 9,999 جوهرة نادرة", emoji="💎"),
+            discord.SelectOption(label="ترقية العتاد للحد الأقصى (10000)", description="رفع مستوى عتادك إلى القمة الفورية", emoji="⚡"),
+            discord.SelectOption(label="إحصائيات النظام السيادية", description="عرض بيانات الخادم واللاعبين والمستخدمين", emoji="👑")
         ]
-        super().__init__(placeholder="اختر أمراً من لوحة تحكم المطور...", options=options)
+        super().__init__(placeholder="✦ اختر أمراً سيادياً من قمة لوحة المطور...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         user_id = interaction.user.id
         eco = get_user_economy(user_id)
 
-        if self.values[0] == "الحصول على بطل السفاح الأسطوري السري":
+        if self.values[0] == "فتح بطل السفاح الأسطوري السري":
             if user_id not in REGISTERED_USERS:
                 REGISTERED_USERS[user_id] = {"name": interaction.user.display_name, "age": 25, "gender": "سري", "hero": "السفاح"}
             else:
                 REGISTERED_USERS[user_id]["hero"] = "السفاح"
             eco["hero"] = "السفاح"
             save_data()
-            await interaction.response.send_message("💀 تم تفعيل بطل «السفاح» الأسطوري السري لحسابك بنجاح بقوة مطلقة!", ephemeral=True)
+            await interaction.response.send_message("💀 **[سيادة المطور]**: تم حقن بطل «السفاح» الأسطوري السري في ملفاتك الشخصية بقوة إفناء مطلقة!", ephemeral=True)
 
-        elif self.values[0] == "الحصول على عملات عادية لا نهائية":
+        elif self.values[0] == "حقن عملات عادية لا نهائية":
             eco["coins"] += 999999
             save_data()
-            await interaction.response.send_message("🪙 تم إضافة 999,999 عملة عادية بنجاح إلى رصيدك!", ephemeral=True)
+            await interaction.response.send_message("🪙 **[سيادة المطور]**: تم ضخ 999,999 عملة عادية بنجاح إلى خزنتك السيادية!", ephemeral=True)
 
-        elif self.values[0] == "الحصول على جواهر ظلام لا نهائية":
+        elif self.values[0] == "حقن جواهر الظلام النادرة":
             eco["gems"] += 9999
             save_data()
-            await interaction.response.send_message("💎 تم إضافة 9,999 جوهرة ظلام نادرة بنجاح إلى رصيدك!", ephemeral=True)
+            await interaction.response.send_message("💎 **[سيادة المطور]**: تم إضافة 9,999 جوهرة ظلام نادرة إلى رصيدك المطلق!", ephemeral=True)
 
-        elif self.values[0] == "الحصول على عتاد سري":
-            eco["inventory"].extend(["سيف المطور الأسطوري", "درع الإله المطلق"])
+        elif self.values[0] == "ترقية العتاد للحد الأقصى (10000)":
+            eco["gear_level"] = 10000
             save_data()
-            await interaction.response.send_message("⚔️ تم إضافة عتاد سري وخارق إلى حقيبتك!", ephemeral=True)
+            await interaction.response.send_message("⚡ **[سيادة المطور]**: تم رفع مستوى العتاد فوراً إلى الحد الأقصى الأسطوري **10,000**!", ephemeral=True)
 
-        elif self.values[0] == "عرض إحصائيات النظام":
-            await interaction.response.send_message(f"📊 اللاعبين المسجلين: {len(REGISTERED_USERS)} | النقابات المسجلة: {len(GUILDS_DATA)}", ephemeral=True)
+        elif self.values[0] == "إحصائيات النظام السيادية":
+            embed_stats = discord.Embed(
+                title="👑 النظام السيادي المركزي للإحصائيات",
+                description="تقرير أداء الخادم العام:",
+                color=0xFFD700
+            )
+            embed_stats.add_field(name="👥 المغامرون المسجلون", value=f"`{len(REGISTERED_USERS)}` بطل", inline=True)
+            embed_stats.add_field(name="🏰 النقابات الإمبراطورية", value=f"`{len(GUILDS_DATA)}` نقابة", inline=True)
+            embed_stats.add_field(name="⚙️ الحالة التشغيلية", value="🟢 نشط ومؤمن بالكامل", inline=True)
+            await interaction.response.send_message(embed=embed_stats, ephemeral=True)
 
 class DevDashboardView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
         self.add_item(DevDashboardSelect())
 
-@bot.tree.command(name="لوحة_المطور", description="لوحة التحكم الخاصة بالمطور بنظام المنيو")
+@bot.tree.command(name="لوحة_المطور", description="لوحة التحكم الإمبراطورية الفخمة الخاصة بالمطور الحصري")
 async def dev_dashboard(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ هذا الأمر خاص بالمطور فقط!", ephemeral=True)
+        await interaction.response.send_message("❌ عذراً، هذه اللوحة محصورة بالكامل لمطور النظام والمشرفين السياديين!", ephemeral=True)
         return
     
-    embed = discord.Embed(title="🛠️ لوحة تحكم المطور المركزية", description="اختر من القائمة أدناه ما تحتاجه لتطوير اللعبة وإدارتها:", color=0xE74C3C)
+    embed = discord.Embed(
+        title="⚡ ⟪ المـَنْصـَة السـِّيـادِيـة لـِلـْمـُطـَوِّر ⟫ ⚡",
+        description="أنت الآن في قمة السيطرة المطلقة على النظام الإمبراطوري. اختر من القائمة الفخمة أدناه الإجراء الذي ترغب بتنفيذه:",
+        color=0x000000
+    )
+    embed.set_thumbnail(url=interaction.user.display_avatar.url)
+    embed.set_footer(text="نظام الأمان السيادي • مرخص للمطور الحصري فقط")
     await interaction.response.send_message(embed=embed, view=DevDashboardView(), ephemeral=True)
 
 
-# ==================== 3. نظام الطوابق والمعارك (الجديد) ====================
-@bot.tree.command(name="الطابق", description="خوض معركة في الطوابق لقتال الوحوش وجمع العملات والجواهر النادرة")
-@app_commands.describe(رقم_الطابق="رقم الطابق الذي ترغب في دخوله (من 1 إلى 1000)")
-async def tower_floor(interaction: discord.Interaction, رقم_الطابق: int):
-    user_id = interaction.user.id
-    if user_id not in REGISTERED_USERS:
-        await interaction.response.send_message("❌ يجب عليك التسجيل أولاً عبر `/تسجيل` لكي تتمكن من صعود الطوابق!", ephemeral=True)
-        return
-    
-    if not (1 <= رقم_الطابق <= 1000):
-        await interaction.response.send_message("❌ رقم الطابق يجب أن يكون بين **1 و 1000** حصرياً!", ephemeral=True)
-        return
+# ==================== 3. نظام الطوابق والمعارك الواقعية والملحمية (لغاية 10000) ====================
 
-    eco = get_user_economy(user_id)
-    
-    # تحديد الصعوبة ونوع الوحوش والجوائز حسب الطابق
-    if 1 <= رقم_الطابق <= 15:
-        difficulty = "🟢 سهل"
-        monsters = ["زومبي مبتدئ", "هيكل عظمي تايه", "عنكبوت الكهف الصغير"]
-        coins_reward = رقم_الطابق * 60
-        gems_reward = random.choice([0, 1])
-        win_chance = 0.90  # نسبة الفوز عالية جداً للطوابق السهلة
-    elif 16 <= رقم_الطابق <= 30:
-        difficulty = "🟡 متوسط"
-        monsters = ["محارب منبوذ", "وحش المستنقع السام", "ذئب الظلام الشرس"]
-        coins_reward = رقم_الطابق * 180
-        gems_reward = random.choice([1, 2, 3])
-        win_chance = 0.75
-    elif 31 <= رقم_الطابق <= 70:
-        difficulty = "🟠 صعب"
-        monsters = ["شيطان الحمم البركانية", "عملاق الحجارة الضخم", "فارس الظلام المرعب"]
-        coins_reward = رقم_الطابق * 450
-        gems_reward = random.randint(3, 8)
-        win_chance = 0.55
-    else:  # 70 إلى 1000
-        difficulty = "🔴 مستحيل / أسطوري"
-        monsters = ["تنين الأبعاد الأبدي", "حاصد الأرواح الملكي", "ملك الشياطين المطلق"]
-        coins_reward = رقم_الطابق * 1200
-        gems_reward = random.randint(10, 30)
-        win_chance = 0.30  # صعب جداً ويحتاج عتاد قوي أو بطل السفاح
+class FloorInputModal(discord.ui.Modal, title="⚔️ بوابة صعود الطوابق الإمبراطورية"):
+    floor_input = discord.ui.TextInput(
+        label="أدخل رقم الطابق المطلوب صعوده", 
+        placeholder="اكتب رقماً من 1 إلى 10000...", 
+        max_length=5
+    )
 
-    monster_name = random.choice(monsters)
-    
-    # تعديل نسبة الفوز بناءً على امتلاك معدات قوية أو بطل السفاح
-    if eco["hero"] == "السفاح" or any("السفاح" in item or "المطور" in item or "الشيطان" in item for item in eco["inventory"]):
-        win_chance = min(1.0, win_chance + 0.35)  # تعزيز كبير لمن يمتلك عتاداً قوياً أو البطل السري
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            target_floor = int(self.floor_input.value)
+        except ValueError:
+            await interaction.response.send_message("❌ يجب أن تدخل رقماً صحيحاً للطابق!", ephemeral=True)
+            return
 
-    # محاكاة نتيجة المعركة
-    is_victory = random.random() < win_chance
+        if not (1 <= target_floor <= 10000):
+            await interaction.response.send_message("❌ رقم الطابق يجب أن يكون محصوراً حصرياً بين **1 و 10,000**!", ephemeral=True)
+            return
 
-    if is_victory:
-        eco["coins"] += coins_reward
-        eco["gems"] += gems_reward
-        if رقم_الطابق > eco.get("max_floor", 1):
-            eco["max_floor"] = رقم_الطابق
+        user_id = interaction.user.id
+        eco = get_user_economy(user_id)
+
+        # تحديد الصعوبة والوحوش
+        if 1 <= target_floor <= 500:
+            difficulty = "🟢 سهل"
+            monsters = ["زومبي مبتدئ متفسخ", "هيكل عظمي تايه", "عنكبوت الكهف السام"]
+        elif 501 <= target_floor <= 2000:
+            difficulty = "🟡 متوسط"
+            monsters = ["محارب زومبي منبوذ", "وحش المستنقع المظلم", "ذئب الظلال الشرس"]
+        elif 2001 <= target_floor <= 5000:
+            difficulty = "🟠 صعب"
+            monsters = ["شيطان الحمم البركانية", "عملاق الحجارة الفولاذي", "فارس الظلام الدموي"]
+        else:
+            difficulty = "🔴 مستحيل / أسطوري"
+            monsters = ["تنين الأبعاد الأبدي", "حاصد الأرواح الملكي المرعب", "ملك الشياطين الأبدي"]
+
+        monster_name = random.choice(monsters)
+
+        # حساب صحة البطل والوحش (مع الاعتماد على عتاد اللاعب ومستوى التطور لغاية 10000)
+        gear_lv = eco.get("gear_level", 1)
+        hero_max_hp = 1000 + (gear_lv * 50)
+        monster_max_hp = 800 + (target_floor * 35)
+
+        hero_hp = hero_max_hp
+        monster_hp = monster_max_hp
+
+        # بدء المعركة الملحمية التفاعلية مع شريط الدم وعدادات الضربات الواقعية
+        await interaction.response.send_message(
+            f"⚔️ **جارٍ فتح بوابة الطابق `{target_floor}` ({difficulty})...**\n"
+            f"الخصم الحالي في ساحة المعركة: **{monster_name}**\n"
+            f"استعد لتلاحم السيوف والضربات المباشرة!", 
+            ephemeral=False
+        )
+        msg = await interaction.original_response()
+
+        # حلقات المعركة الواقعية المتدرجة بالدم والضربات
+        for round_num in range(1, 5):
+            await asyncio.sleep(1.8)
+            
+            # ضربة البطل
+            hero_dmg = random.randint(200, 500) + (gear_lv * 15)
+            monster_hp = max(0, monster_hp - hero_dmg)
+            
+            # ضربة الوحش
+            monster_dmg = random.randint(100, 300) + (target_floor * 5)
+            hero_hp = max(0, hero_hp - monster_dmg)
+
+            # رسم أشرطة الدم بشكل واقعي وفخم
+            hero_bar = "█" * int((hero_hp / hero_max_hp) * 10) + "░" * (10 - int((hero_hp / hero_max_hp) * 10))
+            monster_bar = "█" * int((monster_hp / monster_max_hp) * 10) + "░" * (10 - int((monster_hp / monster_max_hp) * 10))
+
+            battle_embed = discord.Embed(
+                title=f"🔥 معركة شرسة في الطابق {target_floor} (الجولة {round_num}/4)",
+                description=f"الساحة مشتعلة بين البطل والوحش **{monster_name}**!",
+                color=0x992D22
+            )
+            battle_embed.add_field(
+                name=f"🛡️ صحة البطل ({interaction.user.display_name})",
+                value=f"`{hero_bar}`\n❤️ الدم المتبقي: **{hero_hp:,} / {hero_max_hp:,}**\n💥 أحدث ضربة منك: `-{hero_dmg:,}` للوحش",
+                inline=False
+            )
+            battle_embed.add_field(
+                name=f"👹 صحة الوحش ({monster_name})",
+                value=f"`{monster_bar}`\n🩸 الدم المتبقي: **{monster_hp:,} / {monster_max_hp:,}**\n⚡ أحدث ضربة منه: `-{monster_dmg:,}` عليك",
+                inline=False
+            )
+            await msg.edit(embed=battle_embed)
+
+            if monster_hp <= 0 or hero_hp <= 0:
+                break
+
+        await asyncio.sleep(1.5)
+
+        # النتيجة النهائية
+        is_victory = monster_hp <= monster_max_hp * 0.5 or hero_hp > monster_hp or hero_hp > 200
+
+        if is_victory:
+            coins_reward = target_floor * 150
+            gems_reward = random.randint(1, max(2, target_floor // 200 + 1))
+            eco["coins"] += coins_reward
+            eco["gems"] += gems_reward
+            if target_floor > eco.get("max_floor", 1):
+                eco["max_floor"] = target_floor
+            save_data()
+
+            win_embed = discord.Embed(
+                title=f"👑 انتصار أسطوري ساحق في الطابق {target_floor}!",
+                description=f"لقد تمكنت باقتدار من دحر الوحش **{monster_name}** وإخضاع الطابق بالكامل!",
+                color=0x2ECC71
+            )
+            win_embed.add_field(name="🪙 الغنائم المكتسبة من العملات", value=f"+{coins_reward:,} عملة", inline=True)
+            win_embed.add_field(name="💎 الغنائم المكتسبة من جواهر الظلام", value=f"+{gems_reward} جوهرة نادرة", inline=True)
+            win_embed.add_field(name="🏆 الرقم القياسي الجديد لأعلى طابق", value=f"الطابق {eco['max_floor']}", inline=False)
+            await msg.edit(embed=win_embed, view=None)
+        else:
+            lost_coins = min(eco["coins"], 100 * (target_floor // 10 + 1))
+            eco["coins"] = max(0, eco["coins"] - lost_coins)
+            save_data()
+
+            lose_embed = discord.Embed(
+                title=f"💀 هزيمة قاسية وموجعة في الطابق {target_floor}!",
+                description=f"تفوق عليك الوحش المرعب **{monster_name}** وأجبرك على الانسحاب بعد معركة دموية!",
+                color=0xE74C3C
+            )
+            lose_embed.add_field(name="⚠️ الخسائر في المعركة", value=f"فقدت `{lost_coins:,}` عملة أثناء الهروب العاجل!", inline=False)
+            lose_embed.add_field(name="💡 نصيحة إمبراطورية", value="قم بتطوير عتادك الإمبراطوري حتى المستوى **10,000** عبر أمر الطابق لتعزيز قوتك المطلقة!", inline=False)
+            await msg.edit(embed=lose_embed, view=None)
+
+
+class UpgradeGearModal(discord.ui.Modal, title="⚒️ منصة تطوير العتاد الأسطوري (حتى 10000)"):
+    levels_input = discord.ui.TextInput(
+        label="عدد المستويات المراد ترقيتها",
+        placeholder="أدخل عدد المستويات (يكلف كل مستوى 50 عملة)...",
+        max_length=5
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            add_levels = int(self.levels_input.value)
+        except ValueError:
+            await interaction.response.send_message("❌ يجب إدخال رقم صحيح!", ephemeral=True)
+            return
+
+        if add_levels <= 0:
+            await interaction.response.send_message("❌ يجب أن تكون المستويات المراد ترقيتها أكبر من صفر!", ephemeral=True)
+            return
+
+        user_id = interaction.user.id
+        eco = get_user_economy(user_id)
+        current_gear = eco.get("gear_level", 1)
+
+        if current_gear + add_levels > 10000:
+            await interaction.response.send_message(f"❌ عذراً، الحد الأقصى المطلق لتطوير العتاد هو **10,000** مستوى! مستواك الحالي: {current_gear}", ephemeral=True)
+            return
+
+        cost = add_levels * 50
+        if eco["coins"] < cost:
+            await interaction.response.send_message(f"❌ رصيدك لا يكفي! تحتاج إلى `{cost:,}` عملة عادية لتنفيذ هذه الترقية.", ephemeral=True)
+            return
+
+        eco["coins"] -= cost
+        eco["gear_level"] += add_levels
         save_data()
 
         embed = discord.Embed(
-            title=f"⚔️ انتصار ساحق في الطابق {رقم_الطابق}!",
-            description=f"لقد واجهت الوحش **{monster_name}** في قسم المستوى ({difficulty}) وتمكنت من سحقه بنجاح!",
-            color=0x2ECC71
+            title="⚒️ تمت ترقية العتاد بنجاح باهر!",
+            description=f"لقد قمت بتطوير عتادك الإمبراطوري بمقدار `{add_levels}` مستوى!",
+            color=0xF1C40F
         )
-        embed.add_field(name="🪙 الغنائم من العملات العادية", value=f"+{coins_reward:,} عملة", inline=True)
-        embed.add_field(name="💎 الغنائم من جواهر الظلام", value=f"+{gems_reward} جوهرة نادرة", inline=True)
-        embed.add_field(name="🏆 أعلى طابق تم بلوغه", value=f"الطابق {eco['max_floor']}", inline=False)
-        await interaction.response.send_message(embed=embed, ephemeral=False)
-    else:
-        # عقوبة خفيفة عند الخسارة
-        lost_coins = min(eco["coins"], 50 * (رقم_الطابق // 10 + 1))
-        eco["coins"] = max(0, eco["coins"] - lost_coins)
-        save_data()
+        embed.add_field(name="⚡ مستوى العتاد الجديد", value=f"**{eco['gear_level']} / 10,000**", inline=True)
+        embed.add_field(name="🪙 التكلفة الإجمالية", value=f"`{cost:,}` عملة عادية", inline=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
+
+class TowerPanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+    @discord.ui.button(label="بدء المغامرة وصعود الطوابق", style=discord.ButtonStyle.green, emoji="⚔️")
+    async def start_adventure(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = interaction.user.id
+        if user_id not in REGISTERED_USERS:
+            await interaction.response.send_message("❌ يجب عليك التسجيل أولاً عبر `/تسجيل` لتبدأ صعود الطوابق!", ephemeral=True)
+            return
+        await interaction.response.send_modal(FloorInputModal())
+
+    @discord.ui.button(label="تطوير العتاد (حتى 10000)", style=discord.ButtonStyle.blurple, emoji="⚒️")
+    async def upgrade_gear(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = interaction.user.id
+        if user_id not in REGISTERED_USERS:
+            await interaction.response.send_message("❌ يجب عليك التسجيل أولاً عبر `/تسجيل` لتتمكن من تطوير عتادك!", ephemeral=True)
+            return
+        await interaction.response.send_modal(UpgradeGearModal())
+
+    @discord.ui.button(label="حقيبة العتاد والملخص", style=discord.ButtonStyle.grey, emoji="🎒")
+    async def view_status(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = interaction.user.id
+        if user_id not in REGISTERED_USERS:
+            await interaction.response.send_message("❌ لم تقم بالتسجيل بعد!", ephemeral=True)
+            return
+        eco = get_user_economy(user_id)
         embed = discord.Embed(
-            title=f"💀 هزيمة قاسية في الطابق {رقم_الطابق}!",
-            description=f"كان الوحش **{monster_name}** ({difficulty}) أقوى من متوقعك وهزمك في المعركة!",
-            color=0xE74C3C
+            title="🏰 لوحة حالة برج المغامرات والعتاد",
+            description=f"ملخص بيانات المغامر الإمبراطوري:",
+            color=0x3498DB
         )
-        embed.add_field(name="⚠️ الخسارة", value=f"فقدت `{lost_coins}` عملة عادية أثناء الهروب لإنقاذ حياتك!", inline=False)
-        embed.add_field(name="💡 نصيحة", value="طور عتادك من المتجر أو اشترِ معدات متجر الظلام لزيادة فرص فوزك في الطوابق العليا!", inline=False)
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        embed.add_field(name="⚡ مستوى العتاد الحالي", value=f"**{eco.get('gear_level', 1)} / 10,000**", inline=True)
+        embed.add_field(name="🏆 أعلى طابق تم بلوغه", value=f"الطابق **{eco.get('max_floor', 1)}**", inline=True)
+        embed.add_field(name="🪙 العملات العادية", value=f"{eco['coins']:,} عملة", inline=True)
+        embed.add_field(name="💎 جواهر الظلام", value=f"{eco['gems']} جوهرة", inline=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="الطابق", description="فتح القائمة الإمبراطورية المتكاملة لصعود الطوابق، تطوير العتاد والمغامرة")
+async def tower(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🏰 ⟪ بـرْج العـَظـَمـَة والمـُغـَامـَرَات الإمـْبـرَاطـُوريـة ⟫ 🏰",
+        description=(
+            "مرحباً بك في برج التحدي الأسطوري!\n"
+            "من خلال هذه اللوحة التفاعلية يمكنك اختيار ما تحتاجه بكل سلاسة:\n\n"
+            "• **بدء المغامرة**: لا داعي لكتابة أرقام معقدة، اضغط الزر وأدخل رقم الطابق (من 1 إلى 10,000).\n"
+            "• **تطوير العتاد**: ارفع قوة عتادك تدريجياً لغاية الحد الأقصى **10,000** لتصمود أمام الوحوش الأسطورية!\n"
+            "• **المعارك**: تتميز المعارك الآن بنظام دم وتدمير تفاعلي واقعي يوضح الضربات لحظة بلحظة."
+        ),
+        color=0x8E44AD
+    )
+    embed.set_footer(text="اختر أحد الأزرار أدناه للبدء فوراً...")
+    await interaction.response.send_message(embed=embed, view=TowerPanelView(), ephemeral=False)
 
 
 # ==================== 4. نظام الحقيبة التفاعلي (منيو الحقيبة) ====================
@@ -516,8 +682,8 @@ async def profile(interaction: discord.Interaction):
     embed.add_field(name="🌀 المهارة الفتاكة", value=hero_info['skills'], inline=True)
     embed.add_field(name="🪙 العملات العادية", value=f"{eco['coins']} عملة", inline=True)
     embed.add_field(name="💎 جواهر الظلام", value=f"{eco['gems']} جوهرة", inline=True)
+    embed.add_field(name="⚒️ مستوى العتاد", value=f"{eco.get('gear_level', 1)} / 10,000", inline=True)
     embed.add_field(name="🏰 أعلى طابق تم بلوغه", value=f"الطابق {eco.get('max_floor', 1)}", inline=True)
-    embed.add_field(name="🎒 عناصر الحقيبة", value=f"{len(eco['inventory'])} عناصر", inline=True)
     
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
