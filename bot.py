@@ -21,7 +21,10 @@ cursor.execute(
         equipment_score INTEGER DEFAULT 10,
         floors INTEGER DEFAULT 1,
         hero_name TEXT DEFAULT 'لم يتم الاختيار',
-        equipment_name TEXT DEFAULT 'لم يتم الاختيار'
+        equipment_name TEXT DEFAULT 'لم يتم الاختيار',
+        title TEXT DEFAULT 'مبتدئ',
+        hide_stats INTEGER DEFAULT 0,
+        hide_titles INTEGER DEFAULT 0
     )
 """
 )
@@ -118,7 +121,7 @@ class RegisterModal(discord.ui.Modal, title="التسجيل الإجباري ا�
         db_connection.commit()
 
         await interaction.response.send_message(
-            f"✅ **تم تسجيلك بنجاح يابطل!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك استخدام جميع الأوامر والمنيو بحرية تامّة!",
+            f"✅ **تم تسجيلك بنجاح يابطل!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك استخدام جميع الأوامر بحرية تامّة!",
             ephemeral=True,
         )
 
@@ -129,7 +132,185 @@ async def register_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 3. شخصية "السفاح" (خاص بالمطورين - صور فانتزي مرعبة)
+# 3. الملف الشخصي (ظاهر للكل ولكن التعديل لصاحبه فقط عبر منيو التحكم)
+# ==========================================
+
+
+class EditTitleModal(discord.ui.Modal, title="تعديل اللقب الشخصي"):
+
+    new_title = discord.ui.TextInput(
+        label="اللقب الجديد",
+        placeholder="اكتب لقبك الفانتازي الجديد...",
+        required=True,
+        max_length=30,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        cursor.execute(
+            "UPDATE user_data SET title = ? WHERE user_id = ?",
+            (self.new_title.value, interaction.user.id),
+        )
+        db_connection.commit()
+        await interaction.response.send_message(
+            f"✅ تم تحديث لقبك إلى: **{self.new_title.value}** بنجاح!",
+            ephemeral=True,
+        )
+
+
+class ProfileControlView(discord.ui.View):
+
+    def __init__(self, owner_id: int):
+        super().__init__(timeout=180)
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "❌ عذراً، هذا الملف الشخصي لا يخصك ولا يمكنك التعديل عليه!",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    @discord.ui.button(
+        label="تعديل اللقب",
+        style=discord.ButtonStyle.primary,
+        emoji="✏️",
+        row=0,
+    )
+    async def edit_title_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.send_modal(EditTitleModal())
+
+    @discord.ui.button(
+        label="إخفاء/إظهار المعدلات",
+        style=discord.ButtonStyle.secondary,
+        emoji="👁️",
+        row=0,
+    )
+    async def toggle_stats_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute(
+            "SELECT hide_stats FROM user_data WHERE user_id = ?",
+            (interaction.user.id,),
+        )
+        current = cursor.fetchone()[0]
+        new_val = 0 if current == 1 else 1
+        cursor.execute(
+            "UPDATE user_data SET hide_stats = ? WHERE user_id = ?",
+            (new_val, interaction.user.id),
+        )
+        db_connection.commit()
+
+        status_text = "مخفية 🔒" if new_val == 1 else "ظاهرة 🔓"
+        await interaction.response.send_message(
+            f"✅ تم تغيير حالة إخفاء المعدلات لتصبح: **{status_text}**",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="إخفاء/إظهار الألقاب",
+        style=discord.ButtonStyle.secondary,
+        emoji="🛡️",
+        row=0,
+    )
+    async def toggle_titles_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute(
+            "SELECT hide_titles FROM user_data WHERE user_id = ?",
+            (interaction.user.id,),
+        )
+        current = cursor.fetchone()[0]
+        new_val = 0 if current == 1 else 1
+        cursor.execute(
+            "UPDATE user_data SET hide_titles = ? WHERE user_id = ?",
+            (new_val, interaction.user.id),
+        )
+        db_connection.commit()
+
+        status_text = "مخفي 🔒" if new_val == 1 else "ظاهر 🔓"
+        await interaction.response.send_message(
+            f"✅ تم تغيير حالة إخفاء الألقاب لتصبح: **{status_text}**",
+            ephemeral=True,
+        )
+
+
+@bot.tree.command(name="الملف", description="عرض الملف الشخصي (ظاهر للجميع مع أزرار تحكم خاصة بصاحبه)")
+@app_commands.describe(member="العضو المراد عرض ملفه (اختياري)")
+async def profile_command(
+    interaction: discord.Interaction, member: discord.Member = None
+):
+    target = member if member else interaction.user
+
+    if not is_registered(target.id):
+        if target.id == interaction.user.id:
+            await interaction.response.send_modal(RegisterModal())
+        else:
+            await interaction.response.send_message(
+                f"❌ المستخدم {target.mention} غير مسجل في النظام بعد!",
+                ephemeral=True,
+            )
+        return
+
+    cursor.execute(
+        "SELECT name, age, gender, balance, equipment_score, floors, hero_name, equipment_name, title, hide_stats, hide_titles FROM user_data WHERE user_id = ?",
+        (target.id,),
+    )
+    data = cursor.fetchone()
+    name, age, gender, balance, eq_score, floors, hero, equipment, title, hide_stats, hide_titles = (
+        data
+    )
+
+    embed = discord.Embed(
+        title=f"📜 الملف الشخصي لـ: {target.display_name}",
+        color=discord.Color.dark_purple(),
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+
+    # التحقق من إخفاء الألقاب
+    display_title = "مخفي 🔒" if hide_titles == 1 else f"`{title}`"
+    embed.add_field(name="🏷️ اللقب الشخصي", value=display_title, inline=False)
+
+    embed.add_field(name="👤 الاسم الحقيقي", value=f"`{name}`", inline=True)
+    embed.add_field(name="🎂 العمر", value=f"`{age}`", inline=True)
+    embed.add_field(name="🚻 الجنس", value=f"`{gender}`", inline=True)
+
+    # التحقق من إخفاء المعدلات
+    if hide_stats == 1:
+        embed.add_field(
+            name="📊 المعدلات والقوة",
+            value="*المعدلات مخفية بواسطة صاحب الملف 🔒*",
+            inline=False,
+        )
+    else:
+        embed.add_field(
+            name="📊 المعدلات والقوة",
+            value=(
+                f"• الرصيد: `{balance}` 💎\n"
+                f"• نقاط المعدات: `{eq_score}` ⚔️\n"
+                f"• الطوابق المكتسحة: `{floors}` 🏢\n"
+                f"• البطل المختار: `{hero}` 🦸‍♂️\n"
+                f"• العتاد الحالي: `{equipment}` 🗡️"
+            ),
+            inline=False,
+        )
+
+    embed.set_footer(
+        text=(
+            f"طلب بواسطة: {interaction.user.display_name} | الملف مرئي للجميع"
+        )
+    )
+
+    # إرسال الرسالة للجميع (ليس ephemeral) مع إرفاق منيو التحكم الخاص بصاحب الملف فقط
+    view = ProfileControlView(target.id)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+# ==========================================
+# 4. شخصية "السفاح" (خاص بالمطورين)
 # ==========================================
 
 
@@ -177,7 +358,7 @@ async def assassin_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 4. الأبطال الأسطوريين (صور فانتزي)
+# 5. الأبطال الأسطوريين (صور فانتزي)
 # ==========================================
 HEROES_DATA = {
     "arthur": {
@@ -195,38 +376,6 @@ HEROES_DATA = {
         "defense": 750,
         "story": "سيد العواصف الذي يتسيد القمم العالية، يطلق رعداً يزلزل الجبال ويدمر جيوش الأعداء بلمح البصر.",
         "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800",
-    },
-    "kane": {
-        "title": "كين - قناص البراري المظلمة",
-        "gender": "ذكر",
-        "power": 890,
-        "defense": 810,
-        "story": "مقاتل خفي يجوب الغابات المسحورة، بصر حديدي وسهام مغموسة بسُم التنين الأسطوري.",
-        "image": "https://images.unsplash.com/photo-1514539079130-25950c84af65?w=800",
-    },
-    "athena": {
-        "title": "أثينا - حارسة المعابد المقدسة",
-        "gender": "أنثى",
-        "power": 930,
-        "defense": 920,
-        "story": "إلهة الحرب والحكمة، درعها المزخرف بنقوش الفينيق لا يمكن اختراقه، تقود الجيوش بنظرة حادة كالسيف.",
-        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?w=800",
-    },
-    "valkyrie": {
-        "title": "فالكيري - فارسة السماء الفانتازية",
-        "gender": "أنثى",
-        "power": 970,
-        "defense": 830,
-        "story": "محاربة مجنحة تهبط من أبعاد سحرية بعيدة، تحمل رمحاً براقاً تضيء به ساحات المعارك المظلمة.",
-        "image": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800",
-    },
-    "selene": {
-        "title": "سيلين - أميرة السحر القمري",
-        "gender": "أنثى",
-        "power": 910,
-        "defense": 860,
-        "story": "ساحرة الأبعاد الأبدية، تستمد قوتها السحرية من ضوء الأقمار الدموية لتجميد قلوب الأعداء.",
-        "image": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800",
     },
 }
 
@@ -246,30 +395,6 @@ class HeroSelectDropdown(discord.ui.Select):
                 description="ذكر | طاقة رعدية مدمرة",
                 emoji="⚡",
                 value="zeus",
-            ),
-            discord.SelectOption(
-                label="كين (قناص البراري)",
-                description="ذكر | دقة واستخبارات قتالية",
-                emoji="🏹",
-                value="kane",
-            ),
-            discord.SelectOption(
-                label="أثينا (حارسة المعابد)",
-                description="أنثى | دفاع أسطوري وحكمة",
-                emoji="🛡️",
-                value="athena",
-            ),
-            discord.SelectOption(
-                label="فالكيري (محاربة الفضاء)",
-                description="أنثى | سرعة وهجوم خاطف",
-                emoji="🪽",
-                value="valkyrie",
-            ),
-            discord.SelectOption(
-                label="سيلين (أميرة القمريات)",
-                description="أنثى | سحر قمري مرعب",
-                emoji="🌙",
-                value="selene",
             ),
         ]
         super().__init__(
@@ -342,29 +467,17 @@ async def heroes_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 5. أمر "المتجر" (الأسلحة والمعدات بصور فانتزي)
+# 6. المتاجر (المتجر العادي + متجر الظلام)
 # ==========================================
-SHOP_ITEMS = {
+
+# 1. المتجر العادي
+NORMAL_SHOP_ITEMS = {
     "sword": {
         "title": "سيف اللهب الأبدي (Flame Blade)",
         "price": "250 💎",
         "damage": "+500 هجوم ناري",
         "desc": "سيف أسطوري مشتغل بنيران التنانين القديمة، يحرق دروع الأعداء بضربة واحدة.",
         "image": "https://images.unsplash.com/photo-1589241062272-c0a000071dfa?w=800",
-    },
-    "hammer": {
-        "title": "مطرقة الرعد الكونية (Thunder Hammer)",
-        "price": "400 💎",
-        "damage": "+650 قوة تحطيم",
-        "desc": "مطرقة ثقيلة مصنوعة من نيازك السماء، قادرة على إحداث زلزال وهز الحصون.",
-        "image": "https://images.unsplash.com/photo-1601933470077-0afdd71f5424?w=800",
-    },
-    "bow": {
-        "title": "قوس الضوء المقدس (Holy Bow)",
-        "price": "300 💎",
-        "damage": "+480 دقة وبصيرة",
-        "desc": "يطلق سهاماً من الطاقة الصافية التي تخترق أعتى الحصون وتلاحق الهدف تلقائياً.",
-        "image": "https://images.unsplash.com/photo-1514539079130-25950c84af65?w=800",
     },
     "shield": {
         "title": "درع التنين الأسطوري (Dragon Shield)",
@@ -376,7 +489,7 @@ SHOP_ITEMS = {
 }
 
 
-class ShopSelectDropdown(discord.ui.Select):
+class NormalShopDropdown(discord.ui.Select):
 
     def __init__(self):
         options = [
@@ -387,18 +500,6 @@ class ShopSelectDropdown(discord.ui.Select):
                 value="sword",
             ),
             discord.SelectOption(
-                label="مطرقة الرعد الكونية",
-                description="السعر: 400 💎 | مطرقة تدمر الحصون",
-                emoji="🔨",
-                value="hammer",
-            ),
-            discord.SelectOption(
-                label="قوس الضوء المقدس",
-                description="السعر: 300 💎 | قوس بأسهم مضيئة",
-                emoji="🏹",
-                value="bow",
-            ),
-            discord.SelectOption(
                 label="درع التنين الأسطوري",
                 description="السعر: 350 💎 | درع دفاعي مطلق",
                 emoji="🛡️",
@@ -406,7 +507,7 @@ class ShopSelectDropdown(discord.ui.Select):
             ),
         ]
         super().__init__(
-            placeholder="اختر سلاحاً أو معدة من متجر الأسلحة...",
+            placeholder="اختر معدة من المتجر العادي...",
             min_values=1,
             max_values=1,
             options=options,
@@ -414,7 +515,7 @@ class ShopSelectDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         choice = self.values[0]
-        item = SHOP_ITEMS[choice]
+        item = NORMAL_SHOP_ITEMS[choice]
         user_id = interaction.user.id
 
         cursor.execute(
@@ -424,55 +525,137 @@ class ShopSelectDropdown(discord.ui.Select):
         db_connection.commit()
 
         embed = discord.Embed(
-            title=f"🛒 متجر الأسلحة: {item['title']}",
+            title=f"🛒 المتجر العادي: {item['title']}",
             description=(
                 f"**📖 وصف السلاح:**\n{item['desc']}\n\n"
-                f"📊 **تفاصيل السلعة:**\n"
-                f"• السعر: `{item['price']}`\n"
-                f"• التأثير: `{item['damage']}`\n\n"
-                f"✅ *تم شراء وتجهيز هذه المعدة الفانتازية بنجاح في حقيبتك!*"
+                f"📊 **التفاصيل:**\n• السعر: `{item['price']}`\n• التأثير: `{item['damage']}`\n\n"
+                f"✅ *تم اقتناء وتجهيز هذه المعدة بنجاح!*"
             ),
-            color=discord.Color.dark_teal(),
+            color=discord.Color.gold(),
         )
         embed.set_image(url=item["image"])
-        embed.set_footer(
-            text=f"تم الاستعراض بواسطة: {interaction.user.display_name}"
-        )
-
         await interaction.response.edit_message(embed=embed, view=self.view)
 
 
-class ShopMenuView(discord.ui.View):
+class NormalShopView(discord.ui.View):
 
     def __init__(self):
         super().__init__(timeout=120)
-        self.add_item(ShopSelectDropdown())
+        self.add_item(NormalShopDropdown())
 
 
-@bot.tree.command(name="المتجر", description="فتح متجر الأسلحة والمعدات الأسطورية بصور فانتزي")
+@bot.tree.command(name="المتجر", description="فتح المتجر العادي للأسلحة والمعدات بصور فانتزي")
 async def shop_command(interaction: discord.Interaction):
     if not is_registered(interaction.user.id):
         await interaction.response.send_modal(RegisterModal())
         return
 
     embed = discord.Embed(
-        title="🛍️ متجر المعدات والأسلحة الأسطورية",
-        description=(
-            "مرحباً بك في السوق الإمبراطوري.\n"
-            "اختر سلاحاً، مطرقة، أو درعاً من القائمة أدناه لمعاينة **صورته الفانتازية وقوته التدميرية وسعره**!"
-        ),
+        title="🛍️ المتجر العادي الإمبراطوري",
+        description="تصفح الأسلحة والمعدات القياسية المتاحة للشراء وتجهيزها:",
         color=discord.Color.gold(),
     )
     embed.set_image(
         url="https://images.unsplash.com/photo-1589241062272-c0a000071dfa?w=800"
     )
+    view = NormalShopView()
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-    view = ShopMenuView()
+
+# 2. متجر الظلام (Dark Shop)
+DARK_SHOP_ITEMS = {
+    "dark_blade": {
+        "title": "شفرة الموت المظلمة (Dark Death Blade)",
+        "price": "666 💎",
+        "damage": "+1200 هجوم شيطاني",
+        "desc": "شفرة مسحورة تنبعث منها طاقة الهلاك، تلتهم أرواح الأعداء وتضاعف الضرر بالظلام.",
+        "image": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800",
+    },
+    "shadow_hammer": {
+        "title": "مطرقة الفوضى الملعونة (Chaos Hammer)",
+        "price": "800 💎",
+        "damage": "+1500 تحطيم مظلم",
+        "desc": "مطرقة نحس صُنعت في سراديب العوالم السفلى، هجماتها تسبب شلل تام للخصم.",
+        "image": "https://images.unsplash.com/photo-1601933470077-0afdd71f5424?w=800",
+    },
+}
+
+
+class DarkShopDropdown(discord.ui.Select):
+
+    def __init__(self):
+        options = [
+            discord.SelectOption(
+                label="شفرة الموت المظلمة",
+                description="السعر: 666 💎 | شفرة شيطانية فتاكة",
+                emoji="🗡️",
+                value="dark_blade",
+            ),
+            discord.SelectOption(
+                label="مطرقة الفوضى الملعونة",
+                description="السعر: 800 💎 | مطرقة دمار شامل",
+                emoji="🔨",
+                value="shadow_hammer",
+            ),
+        ]
+        super().__init__(
+            placeholder="اختر سلاحاً محرماً من متجر الظلام...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        choice = self.values[0]
+        item = DARK_SHOP_ITEMS[choice]
+        user_id = interaction.user.id
+
+        cursor.execute(
+            "UPDATE user_data SET equipment_name = ? WHERE user_id = ?",
+            (item["title"], user_id),
+        )
+        db_connection.commit()
+
+        embed = discord.Embed(
+            title=f"🖤 متجر الظلام: {item['title']}",
+            description=(
+                f"**📖 وصف السلاح المحرم:**\n{item['desc']}\n\n"
+                f"📊 **التفاصيل:**\n• السعر: `{item['price']}`\n• التأثير: `{item['damage']}`\n\n"
+                f"💀 *لقد عقدت صفقة مظلمة وتم تجهيز السلاح بنجاح!*"
+            ),
+            color=discord.Color.dark_red(),
+        )
+        embed.set_image(url=item["image"])
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class DarkShopView(discord.ui.View):
+
+    def __init__(self):
+        super().__init__(timeout=120)
+        self.add_item(DarkShopDropdown())
+
+
+@bot.tree.command(name="متجر_الظلام", description="فتح متجر الظلام للأسلحة والعتاد المحرم والمظلم")
+async def dark_shop_command(interaction: discord.Interaction):
+    if not is_registered(interaction.user.id):
+        await interaction.response.send_modal(RegisterModal())
+        return
+
+    embed = discord.Embed(
+        title="🌑 متجر الظلام السري",
+        description="تحذير: الأسلحة هنا تنبض بطاقة مظلمة وممحوة. اختر بحذر:",
+        color=discord.Color.dark_red(),
+    )
+    embed.set_image(
+        url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800"
+    )
+    view = DarkShopView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 # ==========================================
-# 6. البنك ولوحة المطورين
+# 7. البنك ولوحة المطورين
 # ==========================================
 
 
@@ -617,7 +800,7 @@ async def add_developer(interaction: discord.Interaction, member: discord.Member
 
 
 # ==========================================
-# 7. تشغيل البوت
+# 8. تشغيل البوت
 # ==========================================
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
