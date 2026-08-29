@@ -7,7 +7,7 @@ from discord.ext import commands
 db_connection = sqlite3.connect("bot_database.db")
 cursor = db_connection.cursor()
 
-# جدول بيانات المستخدمين النقاط
+# جدول بيانات المستخدمين والنقاط (الأوامر القديمة)
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS user_data (
@@ -28,7 +28,7 @@ cursor.execute(
 )
 db_connection.commit()
 
-# 2. إعداد البوت والصلاحيات (مع تفعيل جميع الـ Intents إجبارياً)
+# 2. إعداد البوت والصلاحيات
 intents = discord.Intents.default()
 intents.message_content = True  # مهم جداً لقراءة الأوامر
 intents.members = True
@@ -52,7 +52,7 @@ def is_dev(user_id: int) -> bool:
 
 
 # ==========================================
-# 3. الأوامر القديمة (محفوظة بالكامل)
+# 3. الأوامر القديمة (محفوظة بالكامل بدون حذف)
 # ==========================================
 
 
@@ -91,7 +91,7 @@ async def get_data(ctx):
 
 
 # ==========================================
-# 4. لوحة المطورين الفخمة والأزرار
+# 4. لوحة المطورين الفخمة والإضافات
 # ==========================================
 
 
@@ -168,7 +168,7 @@ class DevPanelView(discord.ui.View):
 
 @bot.command(name="مطور", help="فتح لوحة تحكم المطورين الفخمة")
 async def dev_panel(ctx):
-    # إضافة صاحب أول أمر تلقائياً كأول مطور لتبدأ اللوحة معك
+    # إذا لم يكن هناك أي مطور في قاعدة البيانات، نجعل أول شخص يكتب الأمر مطوراً تلقائياً
     cursor.execute("SELECT COUNT(*) FROM developers")
     if cursor.fetchone()[0] == 0:
         cursor.execute(
@@ -177,6 +177,7 @@ async def dev_panel(ctx):
         )
         db_connection.commit()
 
+    # التحقق هل المستخدم مطور أو مالك السيرفر
     if not is_dev(ctx.author.id) and ctx.author.id != ctx.guild.owner_id:
         await ctx.send("❌ عذراً، أنت لست مدرجاً في قائمة مطوري هذا البوت.")
         return
@@ -201,20 +202,23 @@ async def dev_panel(ctx):
     await ctx.send(embed=embed, view=view)
 
 
-@bot.command(name="اضافة_مطور")
+@bot.command(name="اضافة_مطور", help="إضافة مطور جديد للنظام عن طريق الإشارة إليه")
 async def add_developer(ctx, member: discord.Member):
     cursor.execute("SELECT COUNT(*) FROM developers")
-    # إذا لم يكن هناك مطورين بعد، نسمح لأول شخص باستخدام الأمر
-    if cursor.fetchone()[0] > 0 and not is_dev(ctx.author.id):
-        await ctx.send("❌ هذا الأمر مخصص للمطورين فقط!")
+    total_devs = cursor.fetchone()[0]
+
+    # إذا كان هناك مطورين مسجلين مسبقاً، نشترط أن يكون كاتِب الأمر مطوراً حقيقياً
+    if total_devs > 0 and not is_dev(ctx.author.id):
+        await ctx.send("❌ عذراً، هذا الأمر مخصص للمطورين المعتمدين فقط!")
         return
 
     cursor.execute(
         "INSERT OR IGNORE INTO developers (user_id) VALUES (?)", (member.id,)
     )
     db_connection.commit()
+
     await ctx.send(
-        f"✅ تم بنجاح تعيين {member.mention} مطوراً جديداً في النظام وإضافته لقاعدة البيانات!"
+        f"✅ تم بنجاح تعيين {member.mention} مطوراً جديداً في النظام وحفظه في قاعدة البيانات!"
     )
 
 
