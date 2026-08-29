@@ -4,10 +4,14 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-# 1. إعداد اتصال قاعدة البيانات (SQLite) وإنشاء الجداول
-db_connection = sqlite3.connect("bot_database.db")
+# 1. إعداد مسار ثابت ودائم لقاعدة البيانات في مجلد العمل الحالي
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "bot_database.db")
+
+db_connection = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = db_connection.cursor()
 
+# إنشاء الجداول ودعم التحديث التلقائي للحقول إن وجدت مسبقاً
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS user_data (
@@ -61,6 +65,7 @@ async def on_ready():
     print(f"-----------------------------------------")
     print(f"تم تسجيل الدخول بنجاح باسم: {bot.user.name} (ID: {bot.user.id})")
     print(f"البوت متصل حالياً في {len(bot.guilds)} سيرفر/ات.")
+    print(f"قاعدة البيانات محفوظة في: {DB_PATH}")
     print(f"-----------------------------------------")
 
 
@@ -464,10 +469,9 @@ async def heroes_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 6. المتاجر (المتجر العادي + متجر الظلام - معدات كثيرة جداً)
+# 6. المتاجر (المتجر العادي + متجر الظلام)
 # ==========================================
 
-# 1. المتجر العادي (تعدّد كبير ومقسّم بعناية)
 NORMAL_SHOP_ITEMS = {
     "sword": {
         "title": "سيف اللهب الأبدي (Flame Blade)",
@@ -624,7 +628,6 @@ async def shop_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-# 2. متجر الظلام (Dark Shop - مجموعة ضخمة جداً من المعدات المحرمة)
 DARK_SHOP_ITEMS = {
     "dark_blade": {
         "title": "شفرة الموت المظلمة (Dark Death Blade)",
