@@ -28,19 +28,24 @@ cursor.execute(
 )
 db_connection.commit()
 
-# 2. إعداد البوت والصلاحيات
+# 2. إعداد البوت والصلاحيات (مع تفعيل جميع الـ Intents إجبارياً)
 intents = discord.Intents.default()
-intents.message_content = True
+intents.message_content = True  # مهم جداً لقراءة الأوامر
+intents.members = True
+intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 @bot.event
 async def on_ready():
-    print(f"تم تسجيل الدخول بنجاح باسم {bot.user}")
+    print(f"-----------------------------------------")
+    print(f"تم تسجيل الدخول بنجاح باسم: {bot.user.name} (ID: {bot.user.id})")
+    print(f"البوت متصل حالياً في {len(bot.guilds)} سيرفر/ات.")
+    print(f"-----------------------------------------")
 
 
-# دالة للتحقق مما إذا كان المستخدم مطوراً (مخزناً في قاعدة البيانات أو صاحب البوت)
+# دالة للتحقق مما إذا كان المستخدم مطوراً
 def is_dev(user_id: int) -> bool:
     cursor.execute("SELECT user_id FROM developers WHERE user_id = ?", (user_id,))
     return cursor.fetchone() is not None
@@ -86,11 +91,10 @@ async def get_data(ctx):
 
 
 # ==========================================
-# 4. لوحة المطورين الفخمة (New Feature)
+# 4. لوحة المطورين الفخمة والأزرار
 # ==========================================
 
 
-# واجهة الأزرار الخاصة بلوحة المطورين
 class DevPanelView(discord.ui.View):
 
     def __init__(self, author_id):
@@ -98,7 +102,6 @@ class DevPanelView(discord.ui.View):
         self.author_id = author_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        # السماح فقط لصاحب الأمر بالتفاعل مع الأزرار لحمايتها
         if interaction.user.id == self.author_id or is_dev(
             interaction.user.id
         ):
@@ -163,14 +166,9 @@ class DevPanelView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
 
-# أمر فتح اللوحة
 @bot.command(name="مطور", help="فتح لوحة تحكم المطورين الفخمة")
 async def dev_panel(ctx):
-    # التحقق هل المستخدم صاحب البوت (يمكنك استبدال الايدي بايديك الخاص) أو مسجل كمطور
-    # افتراضياً سنسمح لمن يكتب الأمر لأول مرة أو إذا كان مسجلاً، وللأمان يمكنك جعلها مخصصة لك:
-    # if ctx.author.id != YOUR_ID: return
-
-    # كمثال: نضيف صاحب أول أمر تلقائياً كأول مطور إذا لم يكن هناك مطورين لتبدأ اللوحة معك
+    # إضافة صاحب أول أمر تلقائياً كأول مطور لتبدأ اللوحة معك
     cursor.execute("SELECT COUNT(*) FROM developers")
     if cursor.fetchone()[0] == 0:
         cursor.execute(
@@ -183,7 +181,6 @@ async def dev_panel(ctx):
         await ctx.send("❌ عذراً، أنت لست مدرجاً في قائمة مطوري هذا البوت.")
         return
 
-    # تصميم الفريم الفخم (Embed)
     embed = discord.Embed(
         title="✨ لوحة تحكم المطورين المركزية",
         description=(
@@ -193,20 +190,22 @@ async def dev_panel(ctx):
         ),
         color=discord.Color.from_rgb(40, 40, 45),
     )
-    embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
-    embed.set_footer(
-        text=f"طلب بواسطة: {ctx.author.name}", icon_url=ctx.author.avatar.url
-    )
+    if bot.user.avatar:
+        embed.set_thumbnail(url=bot.user.avatar.url)
+    if ctx.author.avatar:
+        embed.set_footer(
+            text=f"طلب بواسطة: {ctx.author.name}", icon_url=ctx.author.avatar.url
+        )
 
     view = DevPanelView(ctx.author.id)
     await ctx.send(embed=embed, view=view)
 
 
-# أمر لإضافة مطور جديد بسهولة: !اضافة_مطور @user
 @bot.command(name="اضافة_مطور")
 async def add_developer(ctx, member: discord.Member):
-    # تحقق من أن الشخص اللي يسوي الأمر هو مطور أساسي أو صاحب السيرفر/البوت
-    if not is_dev(ctx.author.id):
+    cursor.execute("SELECT COUNT(*) FROM developers")
+    # إذا لم يكن هناك مطورين بعد، نسمح لأول شخص باستخدام الأمر
+    if cursor.fetchone()[0] > 0 and not is_dev(ctx.author.id):
         await ctx.send("❌ هذا الأمر مخصص للمطورين فقط!")
         return
 
