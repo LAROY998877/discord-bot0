@@ -1,4 +1,5 @@
 import os
+import json
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -9,18 +10,47 @@ intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# قواعد البيانات الشاملة
+# ملف حفظ البيانات محلياً
+DB_FILE = "database.json"
+
+# قواعد البيانات
 REGISTERED_USERS = {}
 USER_ECONOMY = {}          # {user_id: {"coins": int, "gems": int, "inventory": [], "hero": str}}
 GUILDS_DATA = {}           # {guild_name: {"owner": id, "level": 1, "exp": 0, "bank_coins": 0, "bank_items": [], "members": [id]}}
 
+def load_data():
+    global REGISTERED_USERS, USER_ECONOMY, GUILDS_DATA
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                # تحويل المفاتيح من نص إلى أرقام (IDs) لتعمل بشكل صحيح
+                REGISTERED_USERS = {int(k): v for k, v in data.get("REGISTERED_USERS", {}).items()}
+                USER_ECONOMY = {int(k): v for k, v in data.get("USER_ECONOMY", {}).items()}
+                GUILDS_DATA = data.get("GUILDS_DATA", {})
+            print("💾 تم تحميل البيانات بنجاح من قاعدة البيانات!")
+        except Exception as e:
+            print(f"❌ خطأ أثناء تحميل البيانات: {e}")
+
+def save_data():
+    data = {
+        "REGISTERED_USERS": {str(k): v for k, v in REGISTERED_USERS.items()},
+        "USER_ECONOMY": {str(k): v for k, v in USER_ECONOMY.items()},
+        "GUILDS_DATA": GUILDS_DATA
+    }
+    try:
+        with open(DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"❌ خطأ أثناء حفظ البيانات: {e}")
+
 def get_user_economy(user_id):
     if user_id not in USER_ECONOMY:
-        # 1000 عملة عادية + 20 جوهرة ظلام نادرة كمبتدئ
         USER_ECONOMY[user_id] = {"coins": 1000, "gems": 20, "inventory": ["سيف التدريب الخشبي", "درع الجلد الطبيعي"], "hero": None}
+        save_data()
     return USER_ECONOMY[user_id]
 
-# تعريف الأبطال (3 ذكور و3 إناث + السفاح)
+# تعريف الأبطال (بما فيهم السفاح الأسطوري السري)
 HEROES_DATA = {
     "لونا": {"gender": "أنثى", "title": "حارسة النجوم", "story": "وُدت تحت ضوء نيزك أزرق نادر لإنقاذ عالمها.", "power": "الضوء القمري", "skills": "انفجار نيزكي", "art": "[ لونا 🌙 ]"},
     "فيكتوريا": {"gender": "أنثى", "title": "فارس العاصفة", "story": "امتزجت روحها بالبرق لتصبح عاصفة بشرية.", "power": "الكهرباء والسرعة", "skills": "صاعقة البرق", "art": "[ فيكتوريا ⚡ ]"},
@@ -28,24 +58,19 @@ HEROES_DATA = {
     "ثورن": {"gender": "ذكر", "title": "عملاق الجبال", "story": "محارب شجاع درعه مصنوع من حجر النيزك.", "power": "صلابة حديدية", "skills": "ضربة الأرض", "art": "[ ثورن 🏔️ ]"},
     "كايدن": {"gender": "ذكر", "title": "سياف اللهيب", "story": "أقسم على الانتقام بسيفه المشتعل بنيران التنين.", "power": "إشعال النيران", "skills": "سيف اللهيب", "art": "[ كايدن 🔥 ]"},
     "زيك": {"gender": "ذكر", "title": "مهندس الموت", "story": "استخدم التكنولوجيا المحرمة لدمج التروس بجسده.", "power": "التحكم التقني", "skills": "مدفع البلازما", "art": "[ زيك ⚙️ ]"},
-    "السفاح": {"gender": "سري", "title": "حاصد الأرواح", "story": "كائن أسطوري مرعب مخصص للمطور حصرياً.", "power": "إفناء الوجود", "skills": "لمسة الموت", "art": "[ 💀 السفاح المرعب 💀 ]"}
+    "السفاح": {"gender": "سري", "title": "حاصد الأرواح السري", "story": "كائن أسطوري مرعب مخصص للمطور حصرياً بقوة مطلقة.", "power": "إفناء الوجود المطلق", "skills": "لمسة الموت والدمار", "art": "[ 💀 السفاح المرعب 💀 ]"}
 }
 
-# معدات متجر الظلام (تُشترى بالعملة النادرة: جواهر الظلام 💎 - أعلى 3 رتب: الشيطان، الجحيم، السفاح)
+# معدات متجر الظلام (تُشترى بجواهر الظلام 💎)
 DARK_SHOP_ITEMS = {
-    # رتبة الشيطان 🔴
     "خنجر الشيطان الأبدي": {"price_gems": 10, "rank": "🔴 الشيطان", "power": "قوة تدميرية +999"},
     "سيف الموت الشيطاني": {"price_gems": 18, "rank": "🔴 الشيطان", "power": "قوة تدميرية +1300"},
     "خوذة خطايا الشيطان": {"price_gems": 12, "rank": "🔴 الشيطان", "power": "دفاع شيطاني +1100"},
     "جناح الشيطان المظلم": {"price_gems": 25, "rank": "🔴 الشيطان", "power": "طيران وسرعة +1600"},
-    
-    # رتبة الجحيم 🔥
     "درع لهيب الجحيم": {"price_gems": 30, "rank": "🔥 الجحيم", "power": "دفاع مطلق +1800"},
     "فأس الحمم البركانية": {"price_gems": 35, "rank": "🔥 الجحيم", "power": "قوة نارية +2100"},
     "حذاء السير في الحمم": {"price_gems": 22, "rank": "🔥 الجحيم", "power": "سرعة فائقة +1500"},
     "خاتم جمر الجحيم": {"price_gems": 28, "rank": "🔥 الجحيم", "power": "حرق الخصوم +1900"},
-
-    # رتبة السفاح ⚔️
     "عباءة السفاح الدموية": {"price_gems": 50, "rank": "⚔️ السفاح", "power": "سرعة وتخفي خارق +3000"},
     "منجل حاصد الأرواح": {"price_gems": 75, "rank": "⚔️ السفاح", "power": "قتل فوري وإبادة +5000"},
     "قناع الظل الأعمى": {"price_gems": 45, "rank": "⚔️ السفاح", "power": "تفادي مطلق +3500"},
@@ -53,7 +78,7 @@ DARK_SHOP_ITEMS = {
     "شفرات الموت المطلق": {"price_gems": 90, "rank": "⚔️ السفاح", "power": "دمار شامل +6000"}
 }
 
-# معدات المتجر العادي (تُشترى بالعملات العادية 🪙 - معدات كثيرة ومتنوعة)
+# معدات المتجر العادي (تُشترى بالعملات العادية 🪙)
 NORMAL_SHOP_ITEMS = {
     "سيف حديدي حاد": {"price": 200, "power": "هجوم +150"},
     "درع الفولاذ المقاوم": {"price": 350, "power": "دفاع +200"},
@@ -71,6 +96,7 @@ NORMAL_SHOP_ITEMS = {
 
 @bot.event
 async def on_ready():
+    load_data()  # تحميل البيانات فور تشغيل البوت
     try:
         synced = await bot.tree.sync()
         print(f"🟢 تم تسجيل {len(synced)} أمر بنجاح والبوت يعمل باسم: {bot.user}")
@@ -94,8 +120,9 @@ class HeroDropdown(discord.ui.Select):
         chosen_hero = self.values[0]
         REGISTERED_USERS[interaction.user.id] = {"name": self.name_val, "age": self.age_val, "gender": self.gender, "hero": chosen_hero}
         get_user_economy(interaction.user.id)["hero"] = chosen_hero
-        h_info = HEROES_DATA[chosen_hero]
+        save_data()  # حفظ البيانات مباشرة
         
+        h_info = HEROES_DATA[chosen_hero]
         embed = discord.Embed(title="🎉 تم التسجيل واختيار البطل بنجاح!", description=f"أهلاً بك يا **{self.name_val}**!", color=0x9B59B6)
         embed.add_field(name="🛡️ البطل", value=f"**{chosen_hero}** ({h_info['title']})", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -129,10 +156,11 @@ async def register(interaction: discord.Interaction):
     await interaction.response.send_message("🎮 نظام التسجيل:", view=GenderSelectView(), ephemeral=True)
 
 
-# ==================== 2. لوحة المطور بنظام المنيو المتطور (عملات وجواهر لا نهائية) ====================
+# ==================== 2. لوحة المطور (مع الحصول على بطل السفاح السري) ====================
 class DevDashboardSelect(discord.ui.Select):
     def __init__(self):
         options = [
+            discord.SelectOption(label="الحصول على بطل السفاح الأسطوري السري", description="فتح واستخدام بطل 'السفاح' الخارق", emoji="💀"),
             discord.SelectOption(label="الحصول على عملات عادية لا نهائية", description="إضافة 999,999 عملة عادية", emoji="🪙"),
             discord.SelectOption(label="الحصول على جواهر ظلام لا نهائية", description="إضافة 9,999 جوهرة نادرة", emoji="💎"),
             discord.SelectOption(label="الحصول على عتاد سري", description="إضافة معدات نادرة لحقيبتك", emoji="⚔️"),
@@ -141,18 +169,35 @@ class DevDashboardSelect(discord.ui.Select):
         super().__init__(placeholder="اختر أمراً من لوحة تحكم المطور...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        eco = get_user_economy(interaction.user.id)
-        if self.values[0] == "الحصول على عملات عادية لا نهائية":
+        user_id = interaction.user.id
+        eco = get_user_economy(user_id)
+
+        if self.values[0] == "الحصول على بطل السفاح الأسطوري السري":
+            if user_id not in REGISTERED_USERS:
+                REGISTERED_USERS[user_id] = {"name": interaction.user.display_name, "age": 25, "gender": "سري", "hero": "السفاح"}
+            else:
+                REGISTERED_USERS[user_id]["hero"] = "السفاح"
+            eco["hero"] = "السفاح"
+            save_data()
+            await interaction.response.send_message("💀 تم تفعيل بطل «السفاح» الأسطوري السري لحسابك بنجاح وبقوة مطلقة!", ephemeral=True)
+
+        elif self.values[0] == "الحصول على عملات عادية لا نهائية":
             eco["coins"] += 999999
+            save_data()
             await interaction.response.send_message("🪙 تم إضافة 999,999 عملة عادية بنجاح إلى رصيدك!", ephemeral=True)
+
         elif self.values[0] == "الحصول على جواهر ظلام لا نهائية":
             eco["gems"] += 9999
+            save_data()
             await interaction.response.send_message("💎 تم إضافة 9,999 جوهرة ظلام نادرة بنجاح إلى رصيدك!", ephemeral=True)
+
         elif self.values[0] == "الحصول على عتاد سري":
             eco["inventory"].extend(["سيف المطور الأسطوري", "درع الإله المطلق"])
+            save_data()
             await interaction.response.send_message("⚔️ تم إضافة عتاد سري وخارق إلى حقيبتك!", ephemeral=True)
+
         elif self.values[0] == "عرض إحصائيات النظام":
-            await interaction.response.send_message(f"📊 اللاعبين المسجلين: {len(REGISTERED_USERS)} | النقابات: {len(GUILDS_DATA)}", ephemeral=True)
+            await interaction.response.send_message(f"📊 اللاعبين المسجلين: {len(REGISTERED_USERS)} | النقابات المسجلة: {len(GUILDS_DATA)}", ephemeral=True)
 
 class DevDashboardView(discord.ui.View):
     def __init__(self):
@@ -191,7 +236,8 @@ class NormalShopSelect(discord.ui.Select):
 
         eco["coins"] -= item_data["price"]
         eco["inventory"].append(item_name)
-        await interaction.response.send_message(f"🛍️ تم شراء `{item_name}` بنجاح وتم إضافته إلى حقيبتك!", ephemeral=True)
+        save_data()
+        await interaction.response.send_message(f"🛍️ تم شراء `{item_name}` بنجاح وتم إضافته إلى حقيبتك وحفظه!", ephemeral=True)
 
 class NormalShopView(discord.ui.View):
     def __init__(self):
@@ -206,10 +252,10 @@ async def shop(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=NormalShopView(), ephemeral=True)
 
 
-# ==================== 4. متجر الظلام (Dark Shop) - بالعملة النادرة (الجواهر) ====================
+# ==================== 4. متجر الظلام (Dark Shop) ====================
 class DarkShopSelect(discord.ui.Select):
     def __init__(self):
-        options = [discord.SelectOption(label=item_name, description=f"السعر: {data['price_gems']} جوهرة ظلام 💎 | {data['rank']}", emoji="🔥") for item_name, data in DARK_SHOP_ITEMS.items()]
+        options = [discord.SelectOption(label=item_name, description=f"السعر: {data['price_gems']} جوهرة 💎 | {data['rank']}", emoji="🔥") for item_name, data in DARK_SHOP_ITEMS.items()]
         super().__init__(placeholder="اختر قطعة مظلمة أسطورية لشرائها...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -228,7 +274,8 @@ class DarkShopSelect(discord.ui.Select):
 
         eco["gems"] -= item_data["price_gems"]
         eco["inventory"].append(item_name)
-        await interaction.response.send_message(f"🌑 تم شراء `{item_name}` بنجاح برتبة **{item_data['rank']}** وقوة `{item_data['power']}` مقابل {item_data['price_gems']} جوهرة ظلام 💎!", ephemeral=True)
+        save_data()
+        await interaction.response.send_message(f"🌑 تم شراء `{item_name}` برتبة **{item_data['rank']}** وتم حفظه في حقيبتك بنجاح!", ephemeral=True)
 
 class DarkShopView(discord.ui.View):
     def __init__(self):
@@ -243,7 +290,7 @@ async def dark_shop(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=DarkShopView(), ephemeral=True)
 
 
-# ==================== 5. باقي الأوامر القديمة (تغيير البطل، النقابات، الملف) ====================
+# ==================== 5. تغيير البطل، النقابات، الملف الشخصي ====================
 class ChangeHeroView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
@@ -264,7 +311,8 @@ class ChangeHeroDropdown(discord.ui.Select):
         eco["coins"] -= 200
         REGISTERED_USERS[user_id]["hero"] = new_hero
         eco["hero"] = new_hero
-        await interaction.response.send_message(f"🔄 تم تغيير البطل إلى **{new_hero}** مقابل 200 عملة عادية!", ephemeral=True)
+        save_data()
+        await interaction.response.send_message(f"🔄 تم تغيير البطل إلى **{new_hero}** بنجاح وحفظه!", ephemeral=True)
 
 @bot.tree.command(name="تغيير_البطل", description="تغيير بطلك مقابل 200 عملة")
 async def change_hero(interaction: discord.Interaction):
@@ -284,7 +332,8 @@ async def create_guild(interaction: discord.Interaction, اسم_النقابة: 
         return
     eco["coins"] -= 299
     GUILDS_DATA[اسم_النقابة] = {"owner": interaction.user.id, "level": 1, "exp": 0, "bank_coins": 0, "bank_items": [], "members": [interaction.user.id]}
-    await interaction.response.send_message(f"🏰 تم تأسيس نقابة **{اسم_النقابة}** بنجاح!", ephemeral=False)
+    save_data()
+    await interaction.response.send_message(f"🏰 تم تأسيس نقابة **{اسم_النقابة}** وحفظها بنجاح!", ephemeral=False)
 
 @bot.tree.command(name="تبرع_نقابة", description="التبرع بالعملات أو العتاد للنقابة")
 @app_commands.choices(نوع_التبرع=[app_commands.Choice(name="عملات", value="coins"), app_commands.Choice(name="عتاد", value="item")])
@@ -308,14 +357,16 @@ async def donate_guild(interaction: discord.Interaction, نوع_التبرع: ap
         eco["coins"] -= amount
         guild_info["bank_coins"] += amount
         guild_info["level"] = min(500, guild_info["level"] + (amount // 1000))
-        await interaction.response.send_message(f"✅ تم تبرع {amount} عملة للنقابة بنجاح!", ephemeral=False)
+        save_data()
+        await interaction.response.send_message(f"✅ تم تبرع {amount} عملة للنقابة وحفظ التغييرات بنجاح!", ephemeral=False)
     elif نوع_التبرع.value == "item":
         if القيمة_أو_الاسم not in eco["inventory"]:
             await interaction.response.send_message("❌ العنصر غير موجود بحقيبتك!", ephemeral=True)
             return
         eco["inventory"].remove(القيمة_أو_الاسم)
         guild_info["bank_items"].append(القيمة_أو_الاسم)
-        await interaction.response.send_message(f"✅ تم تبرع القطعة للنقابة!", ephemeral=False)
+        save_data()
+        await interaction.response.send_message(f"✅ تم تبرع القطعة للنقابة وحفظها بنجاح!", ephemeral=False)
 
 @bot.tree.command(name="الملف", description="عرض ملفك الشخصي")
 async def profile(interaction: discord.Interaction):
@@ -324,6 +375,7 @@ async def profile(interaction: discord.Interaction):
         return
     user_data = REGISTERED_USERS[interaction.user.id]
     eco = get_user_economy(interaction.user.id)
+    
     embed = discord.Embed(title=f"👑 الملف الشخصي | {interaction.user.display_name}", color=0xE67E22)
     embed.add_field(name="الشخصية", value=user_data['name'], inline=True)
     embed.add_field(name="البطل", value=user_data['hero'], inline=True)
