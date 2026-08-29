@@ -3,10 +3,11 @@ import sqlite3
 import discord
 from discord.ext import commands
 
-# 1. إعداد اتصال قاعدة البيانات (SQLite) وإنشاء الجدول
+# 1. إعداد اتصال قاعدة البيانات (SQLite) وإنشاء الجداول
 db_connection = sqlite3.connect("bot_database.db")
 cursor = db_connection.cursor()
 
+# جدول بيانات المستخدمين النقاط
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS user_data (
@@ -16,9 +17,18 @@ cursor.execute(
     )
 """
 )
+
+# جدول المطورين المصرح لهم باستخدام لوحة التحكم
+cursor.execute(
+    """
+    CREATE TABLE IF NOT EXISTS developers (
+        user_id INTEGER PRIMARY KEY
+    )
+"""
+)
 db_connection.commit()
 
-# 2. إعداد البوت
+# 2. إعداد البوت والصلاحيات
 intents = discord.Intents.default()
 intents.message_content = True
 
@@ -30,7 +40,17 @@ async def on_ready():
     print(f"تم تسجيل الدخول بنجاح باسم {bot.user}")
 
 
-# 3. أمر لحفظ أو تحديث بيانات المستخدم
+# دالة للتحقق مما إذا كان المستخدم مطوراً (مخزناً في قاعدة البيانات أو صاحب البوت)
+def is_dev(user_id: int) -> bool:
+    cursor.execute("SELECT user_id FROM developers WHERE user_id = ?", (user_id,))
+    return cursor.fetchone() is not None
+
+
+# ==========================================
+# 3. الأوامر القديمة (محفوظة بالكامل)
+# ==========================================
+
+
 @bot.command(name="حفظ", help="يقوم بحفظ أو تحديث نقاطك في قاعدة بيانات SQLite")
 async def save_data(ctx, points: int):
     user_id = ctx.author.id
@@ -52,8 +72,7 @@ async def save_data(ctx, points: int):
     )
 
 
-# 4. أمر لاسترجاع البيانات المخزنة
-@bot.command(name="بياناتي", help="يعرس بياناتك المخزنة في قاعدة البيانات")
+@bot.command(name="بياناتي", help="يعرض بياناتك المخزنة في قاعدة البيانات")
 async def get_data(ctx):
     user_id = ctx.author.id
 
@@ -61,12 +80,148 @@ async def get_data(ctx):
     result = cursor.fetchone()
 
     if result:
-        await ctx.send(f"رصيدك المخز هو: {result[0]} نقطة.")
+        await ctx.send(f"رصيدك المحفوظ هو: {result[0]} نقطة.")
     else:
         await ctx.send("لا توجد بيانات مخزنة لك حتى الآن. استخدم أمر `!حفظ` أولاً.")
 
 
-# تشغيل البوت باستخدام التوكن من متغيرات البيئة في Railway حمايةً للتوكن
+# ==========================================
+# 4. لوحة المطورين الفخمة (New Feature)
+# ==========================================
+
+
+# واجهة الأزرار الخاصة بلوحة المطورين
+class DevPanelView(discord.ui.View):
+
+    def __init__(self, author_id):
+        super().__init__(timeout=60)
+        self.author_id = author_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # السماح فقط لصاحب الأمر بالتفاعل مع الأزرار لحمايتها
+        if interaction.user.id == self.author_id or is_dev(
+            interaction.user.id
+        ):
+            return True
+        await interaction.response.send_message(
+            "عذراً، هذه الأزرار ليست مخصصة لك!", ephemeral=True
+        )
+        return False
+
+    @discord.ui.button(
+        label="إحصائيات البوت",
+        style=discord.ButtonStyle.blurple,
+        emoji="📊",
+        row=0,
+    )
+    async def stats_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute("SELECT COUNT(*) FROM user_data")
+        total_users = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM developers")
+        total_devs = cursor.fetchone()[0]
+
+        embed = discord.Embed(
+            title="⚡ لوحة تحكم المطور - الإحصائيات",
+            color=discord.Color.dark_embed(),
+        )
+        embed.add_field(
+            name="👥 المستخدمين المسجلين",
+            value=f"`{total_users}` مستخدم",
+            inline=True,
+        )
+        embed.add_field(
+            name="🛡️ عدد المطورين", value=f"`{total_devs}` مطور", inline=True
+        )
+        embed.add_field(
+            name="🌐 السيرفرات", value=f"`{len(bot.guilds)}` سيرفر", inline=True
+        )
+        embed.set_footer(text="نظام الحفظ الفوري SQLite - متصل وآمن")
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(
+        label="قائمة المطورين", style=discord.ButtonStyle.grey, emoji="📜", row=0
+    )
+    async def list_devs(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute("SELECT user_id FROM developers")
+        devs = cursor.fetchall()
+        dev_list = (
+            "\n".join([f"<@{d[0]}> (`{d[0]}`)" for d in devs])
+            if devs
+            else "لا يوجد مطورين مضافين بعد."
+        )
+
+        embed = discord.Embed(
+            title="📜 قائمة المطورين المصرح لهم",
+            description=dev_list,
+            color=discord.Color.gold(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
+# أمر فتح اللوحة
+@bot.command(name="مطور", help="فتح لوحة تحكم المطورين الفخمة")
+async def dev_panel(ctx):
+    # التحقق هل المستخدم صاحب البوت (يمكنك استبدال الايدي بايديك الخاص) أو مسجل كمطور
+    # افتراضياً سنسمح لمن يكتب الأمر لأول مرة أو إذا كان مسجلاً، وللأمان يمكنك جعلها مخصصة لك:
+    # if ctx.author.id != YOUR_ID: return
+
+    # كمثال: نضيف صاحب أول أمر تلقائياً كأول مطور إذا لم يكن هناك مطورين لتبدأ اللوحة معك
+    cursor.execute("SELECT COUNT(*) FROM developers")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(
+            "INSERT OR IGNORE INTO developers (user_id) VALUES (?)",
+            (ctx.author.id,),
+        )
+        db_connection.commit()
+
+    if not is_dev(ctx.author.id) and ctx.author.id != ctx.guild.owner_id:
+        await ctx.send("❌ عذراً، أنت لست مدرجاً في قائمة مطوري هذا البوت.")
+        return
+
+    # تصميم الفريم الفخم (Embed)
+    embed = discord.Embed(
+        title="✨ لوحة تحكم المطورين المركزية",
+        description=(
+            "مرحباً بك يا فنان في لوحة التحكم الخاصة بالبوت.\n"
+            "من خلال هذه الواجهة يمكنك مراقبة النظام وإدارة الصلاحيات بكفاءة عالية.\n\n"
+            "📌 **اختر أحد الخيارات أدناه من الأزرار للتنقل:**"
+        ),
+        color=discord.Color.from_rgb(40, 40, 45),
+    )
+    embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+    embed.set_footer(
+        text=f"طلب بواسطة: {ctx.author.name}", icon_url=ctx.author.avatar.url
+    )
+
+    view = DevPanelView(ctx.author.id)
+    await ctx.send(embed=embed, view=view)
+
+
+# أمر لإضافة مطور جديد بسهولة: !اضافة_مطور @user
+@bot.command(name="اضافة_مطور")
+async def add_developer(ctx, member: discord.Member):
+    # تحقق من أن الشخص اللي يسوي الأمر هو مطور أساسي أو صاحب السيرفر/البوت
+    if not is_dev(ctx.author.id):
+        await ctx.send("❌ هذا الأمر مخصص للمطورين فقط!")
+        return
+
+    cursor.execute(
+        "INSERT OR IGNORE INTO developers (user_id) VALUES (?)", (member.id,)
+    )
+    db_connection.commit()
+    await ctx.send(
+        f"✅ تم بنجاح تعيين {member.mention} مطوراً جديداً في النظام وإضافته لقاعدة البيانات!"
+    )
+
+
+# ==========================================
+# 5. تشغيل البوت
+# ==========================================
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
     bot.run(TOKEN)
