@@ -1,3 +1,4 @@
+print("--- البوت بدأ بالعمل الآن ---")
 import os
 import sqlite3
 
