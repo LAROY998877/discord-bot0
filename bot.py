@@ -1,8 +1,9 @@
+import os
 import sqlite3
 import discord
 from discord.ext import commands
 
-# 1. إعداد اتصال قاعدة البيانات (SQLite) وإنشاء الجدول إذا لم يكن موجوداً
+# 1. إعداد اتصال قاعدة البيانات (SQLite) وإنشاء الجدول
 db_connection = sqlite3.connect("bot_database.db")
 cursor = db_connection.cursor()
 
@@ -29,13 +30,12 @@ async def on_ready():
     print(f"تم تسجيل الدخول بنجاح باسم {bot.user}")
 
 
-# 3. أمر لحفظ أو تحديث بيانات المستخدم في قاعدة البيانات
+# 3. أمر لحفظ أو تحديث بيانات المستخدم
 @bot.command(name="حفظ", help="يقوم بحفظ أو تحديث نقاطك في قاعدة بيانات SQLite")
 async def save_data(ctx, points: int):
     user_id = ctx.author.id
     username = str(ctx.author)
 
-    # التحقق من وجود المستخدم مسبقاً أو تحديث بياناته
     cursor.execute(
         """
         INSERT INTO user_data (user_id, username, points) 
@@ -52,8 +52,8 @@ async def save_data(ctx, points: int):
     )
 
 
-# 4. أمر لاسترجاع البيانات المخزنة من قاعدة البيانات
-@bot.command(name="بياناتي", help="يعرض بياناتك المخزنة في قاعدة البيانات")
+# 4. أمر لاسترجاع البيانات المخزنة
+@bot.command(name="بياناتي", help="يعرس بياناتك المخزنة في قاعدة البيانات")
 async def get_data(ctx):
     user_id = ctx.author.id
 
@@ -61,10 +61,14 @@ async def get_data(ctx):
     result = cursor.fetchone()
 
     if result:
-        await ctx.send(f"رصيدك المحفوظ في قاعدة البيانات هو: {result[0]} نقطة.")
+        await ctx.send(f"رصيدك المخز هو: {result[0]} نقطة.")
     else:
         await ctx.send("لا توجد بيانات مخزنة لك حتى الآن. استخدم أمر `!حفظ` أولاً.")
 
 
-# ضع التوكن الخاص بك هنا
-# bot.run("YOUR_BOT_TOKEN")
+# تشغيل البوت باستخدام التوكن من متغيرات البيئة في Railway حمايةً للتوكن
+TOKEN = os.getenv("DISCORD_TOKEN")
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("خطأ: لم يتم العثور على توكن البوت في متغيرات البيئة (DISCORD_TOKEN).")
