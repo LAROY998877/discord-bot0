@@ -15,7 +15,7 @@ intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # ==================== إعداد قاعدة بيانات SQLite الدائمة ====================
-DB_FILE = "database.db"
+DB_FILE = "/data/database.db"
 conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 cursor = conn.cursor()
 
