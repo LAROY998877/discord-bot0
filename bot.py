@@ -8,7 +8,6 @@ from discord.ext import commands
 db_connection = sqlite3.connect("bot_database.db")
 cursor = db_connection.cursor()
 
-# جدول بيانات المستخدمين والشروط الجديدة (الاسم، العمر، الجنس، والبطل المختار)
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS user_data (
@@ -21,12 +20,12 @@ cursor.execute(
         balance INTEGER DEFAULT 100,
         equipment_score INTEGER DEFAULT 10,
         floors INTEGER DEFAULT 1,
-        hero_name TEXT DEFAULT 'لم يتم الاختيار'
+        hero_name TEXT DEFAULT 'لم يتم الاختيار',
+        equipment_name TEXT DEFAULT 'لم يتم الاختيار'
     )
 """
 )
 
-# جدول المطورين المصرح لهم
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS developers (
@@ -36,7 +35,6 @@ cursor.execute(
 )
 db_connection.commit()
 
-# 2. إعداد البوت والصلاحيات
 intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
@@ -79,11 +77,11 @@ def is_registered(user_id: int) -> bool:
 
 
 # ==========================================
-# 3. نظام التسجيل (Modal & Command)
+# 2. نظام التسجيل التلقائي الذكي (Modal)
 # ==========================================
 
 
-class RegisterModal(discord.ui.Modal, title="نظام التسجيل الإجباري"):
+class RegisterModal(discord.ui.Modal, title="التسجيل الإجباري الأول"):
 
     name_input = discord.ui.TextInput(
         label="الاسم الكامل", placeholder="اكتب اسمك هنا...", required=True
@@ -104,8 +102,7 @@ class RegisterModal(discord.ui.Modal, title="نظام التسجيل الإجب�
 
         if not age.isdigit():
             await interaction.response.send_message(
-                "❌ العمر يجب أن يكون أرقاماً صحيحة! يرجى إعادة المحاولة.",
-                ephemeral=True,
+                "❌ العمر يجب أن يكون أرقاماً صحيحة!", ephemeral=True
             )
             return
 
@@ -121,24 +118,23 @@ class RegisterModal(discord.ui.Modal, title="نظام التسجيل الإجب�
         db_connection.commit()
 
         await interaction.response.send_message(
-            f"✅ **تم تسجيلك بنجاح!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك استخدام الأوامر وقوائم المنيو بحرية!",
+            f"✅ **تم تسجيلك بنجاح يابطل!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك استخدام جميع الأوامر والمنيو بحرية تامّة!",
             ephemeral=True,
         )
 
 
-@bot.tree.command(name="تسجيل", description="التسجيل في النظام لفتح جميع الأوامر والمنيو")
+@bot.tree.command(name="تسجيل", description="التسجيل في النظام لفتح جميع الأوامر")
 async def register_command(interaction: discord.Interaction):
     await interaction.response.send_modal(RegisterModal())
 
 
 # ==========================================
-# 4. شخصية "السفاح" (خاصة بالمطورين فقط)
+# 3. شخصية "السفاح" (خاص بالمطورين - صور فانتزي مرعبة)
 # ==========================================
 
 
-@bot.tree.command(name="السفاح", description="[خاص بالمطورين] استدعاء شخصية السفاح المرعبة")
+@bot.tree.command(name="السفاح", description="[خاص بالمطورين] استدعاء شخصية السفاح الفانتازية المرعبة")
 async def assassin_command(interaction: discord.Interaction):
-    # التأكد من أن المستخدم مطور أو مالك السيرفر
     cursor.execute("SELECT COUNT(*) FROM developers")
     if cursor.fetchone()[0] == 0:
         cursor.execute(
@@ -152,87 +148,85 @@ async def assassin_command(interaction: discord.Interaction):
         and interaction.user.id != interaction.guild.owner_id
     ):
         await interaction.response.send_message(
-            "❌ **خطأ أمني:** هذا الأمر مرعب وخاص بالمطورين المعتمدين فقط ولا يمكن للعامة استخدامه!",
+            "❌ **خطأ أمني:** هذا الكيان الفانتازي مرعب وخاص بالمطورين فقط!",
             ephemeral=True,
         )
         return
 
     embed = discord.Embed(
-        title="🩸 السفاح - كابوس الظلال المطلق",
+        title="🩸 السفاح - حاصد الأرواح الأسطوري",
         description=(
-            "**📖 القصة المرعبة:**\n"
-            "في أعمق قيعان الجحيم الرقمي، حيث تتساقط أرواح الأكواد التالفة، وُلد السفاح.\n"
-            "كيان شيطاني لا يرحم، يرتدي قناعاً متآكلاً من الديحان، ويحمل منجلًا مصبوغًا بدماء من حاولوا عبثاً اختراق الأنظمة الإمبراطورية.\n"
-            "لا صرخات تنفع أمامه، ولا دفاعات تصد ضرباته.. إنه الحارس الشخصي للمطورين والجلاد الأكبر لكل متطفل!\n\n"
-            "📊 **معدلات القوة المرعبة:**\n"
-            "• قوة الفتاك: `999,999` 🔪\n"
-            "• رعب الدمار: `لا نهائي` 💀\n"
-            "• نسبة النجاة منه: `0%`\n\n"
-            "⚠️ *تحذير: حضور هذا الكيان يعني أن الإمبراطورية تحت السيطرة المطلقة للمطور.*"
+            "**📖 القصة الفانتازية المرعبة:**\n"
+            "في أعمق قيعان العوالم المظلمة، وُلد سلالة 'السفاحين'؛ كيانات مرعبة ترتدي دروعاً من العظام الملعونة.\n"
+            "سيفه يقطر شؤماً ودماءً، ولا يقف في وجهه أي كائن حي إلا وتمزق إرتباطه بالواقع للأبد.\n\n"
+            "📊 **معدلات القوة الفانتازية:**\n"
+            "• قوة الفتاك: `999,999` ⚔️\n"
+            "• هالة الرعب: `أبدية` 💀\n"
+            "• نسبة النجاة: `0%`"
         ),
         color=discord.Color.dark_red(),
     )
     embed.set_image(
-        url="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500"
+        url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800"
     )
     embed.set_footer(
-        text=f"استدعاء سري بواسطة المطور: {interaction.user.display_name}"
+        text=f"استدعاء حصري بواسطة المطور: {interaction.user.display_name}"
     )
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ==========================================
-# 5. نظام الأبطال العاديين (6 أبطال)
+# 4. الأبطال الأسطوريين (صور فانتزي)
 # ==========================================
 HEROES_DATA = {
     "arthur": {
-        "title": "آرثر - فارس الظلال",
+        "title": "آرثر - فارس الظلال الملكي",
         "gender": "ذكر",
         "power": 950,
         "defense": 880,
-        "story": "فارس محارب عانى من دمار مملكته، فحمل سيف النور المقدس ليطهر الأراضي من قوى الظلام وينتقم لشعبه.",
-        "image": "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=500",
+        "story": "فارس محارب ارتدى درع الملوك الفولاذي، وحمل سيف النور المخضب بالنار ليطهر الأراضي من الوحوش الأسطورية.",
+        "image": "https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800",
     },
     "zeus": {
-        "title": "زيوس - سيده الصواعق",
+        "title": "زيوس - إله الصواعق الأبدي",
         "gender": "ذكر",
         "power": 990,
         "defense": 750,
-        "story": "إله الرعد الأسطوري، وُلد وسط العواصف العاتية، يمتلك القدرة على تدمير الأعداء بصاعقة واحدة تهز الأكوان.",
-        "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500",
+        "story": "سيد العواصف الذي يتسيد القمم العالية، يطلق رعداً يزلزل الجبال ويدمر جيوش الأعداء بلمح البصر.",
+        "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800",
     },
     "kane": {
-        "title": "كين - قناص البراري",
+        "title": "كين - قناص البراري المظلمة",
         "gender": "ذكر",
         "power": 890,
         "defense": 810,
-        "story": "مقاتل خفي عاش في الغابات المظلمة، لا يخطئ هدفه أبداً، ويعتبر أشرس مرتزق في القارة.",
-        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?w=500",
+        "story": "مقاتل خفي يجوب الغابات المسحورة، بصر حديدي وسهام مغموسة بسُم التنين الأسطوري.",
+        "image": "https://images.unsplash.com/photo-1514539079130-25950c84af65?w=800",
     },
     "athena": {
-        "title": "أثينا - حارسة المعابد",
+        "title": "أثينا - حارسة المعابد المقدسة",
         "gender": "أنثى",
         "power": 930,
         "defense": 920,
-        "story": "إلهة الحكمة والقتال، قادت الجيوش بحنكة لا نظير لها، درعها لا ينكسر وسيفها يفرق بين الحق والباطل.",
-        "image": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500",
+        "story": "إلهة الحرب والحكمة، درعها المزخرف بنقوش الفينيق لا يمكن اختراقه، تقود الجيوش بنظرة حادة كالسيف.",
+        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?w=800",
     },
     "valkyrie": {
-        "title": "فالكيري - محاربة الفضاء",
+        "title": "فالكيري - فارسة السماء الفانتازية",
         "gender": "أنثى",
         "power": 970,
         "defense": 830,
-        "story": "مقاتلة شرسة تهبط من سماء الأساطير لتختار الأرواح الشجاعة في ساحات المعارك الكبرى.",
-        "image": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500",
+        "story": "محاربة مجنحة تهبط من أبعاد سحرية بعيدة، تحمل رمحاً براقاً تضيء به ساحات المعارك المظلمة.",
+        "image": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800",
     },
     "selene": {
-        "title": "سيلين - أميرة القمريات",
+        "title": "سيلين - أميرة السحر القمري",
         "gender": "أنثى",
         "power": 910,
         "defense": 860,
-        "story": "ساحرة الليل الأبدي، تستمد قوتها من ضوء القمر لتجميد الخصوم وإلقاء تعويذات مدمرة لا تُرد.",
-        "image": "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=500",
+        "story": "ساحرة الأبعاد الأبدية، تستمد قوتها السحرية من ضوء الأقمار الدموية لتجميد قلوب الأعداء.",
+        "image": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800",
     },
 }
 
@@ -279,7 +273,7 @@ class HeroSelectDropdown(discord.ui.Select):
             ),
         ]
         super().__init__(
-            placeholder="اختر بطلاً لعرض تفاصيله وقصته...",
+            placeholder="اختر بطلاً أسطورياً لعرض قصته وصورته...",
             min_values=1,
             max_values=1,
             options=options,
@@ -297,14 +291,14 @@ class HeroSelectDropdown(discord.ui.Select):
         db_connection.commit()
 
         embed = discord.Embed(
-            title=f"🛡️ استعراض البطل: {hero['title']}",
+            title=f"🛡️ استعراض البطل الفانتازي: {hero['title']}",
             description=(
                 f"**📖 قصة البطل:**\n{hero['story']}\n\n"
                 f"📊 **معدلات القوة:**\n"
                 f"• قوة الهجوم: `{hero['power']}` ⚔️\n"
                 f"• قوة الدفاع: `{hero['defense']}` 🛡️\n"
                 f"• الجنس: `{hero['gender']}`\n\n"
-                f"✅ *تم تعيين هذا البطل كبطل أساسي لحسابك تلقائياً!*"
+                f"✅ *تم تعيين هذا البطل كبطل أساسي لحسابك!*"
             ),
             color=discord.Color.purple(),
         )
@@ -323,25 +317,24 @@ class HeroMenuView(discord.ui.View):
         self.add_item(HeroSelectDropdown())
 
 
-@bot.tree.command(name="الابطال", description="فتح منيو اختيار الأبطال وقصصهم وقوتهم")
+@bot.tree.command(
+    name="الابطال", description="فتح منيو الأبطال الفانتازيا وقصصهم الأسطورية"
+)
 async def heroes_command(interaction: discord.Interaction):
     if not is_registered(interaction.user.id):
-        await interaction.response.send_message(
-            "❌ **عذراً!** يجب عليك التسجيل أولاً لاستخدام منيو الأبطال.\nاستخدم أمر: `/تسجيل`",
-            ephemeral=True,
-        )
+        await interaction.response.send_modal(RegisterModal())
         return
 
     embed = discord.Embed(
-        title="🌟 ساحة الأبطال الأسطوريين",
+        title="🌟 قاعة الأبطال الفانتازيا الأسطوريين",
         description=(
-            "مرحباً بك في قاعة الأبطال.\n"
-            "اختر بطلاً من القائمة المنسدلة بالأسفل لاستعراض **قصته، صورته الخاصة، ومعدلات قوته ودفاعه**!"
+            "مرحباً بك في عالم الأساطير.\n"
+            "اختر بطلاً من القائمة المنسدلة بالأسفل لاستعراض **قصته، صورته الفانتازية الخيالية، ومعدلات قوته**!"
         ),
         color=discord.Color.dark_gold(),
     )
     embed.set_image(
-        url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500"
+        url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800"
     )
 
     view = HeroMenuView()
@@ -349,7 +342,137 @@ async def heroes_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 6. الأوامر الأخرى (البنك والمطورين)
+# 5. أمر "المتجر" (الأسلحة والمعدات بصور فانتزي)
+# ==========================================
+SHOP_ITEMS = {
+    "sword": {
+        "title": "سيف اللهب الأبدي (Flame Blade)",
+        "price": "250 💎",
+        "damage": "+500 هجوم ناري",
+        "desc": "سيف أسطوري مشتغل بنيران التنانين القديمة، يحرق دروع الأعداء بضربة واحدة.",
+        "image": "https://images.unsplash.com/photo-1589241062272-c0a000071dfa?w=800",
+    },
+    "hammer": {
+        "title": "مطرقة الرعد الكونية (Thunder Hammer)",
+        "price": "400 💎",
+        "damage": "+650 قوة تحطيم",
+        "desc": "مطرقة ثقيلة مصنوعة من نيازك السماء، قادرة على إحداث زلزال وهز الحصون.",
+        "image": "https://images.unsplash.com/photo-1601933470077-0afdd71f5424?w=800",
+    },
+    "bow": {
+        "title": "قوس الضوء المقدس (Holy Bow)",
+        "price": "300 💎",
+        "damage": "+480 دقة وبصيرة",
+        "desc": "يطلق سهاماً من الطاقة الصافية التي تخترق أعتى الحصون وتلاحق الهدف تلقائياً.",
+        "image": "https://images.unsplash.com/photo-1514539079130-25950c84af65?w=800",
+    },
+    "shield": {
+        "title": "درع التنين الأسطوري (Dragon Shield)",
+        "price": "350 💎",
+        "damage": "+800 دفاع مطلق",
+        "desc": "درع من حراشف أقدم تنين في الممالك السحرية، يعكس سحر وسهام الأعداء.",
+        "image": "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800",
+    },
+}
+
+
+class ShopSelectDropdown(discord.ui.Select):
+
+    def __init__(self):
+        options = [
+            discord.SelectOption(
+                label="سيف اللهب الأبدي",
+                description="السعر: 250 💎 | سيف ناري أسطوري",
+                emoji="⚔️",
+                value="sword",
+            ),
+            discord.SelectOption(
+                label="مطرقة الرعد الكونية",
+                description="السعر: 400 💎 | مطرقة تدمر الحصون",
+                emoji="🔨",
+                value="hammer",
+            ),
+            discord.SelectOption(
+                label="قوس الضوء المقدس",
+                description="السعر: 300 💎 | قوس بأسهم مضيئة",
+                emoji="🏹",
+                value="bow",
+            ),
+            discord.SelectOption(
+                label="درع التنين الأسطوري",
+                description="السعر: 350 💎 | درع دفاعي مطلق",
+                emoji="🛡️",
+                value="shield",
+            ),
+        ]
+        super().__init__(
+            placeholder="اختر سلاحاً أو معدة من متجر الأسلحة...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        choice = self.values[0]
+        item = SHOP_ITEMS[choice]
+        user_id = interaction.user.id
+
+        cursor.execute(
+            "UPDATE user_data SET equipment_name = ? WHERE user_id = ?",
+            (item["title"], user_id),
+        )
+        db_connection.commit()
+
+        embed = discord.Embed(
+            title=f"🛒 متجر الأسلحة: {item['title']}",
+            description=(
+                f"**📖 وصف السلاح:**\n{item['desc']}\n\n"
+                f"📊 **تفاصيل السلعة:**\n"
+                f"• السعر: `{item['price']}`\n"
+                f"• التأثير: `{item['damage']}`\n\n"
+                f"✅ *تم شراء وتجهيز هذه المعدة الفانتازية بنجاح في حقيبتك!*"
+            ),
+            color=discord.Color.dark_teal(),
+        )
+        embed.set_image(url=item["image"])
+        embed.set_footer(
+            text=f"تم الاستعراض بواسطة: {interaction.user.display_name}"
+        )
+
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class ShopMenuView(discord.ui.View):
+
+    def __init__(self):
+        super().__init__(timeout=120)
+        self.add_item(ShopSelectDropdown())
+
+
+@bot.tree.command(name="المتجر", description="فتح متجر الأسلحة والمعدات الأسطورية بصور فانتزي")
+async def shop_command(interaction: discord.Interaction):
+    if not is_registered(interaction.user.id):
+        await interaction.response.send_modal(RegisterModal())
+        return
+
+    embed = discord.Embed(
+        title="🛍️ متجر المعدات والأسلحة الأسطورية",
+        description=(
+            "مرحباً بك في السوق الإمبراطوري.\n"
+            "اختر سلاحاً، مطرقة، أو درعاً من القائمة أدناه لمعاينة **صورته الفانتازية وقوته التدميرية وسعره**!"
+        ),
+        color=discord.Color.gold(),
+    )
+    embed.set_image(
+        url="https://images.unsplash.com/photo-1589241062272-c0a000071dfa?w=800"
+    )
+
+    view = ShopMenuView()
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+# ==========================================
+# 6. البنك ولوحة المطورين
 # ==========================================
 
 
@@ -386,9 +509,7 @@ class BankMenuView(discord.ui.View):
 @bot.tree.command(name="البنك", description="فتح منيو المصرف الإمبراطوري")
 async def bank_panel(interaction: discord.Interaction):
     if not is_registered(interaction.user.id):
-        await interaction.response.send_message(
-            "❌ التسجيل إجباري أولاً عبر أمر: `/تسجيل`", ephemeral=True
-        )
+        await interaction.response.send_modal(RegisterModal())
         return
 
     embed = discord.Embed(
