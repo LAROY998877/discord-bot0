@@ -8,7 +8,7 @@ from discord.ext import commands
 db_connection = sqlite3.connect("bot_database.db")
 cursor = db_connection.cursor()
 
-# جدول بيانات المستخدمين والشروط الجديدة (الاسم، العمر، الجنس)
+# جدول بيانات المستخدمين والشروط الجديدة (الاسم، العمر، الجنس، والبطل المختار)
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS user_data (
@@ -20,7 +20,8 @@ cursor.execute(
         is_registered INTEGER DEFAULT 0,
         balance INTEGER DEFAULT 100,
         equipment_score INTEGER DEFAULT 10,
-        floors INTEGER DEFAULT 1
+        floors INTEGER DEFAULT 1,
+        hero_name TEXT DEFAULT 'لم يتم الاختيار'
     )
 """
 )
@@ -67,7 +68,6 @@ def is_dev(user_id: int) -> bool:
     return cursor.fetchone() is not None
 
 
-# دالة للتحقق مما إذا كان المستخدم مسجلاً
 def is_registered(user_id: int) -> bool:
     cursor.execute(
         "SELECT is_registered FROM user_data WHERE user_id = ?", (user_id,)
@@ -102,7 +102,6 @@ class RegisterModal(discord.ui.Modal, title="نظام التسجيل الإجب�
         age = self.age_input.value
         gender = self.gender_input.value
 
-        # التحقق أن العمر أرقام
         if not age.isdigit():
             await interaction.response.send_message(
                 "❌ العمر يجب أن يكون أرقاماً صحيحة! يرجى إعادة المحاولة.",
@@ -110,7 +109,6 @@ class RegisterModal(discord.ui.Modal, title="نظام التسجيل الإجب�
             )
             return
 
-        # حفظ البيانات في قاعدة البيانات وتحديث حالة التسجيل
         cursor.execute(
             """
             INSERT INTO user_data (user_id, username, name, age, gender, is_registered)
@@ -123,7 +121,7 @@ class RegisterModal(discord.ui.Modal, title="نظام التسجيل الإجب�
         db_connection.commit()
 
         await interaction.response.send_message(
-            f"✅ **تم تسجيلك بنجاح!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك استخدام جميع أوامر البوت وقوائم المنيو بحرية!",
+            f"✅ **تم تسجيلك بنجاح!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك استخدام أمر `/الابطال` وقوائم المنيو بحرية!",
             ephemeral=True,
         )
 
@@ -134,10 +132,177 @@ async def register_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 4. واجهات المنيو والأوامر (تتطلب التسجيل)
+# 4. بيانات الأبطال (القصص، القوة، الصور)
+# ==========================================
+HEROES_DATA = {
+    "arthur": {
+        "title": "آرثر - فارس الظلال",
+        "gender": "ذكر",
+        "power": 950,
+        "defense": 880,
+        "story": "فارس محارب عانى من دمار مملكته، فحمل سيف النور المقدس ليطهر الأراضي من قوى الظلام وينتقم لشعبه.",
+        "image": "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=500",
+    },
+    "zeus": {
+        "title": "زيوس - سيده الصواعق",
+        "gender": "ذكر",
+        "power": 990,
+        "defense": 750,
+        "story": "إله الرعد الأسطوري، وُلد وسط العواصف العاتية، يمتلك القدرة على تدمير الأعداء بصاعقة واحدة تهز الأكوان.",
+        "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500",
+    },
+    "kane": {
+        "title": "كين - قناص البراري",
+        "gender": "ذكر",
+        "power": 890,
+        "defense": 810,
+        "story": "مقاتل خفي عاش في الغابات المظلمة، لا يخطئ هدفه أبداً، ويعتبر أشرس مرتزق في القارة.",
+        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?w=500",
+    },
+    "athena": {
+        "title": "أثينا - حارسة المعابد",
+        "gender": "أنثى",
+        "power": 930,
+        "defense": 920,
+        "story": "إلهة الحكمة والقتال، قادت الجيوش بحنكة لا نظير لها، درعها لا ينكسر وسيفها يفرق بين الحق والباطل.",
+        "image": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500",
+    },
+    "valkyrie": {
+        "title": "فالكيري - محاربة الفضاء",
+        "gender": "أنثى",
+        "power": 970,
+        "defense": 830,
+        "story": "مقاتلة شرسة تهبط من سماء الأساطير لتختار الأرواح الشجاعة في ساحات المعارك الكبرى.",
+        "image": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500",
+    },
+    "selene": {
+        "title": "سيلين - أميرة القمريات",
+        "gender": "أنثى",
+        "power": 910,
+        "defense": 860,
+        "story": "ساحرة الليل الأبدي، تستمد قوتها من ضوء القمر لتجميد الخصوم وإلقاء تعويذات مدمرة لا تُرد.",
+        "image": "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=500",
+    },
+}
+
+
+class HeroSelectDropdown(discord.ui.Select):
+
+    def __init__(self):
+        options = [
+            discord.SelectOption(
+                label="آرثر (فارس الظلال)",
+                description="ذكر | قوة عالية وسيف مقدس",
+                emoji="⚔️",
+                value="arthur",
+            ),
+            discord.SelectOption(
+                label="زيوس (سيد الصواعق)",
+                description="ذكر | طاقة رعدية مدمرة",
+                emoji="⚡",
+                value="zeus",
+            ),
+            discord.SelectOption(
+                label="كين (قناص البراري)",
+                description="ذكر | دقة واستخبارات قتالية",
+                emoji="🏹",
+                value="kane",
+            ),
+            discord.SelectOption(
+                label="أثينا (حارسة المعابد)",
+                description="أنثى | دفاع أسطوري وحكمة",
+                emoji="🛡️",
+                value="athena",
+            ),
+            discord.SelectOption(
+                label="فالكيري (محاربة الفضاء)",
+                description="أنثى | سرعة وهجوم خاطف",
+                emoji="🪽",
+                value="valkyrie",
+            ),
+            discord.SelectOption(
+                label="سيلين (أميرة القمريات)",
+                description="أنثى | سحر قمري مرعب",
+                emoji="🌙",
+                value="selene",
+            ),
+        ]
+        super().__init__(
+            placeholder="اختر بطلاً لعرض تفاصيله وقصته...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        choice = self.values[0]
+        hero = HEROES_DATA[choice]
+        user_id = interaction.user.id
+
+        # حفظ البطل المختار في قاعدة البيانات تلقائياً
+        cursor.execute(
+            "UPDATE user_data SET hero_name = ? WHERE user_id = ?",
+            (hero["title"], user_id),
+        )
+        db_connection.commit()
+
+        embed = discord.Embed(
+            title=f"🛡️ استعراض البطل: {hero['title']}",
+            description=(
+                f"**📖 قصة البطل:**\n{hero['story']}\n\n"
+                f"📊 **معدلات القوة:**\n"
+                f"• قوة الهجوم: `{hero['power']}` ⚔️\n"
+                f"• قوة الدفاع: `{hero['defense']}` 🛡️\n"
+                f"• الجنس: `{hero['gender']}`\n\n"
+                f"✅ *تم تعيين هذا البطل كبطل أساسي لحسابك تلقائياً!*"
+            ),
+            color=discord.Color.purple(),
+        )
+        embed.set_image(url=hero["image"])
+        embed.set_footer(
+            text=f"تم الاختيار بواسطة: {interaction.user.display_name}"
+        )
+
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class HeroMenuView(discord.ui.View):
+
+    def __init__(self):
+        super().__init__(timeout=120)
+        self.add_item(HeroSelectDropdown())
+
+
+@bot.tree.command(name="الابطال", description="فتح منيو اختيار الأبطال وقصصهم وقوتهم")
+async def heroes_command(interaction: discord.Interaction):
+    if not is_registered(interaction.user.id):
+        await interaction.response.send_message(
+            "❌ **عذراً!** يجب عليك التسجيل أولاً لاستخدام منيو الأبطال.\nاستخدم أمر: `/تسجيل`",
+            ephemeral=True,
+        )
+        return
+
+    embed = discord.Embed(
+        title="🌟 ساحة الأبطال الأسطوريين",
+        description=(
+            "مرحباً بك في قاعة الأبطال.\n"
+            "اختر بطلاً من القائمة المنسدلة بالأسفل لاستعراض **قصته، صورته الخاصة، ومعدلات قوته ودفاعه**!"
+        ),
+        color=discord.Color.dark_gold(),
+    )
+    embed.set_image(
+        url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500"
+    )
+
+    view = HeroMenuView()
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+# ==========================================
+# 5. واجهات المنيو الأخرى (البنك، المتصدرين، المطورين)
 # ==========================================
 
-# منيو البنك والخدمات
+
 class BankMenuView(discord.ui.View):
 
     def __init__(self):
@@ -189,137 +354,24 @@ class BankMenuView(discord.ui.View):
         )
 
 
-@bot.tree.command(name="البنك", description="فتح منيو المصرف الإمبراطوري والتفاعل")
+@bot.tree.command(name="البنك", description="فتح منيو المصرف الإمبراطوري")
 async def bank_panel(interaction: discord.Interaction):
     if not is_registered(interaction.user.id):
         await interaction.response.send_message(
-            "❌ **عذراً!** لا يمكنك استخدام الأوامر إلا بعد إتمام التسجيل أولاً.\nاستخدم الأمر: `/تسجيل`",
-            ephemeral=True,
+            "❌ التسجيل إجباري أولاً عبر أمر: `/تسجيل`", ephemeral=True
         )
         return
 
     embed = discord.Embed(
         title="✨ منيو المصرف الإمبراطوري",
-        description="اختر العملية التي تريد تنفيذها من الأزرار أدناه:",
+        description="اختر العملية التي تريد تنفيذها:",
         color=discord.Color.gold(),
     )
     view = BankMenuView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-# منيو ليدربورد (المتصدرين)
-class LeaderboardMenuView(discord.ui.View):
-
-    def __init__(self):
-        super().__init__(timeout=60)
-
-    @discord.ui.button(
-        label="أغنى اللاعبين", style=discord.ButtonStyle.success, emoji="💰", row=0
-    )
-    async def lb_money(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        cursor.execute(
-            "SELECT name, balance FROM user_data WHERE is_registered=1 ORDER BY balance DESC LIMIT 10"
-        )
-        data = cursor.fetchall()
-        desc = "".join(
-            [
-                f"{'🥇' if i==1 else '🥈' if i==2 else '🥉' if i==3 else f'`{i}.`'} **{row[0]}** — `{row[1]}` 💎\n"
-                for i, row in enumerate(data, 1)
-            ]
-        )
-        embed = discord.Embed(
-            title="💰 منيو أغنى اللاعبين",
-            description=desc or "لا توجد بيانات مسجلة.",
-            color=discord.Color.gold(),
-        )
-        await interaction.response.edit_message(embed=embed, view=self)
-
-    @discord.ui.button(
-        label="ترتيب المعدات", style=discord.ButtonStyle.primary, emoji="🛡️", row=0
-    )
-    async def lb_equipment(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        cursor.execute(
-            "SELECT name, equipment_score FROM user_data WHERE is_registered=1 ORDER BY equipment_score DESC LIMIT 10"
-        )
-        data = cursor.fetchall()
-        desc = "".join(
-            [
-                f"{'🥇' if i==1 else '🥈' if i==2 else '🥉' if i==3 else f'`{i}.`'} **{row[0]}** — قوة: `{row[1]}` 🛡️\n"
-                for i, row in enumerate(data, 1)
-            ]
-        )
-        embed = discord.Embed(
-            title="🛡️ منيو ترتيب المعدات",
-            description=desc or "لا توجد بيانات مسجلة.",
-            color=discord.Color.blue(),
-        )
-        await interaction.response.edit_message(embed=embed, view=self)
-
-    @discord.ui.button(
-        label="أعلى الطوابق", style=discord.ButtonStyle.danger, emoji="🏢", row=0
-    )
-    async def lb_floors(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        cursor.execute(
-            "SELECT name, floors FROM user_data WHERE is_registered=1 ORDER BY floors DESC LIMIT 10"
-        )
-        data = cursor.fetchall()
-        desc = "".join(
-            [
-                f"{'🥇' if i==1 else '🥈' if i==2 else '🥉' if i==3 else f'`{i}.`'} **{row[0]}** — الطابق: `{row[1]}` 🏢\n"
-                for i, row in enumerate(data, 1)
-            ]
-        )
-        embed = discord.Embed(
-            title="🏢 منيو أعلى الطوابق",
-            description=desc or "لا توجد بيانات مسجلة.",
-            color=discord.Color.red(),
-        )
-        await interaction.response.edit_message(embed=embed, view=self)
-
-
-@bot.tree.command(name="ليدربورد", description="فتح منيو لوحة المتصدرين المتكاملة")
-async def leaderboard_command(interaction: discord.Interaction):
-    if not is_registered(interaction.user.id):
-        await interaction.response.send_message(
-            "❌ **عذراً!** التسجيل إجباري لاستخدام الأوامر.\nيرجى استخدام أمر: `/تسجيل`",
-            ephemeral=True,
-        )
-        return
-
-    cursor.execute(
-        "SELECT name, balance FROM user_data WHERE is_registered=1 ORDER BY balance DESC LIMIT 10"
-    )
-    data = cursor.fetchall()
-    desc = "".join(
-        [
-            f"{'🥇' if i==1 else '🥈' if i==2 else '🥉' if i==3 else f'`{i}.`'} **{row[0]}** — `{row[1]}` 💎\n"
-            for i, row in enumerate(data, 1)
-        ]
-    )
-
-    embed = discord.Embed(
-        title="🏆 منيو لوحة المتصدرين الرئيسية",
-        description=(
-            "اختر التصنيف المطلوب من الأزرار أدناه:\n\n"
-            + (desc or "لا توجد بيانات مسجلة.")
-        ),
-        color=discord.Color.dark_theme(),
-    )
-    view = LeaderboardMenuView()
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-
-# ==========================================
-# 5. لوحة المطورين (مع الأوامر المضافة تلقائياً)
-# ==========================================
-
-
+# لوحة المطورين مع الرصد التلقائي للأوامر
 class DevPanelView(discord.ui.View):
 
     def __init__(self, author_id):
