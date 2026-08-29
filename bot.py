@@ -1,5 +1,6 @@
 import os
 import json
+import random
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -15,7 +16,7 @@ DB_FILE = "database.json"
 
 # قواعد البيانات
 REGISTERED_USERS = {}
-USER_ECONOMY = {}          # {user_id: {"coins": int, "gems": int, "inventory": [], "hero": str}}
+USER_ECONOMY = {}          # {user_id: {"coins": int, "gems": int, "inventory": [], "hero": str, "max_floor": int}}
 GUILDS_DATA = {}           # {guild_name: {"owner": id, "level": 1, "exp": 0, "bank_coins": 0, "bank_items": [], "members": [id]}}
 
 def load_data():
@@ -45,11 +46,11 @@ def save_data():
 
 def get_user_economy(user_id):
     if user_id not in USER_ECONOMY:
-        USER_ECONOMY[user_id] = {"coins": 1000, "gems": 20, "inventory": ["سيف التدريب الخشبي", "درع الجلد الطبيعي"], "hero": None}
+        USER_ECONOMY[user_id] = {"coins": 1000, "gems": 20, "inventory": ["سيف التدريب الخشبي", "درع الجلد الطبيعي"], "hero": None, "max_floor": 1}
         save_data()
     return USER_ECONOMY[user_id]
 
-# تعريف الأبطال (3 ذكور + 6 إناث + بطل السفاح السري للمطور)
+# تعريف الأبطال (3 ذكور + 6 إناث + بطل السفاح السري)
 HEROES_DATA = {
     # الأبطال الذكور (3)
     "ثورن": {"gender": "ذكر", "title": "عملاق الجبال", "story": "محارب شجاع درعه مصنوع من حجر النيزك.", "power": "صلابة حديدية", "skills": "ضربة الأرض", "art": "[ ثورن 🏔️ ]"},
@@ -111,7 +112,7 @@ async def on_ready():
         print(f"❌ خطأ في المزامنة: {e}")
 
 
-# ==================== 1. نظام التسجيل واختيار البطل (حسب الجنس) ====================
+# ==================== 1. نظام التسجيل واختيار البطل ====================
 class HeroSelectView(discord.ui.View):
     def __init__(self, gender: str, name_val: str, age_val: int):
         super().__init__(timeout=60)
@@ -226,13 +227,94 @@ async def dev_dashboard(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=DevDashboardView(), ephemeral=True)
 
 
-# ==================== 3. نظام الحقيبة التفاعلي (منيو الحقيبة) ====================
+# ==================== 3. نظام الطوابق والمعارك (الجديد) ====================
+@bot.tree.command(name="الطابق", description="خوض معركة في الطوابق لقتال الوحوش وجمع العملات والجواهر النادرة")
+@app_commands.describe(رقم_الطابق="رقم الطابق الذي ترغب في دخوله (من 1 إلى 1000)")
+async def tower_floor(interaction: discord.Interaction, رقم_الطابق: int):
+    user_id = interaction.user.id
+    if user_id not in REGISTERED_USERS:
+        await interaction.response.send_message("❌ يجب عليك التسجيل أولاً عبر `/تسجيل` لكي تتمكن من صعود الطوابق!", ephemeral=True)
+        return
+    
+    if not (1 <= رقم_الطابق <= 1000):
+        await interaction.response.send_message("❌ رقم الطابق يجب أن يكون بين **1 و 1000** حصرياً!", ephemeral=True)
+        return
+
+    eco = get_user_economy(user_id)
+    
+    # تحديد الصعوبة ونوع الوحوش والجوائز حسب الطابق
+    if 1 <= رقم_الطابق <= 15:
+        difficulty = "🟢 سهل"
+        monsters = ["زومبي مبتدئ", "هيكل عظمي تايه", "عنكبوت الكهف الصغير"]
+        coins_reward = رقم_الطابق * 60
+        gems_reward = random.choice([0, 1])
+        win_chance = 0.90  # نسبة الفوز عالية جداً للطوابق السهلة
+    elif 16 <= رقم_الطابق <= 30:
+        difficulty = "🟡 متوسط"
+        monsters = ["محارب منبوذ", "وحش المستنقع السام", "ذئب الظلام الشرس"]
+        coins_reward = رقم_الطابق * 180
+        gems_reward = random.choice([1, 2, 3])
+        win_chance = 0.75
+    elif 31 <= رقم_الطابق <= 70:
+        difficulty = "🟠 صعب"
+        monsters = ["شيطان الحمم البركانية", "عملاق الحجارة الضخم", "فارس الظلام المرعب"]
+        coins_reward = رقم_الطابق * 450
+        gems_reward = random.randint(3, 8)
+        win_chance = 0.55
+    else:  # 70 إلى 1000
+        difficulty = "🔴 مستحيل / أسطوري"
+        monsters = ["تنين الأبعاد الأبدي", "حاصد الأرواح الملكي", "ملك الشياطين المطلق"]
+        coins_reward = رقم_الطابق * 1200
+        gems_reward = random.randint(10, 30)
+        win_chance = 0.30  # صعب جداً ويحتاج عتاد قوي أو بطل السفاح
+
+    monster_name = random.choice(monsters)
+    
+    # تعديل نسبة الفوز بناءً على امتلاك معدات قوية أو بطل السفاح
+    if eco["hero"] == "السفاح" or any("السفاح" in item or "المطور" in item or "الشيطان" in item for item in eco["inventory"]):
+        win_chance = min(1.0, win_chance + 0.35)  # تعزيز كبير لمن يمتلك عتاداً قوياً أو البطل السري
+
+    # محاكاة نتيجة المعركة
+    is_victory = random.random() < win_chance
+
+    if is_victory:
+        eco["coins"] += coins_reward
+        eco["gems"] += gems_reward
+        if رقم_الطابق > eco.get("max_floor", 1):
+            eco["max_floor"] = رقم_الطابق
+        save_data()
+
+        embed = discord.Embed(
+            title=f"⚔️ انتصار ساحق في الطابق {رقم_الطابق}!",
+            description=f"لقد واجهت الوحش **{monster_name}** في قسم المستوى ({difficulty}) وتمكنت من سحقه بنجاح!",
+            color=0x2ECC71
+        )
+        embed.add_field(name="🪙 الغنائم من العملات العادية", value=f"+{coins_reward:,} عملة", inline=True)
+        embed.add_field(name="💎 الغنائم من جواهر الظلام", value=f"+{gems_reward} جوهرة نادرة", inline=True)
+        embed.add_field(name="🏆 أعلى طابق تم بلوغه", value=f"الطابق {eco['max_floor']}", inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
+    else:
+        # عقوبة خفيفة عند الخسارة
+        lost_coins = min(eco["coins"], 50 * (رقم_الطابق // 10 + 1))
+        eco["coins"] = max(0, eco["coins"] - lost_coins)
+        save_data()
+
+        embed = discord.Embed(
+            title=f"💀 هزيمة قاسية في الطابق {رقم_الطابق}!",
+            description=f"كان الوحش **{monster_name}** ({difficulty}) أقوى من متوقعك وهزمك في المعركة!",
+            color=0xE74C3C
+        )
+        embed.add_field(name="⚠️ الخسارة", value=f"فقدت `{lost_coins}` عملة عادية أثناء الهروب لإنقاذ حياتك!", inline=False)
+        embed.add_field(name="💡 نصيحة", value="طور عتادك من المتجر أو اشترِ معدات متجر الظلام لزيادة فرص فوزك في الطوابق العليا!", inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
+
+
+# ==================== 4. نظام الحقيبة التفاعلي (منيو الحقيبة) ====================
 class InventorySelect(discord.ui.Select):
     def __init__(self, inventory):
         if not inventory:
             options = [discord.SelectOption(label="الحقيبة فارغة", description="لا تملك أي عناصر حالياً")]
         else:
-            # عرض عناصر الحقيبة في منيو تفاعلي
             options = [discord.SelectOption(label=item, description="قطعة حربية أو أداة في حقيبتك", emoji="🎒") for item in inventory[:25]]
         super().__init__(placeholder="اختر قطعة من حقيبتك لعرض تفاصيلها...", options=options)
 
@@ -241,7 +323,7 @@ class InventorySelect(discord.ui.Select):
             await interaction.response.send_message("❌ حقيبتك فارغة تماماً!", ephemeral=True)
             return
         item_name = self.values[0]
-        await interaction.response.send_message(f"🎒 معلومات القطعة **{item_name}**: هذه قطعة أسطورية فريدة تزيد من قدرات بطلك وتمنحك أفضلية في المعارك القادمة!", ephemeral=True)
+        await interaction.response.send_message(f"🎒 معلومات القطعة **{item_name}**: هذه قطعة أسطورية فريدة تزيد من قدرات بطلك وتمنحك أفضلية خارقة في قتال الطوابق والوحوش!", ephemeral=True)
 
 class InventoryView(discord.ui.View):
     def __init__(self, inventory):
@@ -260,7 +342,7 @@ async def inventory_menu(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=InventoryView(eco["inventory"]), ephemeral=True)
 
 
-# ==================== 4. المتجر العادي والمتجر المظلم ====================
+# ==================== 5. المتجر العادي ومتجر الظلام ====================
 class NormalShopSelect(discord.ui.Select):
     def __init__(self):
         options = [discord.SelectOption(label=name, description=f"السعر: {data['price']} عملة | {data['power']}", emoji="🛒") for name, data in NORMAL_SHOP_ITEMS.items()]
@@ -334,7 +416,7 @@ async def dark_shop(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=DarkShopView(), ephemeral=True)
 
 
-# ==================== 5. تغيير البطل، النقابات، والملف الشخصي البصري ====================
+# ==================== 6. تغيير البطل، النقابات، والملف الشخصي ====================
 class ChangeHeroView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
@@ -434,7 +516,8 @@ async def profile(interaction: discord.Interaction):
     embed.add_field(name="🌀 المهارة الفتاكة", value=hero_info['skills'], inline=True)
     embed.add_field(name="🪙 العملات العادية", value=f"{eco['coins']} عملة", inline=True)
     embed.add_field(name="💎 جواهر الظلام", value=f"{eco['gems']} جوهرة", inline=True)
-    embed.add_field(name="🎒 عدد عناصر الحقيبة", value=f"{len(eco['inventory'])} عناصر", inline=True)
+    embed.add_field(name="🏰 أعلى طابق تم بلوغه", value=f"الطابق {eco.get('max_floor', 1)}", inline=True)
+    embed.add_field(name="🎒 عناصر الحقيبة", value=f"{len(eco['inventory'])} عناصر", inline=True)
     
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
