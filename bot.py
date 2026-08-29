@@ -199,7 +199,7 @@ class LoanModal(discord.ui.Modal, title="🏦 طلب قرض مصرفي"):
             f"**تنبيه:** إذا لم تقم بسداد هذا القرض بالكامل قبل خوضك لأي معركة أو استخدام عتادك، **سيقوم البنك ببيع معداتك وعتادك بالكامل ومصادرة مستواك لتسوية الدين** فوراً دون إنذار آخر!"
         )
 
-        embed = discord.Embed(title="🏦 تمت الموافقة على القرض الإمبراطورية", description=warning_text, color=0xE74C3C)
+        embed = discord.Embed(title="🏦 تمت الموافقة على القرض الإمبراطوري", description=warning_text, color=0xE74C3C)
         embed.add_field(name="🪙 الرصيد المضاف", value=f"+{amount:,} عملة", inline=True)
         embed.add_field(name="💳 الدين المترتب عليك", value=f"{amount:,} عملة", inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -221,7 +221,6 @@ class TransferModal(discord.ui.Modal, title="💸 تحويل عملات لشخص
             return
 
         if str(interaction.user.id) == target_id:
-            await لنفسه = True # تعبير مجازي
             await interaction.response.send_message("❌ لا يمكنك تحويل العملات لنفسك!", ephemeral=True)
             return
 
@@ -367,7 +366,6 @@ class FloorInputModal(discord.ui.Modal, title="⚔️ بوابة صعود الط
         # 🚨 فحص القرض غير السداد (تفعيل العقوبة: بيع المعدات والعتاد لتسوية الدين)
         if eco.get("loan_debt", 0) > 0:
             debt = eco["loan_debt"]
-            # عقوبة المصادرة وبيع العتاد
             eco["gear_level"] = 1  # إعادة مستوى العتاد للصفر/الأساس
             eco["inventory"] = ["سيف التدريب الخشبي (تم بيعه لتسوية الدين)", "درع الجلد الطبيعي"]
             eco["loan_debt"] = 0  # تسوية الدين مقابل بيع العتاد
