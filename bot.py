@@ -1,13 +1,14 @@
 import os
 import sqlite3
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 # 1. إعداد اتصال قاعدة البيانات (SQLite) وإنشاء الجداول
 db_connection = sqlite3.connect("bot_database.db")
 cursor = db_connection.cursor()
 
-# جدول بيانات المستخدمين والنقاط (الأوامر القديمة)
+# جدول بيانات المستخدمين والنقاط
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS user_data (
@@ -30,11 +31,22 @@ db_connection.commit()
 
 # 2. إعداد البوت والصلاحيات
 intents = discord.Intents.default()
-intents.message_content = True  # مهم جداً لقراءة الأوامر
 intents.members = True
 intents.guilds = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+# استبدلنا commands.Bot بـ Bot مع مزامنة السلاش
+class MyBot(commands.Bot):
+
+    def __init__(self):
+        super().__init__(command_prefix="!", intents=intents)
+
+    async def setup_hook(self):
+        # مزامنة أوامر السلاش مع دسكورد لكي تظهر فوراً
+        await self.tree.sync()
+        print("تم مزامنة أوامر السلاش (Slash Commands) بنجاح!")
+
+
+bot = MyBot()
 
 
 @bot.event
@@ -52,14 +64,17 @@ def is_dev(user_id: int) -> bool:
 
 
 # ==========================================
-# 3. الأوامر القديمة (محفوظة بالكامل بدون حذف)
+# 3. الأوامر القديمة (محفوظة بالكامل بنظام السلاش /)
 # ==========================================
 
 
-@bot.command(name="حفظ", help="يقوم بحفظ أو تحديث نقاطك في قاعدة بيانات SQLite")
-async def save_data(ctx, points: int):
-    user_id = ctx.author.id
-    username = str(ctx.author)
+@bot.tree.command(
+    name="حفظ", description="يقوم بحفظ أو تحديث نقاطك في قاعدة بيانات SQLite"
+)
+@app_commands.describe(points="عدد النقاط التي تريد حفظها")
+async def save_data(interaction: discord.Interaction, points: int):
+    user_id = interaction.user.id
+    username = str(interaction.user)
 
     cursor.execute(
         """
@@ -72,26 +87,33 @@ async def save_data(ctx, points: int):
     )
     db_connection.commit()
 
-    await ctx.send(
-        f"تم حفظ بياناتك بنجاح يا {ctx.author.mention}! النقاط المسجلة: {points}"
+    await interaction.response.send_message(
+        f"تم حفظ بياناتك بنجاح يا {interaction.user.mention}! النقاط المسجلة: {points}"
     )
 
 
-@bot.command(name="بياناتي", help="يعرض بياناتك المخزنة في قاعدة البيانات")
-async def get_data(ctx):
-    user_id = ctx.author.id
+@bot.tree.command(
+    name="بياناتي", description="يعرض بياناتك المخزنة في قاعدة البيانات"
+)
+async def get_data(interaction: discord.Interaction):
+    user_id = interaction.user.id
 
     cursor.execute("SELECT points FROM user_data WHERE user_id = ?", (user_id,))
     result = cursor.fetchone()
 
     if result:
-        await ctx.send(f"رصيدك المحفوظ هو: {result[0]} نقطة.")
+        await interaction.response.send_message(
+            f"رصيدك المحفوظ هو: {result[0]} نقطة."
+        )
     else:
-        await ctx.send("لا توجد بيانات مخزنة لك حتى الآن. استخدم أمر `!حفظ` أولاً.")
+        await interaction.response.send_message(
+            "لا توجد بيانات مخزنة لك حتى الآن. استخدم أمر `/حفظ` أولاً.",
+            ephemeral=True,
+        )
 
 
 # ==========================================
-# 4. لوحة المطورين الفخمة والإضافات
+# 4. لوحة المطورين الفخمة (بنظام السلاش /)
 # ==========================================
 
 
@@ -166,20 +188,24 @@ class DevPanelView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
 
-@bot.command(name="مطور", help="فتح لوحة تحكم المطورين الفخمة")
-async def dev_panel(ctx):
-    # إذا لم يكن هناك أي مطور في قاعدة البيانات، نجعل أول شخص يكتب الأمر مطوراً تلقائياً
+@bot.tree.command(name="مطور", description="فتح لوحة تحكم المطورين الفخمة")
+async def dev_panel(interaction: discord.Interaction):
+    # إضافة أول شخص يكتب الأمر كأول مطور تلقائياً إذا لم يكن هناك مطورين
     cursor.execute("SELECT COUNT(*) FROM developers")
     if cursor.fetchone()[0] == 0:
         cursor.execute(
             "INSERT OR IGNORE INTO developers (user_id) VALUES (?)",
-            (ctx.author.id,),
+            (interaction.user.id,),
         )
         db_connection.commit()
 
-    # التحقق هل المستخدم مطور أو مالك السيرفر
-    if not is_dev(ctx.author.id) and ctx.author.id != ctx.guild.owner_id:
-        await ctx.send("❌ عذراً، أنت لست مدرجاً في قائمة مطوري هذا البوت.")
+    if (
+        not is_dev(interaction.user.id)
+        and interaction.user.id != interaction.guild.owner_id
+    ):
+        await interaction.response.send_message(
+            "❌ عذراً، أنت لست مدرجاً في قائمة مطوري هذا البوت.", ephemeral=True
+        )
         return
 
     embed = discord.Embed(
@@ -193,23 +219,28 @@ async def dev_panel(ctx):
     )
     if bot.user.avatar:
         embed.set_thumbnail(url=bot.user.avatar.url)
-    if ctx.author.avatar:
+    if interaction.user.avatar:
         embed.set_footer(
-            text=f"طلب بواسطة: {ctx.author.name}", icon_url=ctx.author.avatar.url
+            text=f"طلب بواسطة: {interaction.user.name}",
+            icon_url=interaction.user.avatar.url,
         )
 
-    view = DevPanelView(ctx.author.id)
-    await ctx.send(embed=embed, view=view)
+    view = DevPanelView(interaction.user.id)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-@bot.command(name="اضافة_مطور", help="إضافة مطور جديد للنظام عن طريق الإشارة إليه")
-async def add_developer(ctx, member: discord.Member):
+@bot.tree.command(
+    name="اضافة_مطور", description="إضافة مطور جديد للنظام عن طريق تحديد العضو"
+)
+@app_commands.describe(member="العضو الذي تريد ترقيته لمطور")
+async def add_developer(interaction: discord.Interaction, member: discord.Member):
     cursor.execute("SELECT COUNT(*) FROM developers")
     total_devs = cursor.fetchone()[0]
 
-    # إذا كان هناك مطورين مسجلين مسبقاً، نشترط أن يكون كاتِب الأمر مطوراً حقيقياً
-    if total_devs > 0 and not is_dev(ctx.author.id):
-        await ctx.send("❌ عذراً، هذا الأمر مخصص للمطورين المعتمدين فقط!")
+    if total_devs > 0 and not is_dev(interaction.user.id):
+        await interaction.response.send_message(
+            "❌ عذراً، هذا الأمر مخصص للمطورين المعتمدين فقط!", ephemeral=True
+        )
         return
 
     cursor.execute(
@@ -217,7 +248,7 @@ async def add_developer(ctx, member: discord.Member):
     )
     db_connection.commit()
 
-    await ctx.send(
+    await interaction.response.send_message(
         f"✅ تم بنجاح تعيين {member.mention} مطوراً جديداً في النظام وحفظه في قاعدة البيانات!"
     )
 
