@@ -11,12 +11,13 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # قواعد البيانات الشاملة
 REGISTERED_USERS = {}
-USER_ECONOMY = {}          # {user_id: {"coins": int, "inventory": [], "hero": str}}
+USER_ECONOMY = {}          # {user_id: {"coins": int, "gems": int, "inventory": [], "hero": str}}
 GUILDS_DATA = {}           # {guild_name: {"owner": id, "level": 1, "exp": 0, "bank_coins": 0, "bank_items": [], "members": [id]}}
 
 def get_user_economy(user_id):
     if user_id not in USER_ECONOMY:
-        USER_ECONOMY[user_id] = {"coins": 1000, "inventory": ["سيف التدريب الخشبي", "درع الجلد الطبيعي"], "hero": None}
+        # 1000 عملة عادية + 20 جوهرة ظلام نادرة كمبتدئ
+        USER_ECONOMY[user_id] = {"coins": 1000, "gems": 20, "inventory": ["سيف التدريب الخشبي", "درع الجلد الطبيعي"], "hero": None}
     return USER_ECONOMY[user_id]
 
 # تعريف الأبطال (3 ذكور و3 إناث + السفاح)
@@ -30,11 +31,42 @@ HEROES_DATA = {
     "السفاح": {"gender": "سري", "title": "حاصد الأرواح", "story": "كائن أسطوري مرعب مخصص للمطور حصرياً.", "power": "إفناء الوجود", "skills": "لمسة الموت", "art": "[ 💀 السفاح المرعب 💀 ]"}
 }
 
-# معدات متجر الظلام (أعلى 3 رتب: الشيطان، الجحيم، السفاح)
+# معدات متجر الظلام (تُشترى بالعملة النادرة: جواهر الظلام 💎 - أعلى 3 رتب: الشيطان، الجحيم، السفاح)
 DARK_SHOP_ITEMS = {
-    "خنجر الشيطان الأبدي": {"price": 150, "rank": "🔴 الشيطان", "power": "قوة تدميرية +999"},
-    "درع لهيب الجحيم": {"price": 250, "rank": "🔥 الجحيم", "power": "دفاع مطلق +1500"},
-    "عباءة السفاح الدموية": {"price": 400, "rank": "⚔️ السفاح", "power": "سرعة وتخفي خارق +3000"}
+    # رتبة الشيطان 🔴
+    "خنجر الشيطان الأبدي": {"price_gems": 10, "rank": "🔴 الشيطان", "power": "قوة تدميرية +999"},
+    "سيف الموت الشيطاني": {"price_gems": 18, "rank": "🔴 الشيطان", "power": "قوة تدميرية +1300"},
+    "خوذة خطايا الشيطان": {"price_gems": 12, "rank": "🔴 الشيطان", "power": "دفاع شيطاني +1100"},
+    "جناح الشيطان المظلم": {"price_gems": 25, "rank": "🔴 الشيطان", "power": "طيران وسرعة +1600"},
+    
+    # رتبة الجحيم 🔥
+    "درع لهيب الجحيم": {"price_gems": 30, "rank": "🔥 الجحيم", "power": "دفاع مطلق +1800"},
+    "فأس الحمم البركانية": {"price_gems": 35, "rank": "🔥 الجحيم", "power": "قوة نارية +2100"},
+    "حذاء السير في الحمم": {"price_gems": 22, "rank": "🔥 الجحيم", "power": "سرعة فائقة +1500"},
+    "خاتم جمر الجحيم": {"price_gems": 28, "rank": "🔥 الجحيم", "power": "حرق الخصوم +1900"},
+
+    # رتبة السفاح ⚔️
+    "عباءة السفاح الدموية": {"price_gems": 50, "rank": "⚔️ السفاح", "power": "سرعة وتخفي خارق +3000"},
+    "منجل حاصد الأرواح": {"price_gems": 75, "rank": "⚔️ السفاح", "power": "قتل فوري وإبادة +5000"},
+    "قناع الظل الأعمى": {"price_gems": 45, "rank": "⚔️ السفاح", "power": "تفادي مطلق +3500"},
+    "قفازات الإبادة الشاملة": {"price_gems": 60, "rank": "⚔️ السفاح", "power": "تحطيم الدروع +4200"},
+    "شفرات الموت المطلق": {"price_gems": 90, "rank": "⚔️ السفاح", "power": "دمار شامل +6000"}
+}
+
+# معدات المتجر العادي (تُشترى بالعملات العادية 🪙 - معدات كثيرة ومتنوعة)
+NORMAL_SHOP_ITEMS = {
+    "سيف حديدي حاد": {"price": 200, "power": "هجوم +150"},
+    "درع الفولاذ المقاوم": {"price": 350, "power": "دفاع +200"},
+    "قوس الصيد السريع": {"price": 300, "power": "هجوم عن بعد +180"},
+    "جرعة شفاء كبرى": {"price": 100, "power": "استعادة صحة كاملة"},
+    "رمح الحراس الملكي": {"price": 450, "power": "هجوم +250"},
+    "خوذة الفارس الحديدية": {"price": 250, "power": "دفاع +180"},
+    "حذاء السرعة الخفيف": {"price": 150, "power": "سرعة +100"},
+    "عصا السحر المبتدئ": {"price": 400, "power": "سحر +220"},
+    "درع التاريس الخشبي": {"price": 120, "power": "دفاع +90"},
+    "سيف النسر الذهبي": {"price": 800, "power": "هجوم +500"},
+    "درع التنين العتيق": {"price": 950, "power": "دفاع +600"},
+    "خنجر اللصوص السريع": {"price": 280, "power": "هجوم مباغت +190"}
 }
 
 @bot.event
@@ -97,11 +129,12 @@ async def register(interaction: discord.Interaction):
     await interaction.response.send_message("🎮 نظام التسجيل:", view=GenderSelectView(), ephemeral=True)
 
 
-# ==================== 2. لوحة المطور بنظام المنيو المتطور ====================
+# ==================== 2. لوحة المطور بنظام المنيو المتطور (عملات وجواهر لا نهائية) ====================
 class DevDashboardSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="الحصول على عملات لا نهائية", description="إضافة 999,999 عملة لحسابك", emoji="💰"),
+            discord.SelectOption(label="الحصول على عملات عادية لا نهائية", description="إضافة 999,999 عملة عادية", emoji="🪙"),
+            discord.SelectOption(label="الحصول على جواهر ظلام لا نهائية", description="إضافة 9,999 جوهرة نادرة", emoji="💎"),
             discord.SelectOption(label="الحصول على عتاد سري", description="إضافة معدات نادرة لحقيبتك", emoji="⚔️"),
             discord.SelectOption(label="عرض إحصائيات النظام", description="معرفة عدد اللاعبين والنقابات", emoji="📊")
         ]
@@ -109,14 +142,17 @@ class DevDashboardSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         eco = get_user_economy(interaction.user.id)
-        if self.values[0] == "الحصول على عملات لا نهائية":
+        if self.values[0] == "الحصول على عملات عادية لا نهائية":
             eco["coins"] += 999999
-            await interaction.response.send_message("💰 تم إضافة 999,999 عملة بنجاح إلى رصيدك!", ephemeral=True)
+            await interaction.response.send_message("🪙 تم إضافة 999,999 عملة عادية بنجاح إلى رصيدك!", ephemeral=True)
+        elif self.values[0] == "الحصول على جواهر ظلام لا نهائية":
+            eco["gems"] += 9999
+            await interaction.response.send_message("💎 تم إضافة 9,999 جوهرة ظلام نادرة بنجاح إلى رصيدك!", ephemeral=True)
         elif self.values[0] == "الحصول على عتاد سري":
             eco["inventory"].extend(["سيف المطور الأسطوري", "درع الإله المطلق"])
             await interaction.response.send_message("⚔️ تم إضافة عتاد سري وخارق إلى حقيبتك!", ephemeral=True)
         elif self.values[0] == "عرض إحصائيات النظام":
-            await interaction.response.send_message(f"📊 اللاعبين: {len(REGISTERED_USERS)} | النقابات: {len(GUILDS_DATA)}", ephemeral=True)
+            await interaction.response.send_message(f"📊 اللاعبين المسجلين: {len(REGISTERED_USERS)} | النقابات: {len(GUILDS_DATA)}", ephemeral=True)
 
 class DevDashboardView(discord.ui.View):
     def __init__(self):
@@ -133,11 +169,48 @@ async def dev_dashboard(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=DevDashboardView(), ephemeral=True)
 
 
-# ==================== 3. متجر الظلام (Dark Shop) ====================
+# ==================== 3. المتجر العادي (Normal Shop) ====================
+class NormalShopSelect(discord.ui.Select):
+    def __init__(self):
+        options = [discord.SelectOption(label=name, description=f"السعر: {data['price']} عملة | {data['power']}", emoji="🛒") for name, data in NORMAL_SHOP_ITEMS.items()]
+        super().__init__(placeholder="اختر غرضاً لشرائه من المتجر العادي...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        user_id = interaction.user.id
+        if user_id not in REGISTERED_USERS:
+            await interaction.response.send_message("❌ تسجل أولاً عبر `/تسجيل`!", ephemeral=True)
+            return
+
+        item_name = self.values[0]
+        item_data = NORMAL_SHOP_ITEMS[item_name]
+        eco = get_user_economy(user_id)
+
+        if eco["coins"] < item_data["price"]:
+            await interaction.response.send_message(f"❌ رصيدك لا يكفي! تحتاج إلى {item_data['price']} عملة عادية.", ephemeral=True)
+            return
+
+        eco["coins"] -= item_data["price"]
+        eco["inventory"].append(item_name)
+        await interaction.response.send_message(f"🛍️ تم شراء `{item_name}` بنجاح وتم إضافته إلى حقيبتك!", ephemeral=True)
+
+class NormalShopView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.add_item(NormalShopSelect())
+
+@bot.tree.command(name="المتجر", description="فتح المتجر العادي لشراء الأسلحة والدروع بالعملات العادية")
+async def shop(interaction: discord.Interaction):
+    embed = discord.Embed(title="🛒 المتجر العادي للمغامرين", description="معدات وأسلحة متنوعة (تُشترى بالعملات العادية 🪙):", color=0xF1C40F)
+    for name, data in NORMAL_SHOP_ITEMS.items():
+        embed.add_field(name=name, value=f"السعر: {data['price']} عملة\n{data['power']}", inline=True)
+    await interaction.response.send_message(embed=embed, view=NormalShopView(), ephemeral=True)
+
+
+# ==================== 4. متجر الظلام (Dark Shop) - بالعملة النادرة (الجواهر) ====================
 class DarkShopSelect(discord.ui.Select):
     def __init__(self):
-        options = [discord.SelectOption(label=item_name, description=f"السعر: {data['price']} عملة | الرتبة: {data['rank']}", emoji="🔥") for item_name, data in DARK_SHOP_ITEMS.items()]
-        super().__init__(placeholder="اختر قطعة مظلمة لشرائها...", options=options)
+        options = [discord.SelectOption(label=item_name, description=f"السعر: {data['price_gems']} جوهرة ظلام 💎 | {data['rank']}", emoji="🔥") for item_name, data in DARK_SHOP_ITEMS.items()]
+        super().__init__(placeholder="اختر قطعة مظلمة أسطورية لشرائها...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         user_id = interaction.user.id
@@ -149,28 +222,28 @@ class DarkShopSelect(discord.ui.Select):
         item_data = DARK_SHOP_ITEMS[item_name]
         eco = get_user_economy(user_id)
 
-        if eco["coins"] < item_data["price"]:
-            await interaction.response.send_message(f"❌ رصيدك لا يكفي! تحتاج إلى {item_data['price']} عملة.", ephemeral=True)
+        if eco["gems"] < item_data["price_gems"]:
+            await interaction.response.send_message(f"❌ رصيدك لا يكفي من جواهر الظلام! تحتاج إلى {item_data['price_gems']} جوهرة 💎.", ephemeral=True)
             return
 
-        eco["coins"] -= item_data["price"]
+        eco["gems"] -= item_data["price_gems"]
         eco["inventory"].append(item_name)
-        await interaction.response.send_message(f"🌑 تم شراء `{item_name}` بنجاح برتبة **{item_data['rank']}** وقوة `{item_data['power']}`!", ephemeral=True)
+        await interaction.response.send_message(f"🌑 تم شراء `{item_name}` بنجاح برتبة **{item_data['rank']}** وقوة `{item_data['power']}` مقابل {item_data['price_gems']} جوهرة ظلام 💎!", ephemeral=True)
 
 class DarkShopView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
         self.add_item(DarkShopSelect())
 
-@bot.tree.command(name="متجر_الظلام", description="فتح متجر الظلام للمعدات الشيطانية والأسطورية")
+@bot.tree.command(name="متجر_الظلام", description="فتح متجر الظلام للمعدات الشيطانية والأسطورية بالعملة النادرة")
 async def dark_shop(interaction: discord.Interaction):
-    embed = discord.Embed(title="🌑 متجر الظلام الأسطوري", description="معدات الرتب العليـا (الشيطان - الجحيم - السفاح):", color=0x111111)
+    embed = discord.Embed(title="🌑 متجر الظلام الأسطوري", description="معدات الرتب العليـا (الشيطان - الجحيم - السفاح) تُشترى بجواهر الظلام النادرة 💎:", color=0x111111)
     for name, data in DARK_SHOP_ITEMS.items():
-        embed.add_field(name=f"{data['rank']} | {name}", value=f"السعر: {data['price']} عملة\nقوة: {data['power']}", inline=False)
+        embed.add_field(name=f"{data['rank']} | {name}", value=f"السعر: {data['price_gems']} جوهرة 💎\nقوة: {data['power']}", inline=False)
     await interaction.response.send_message(embed=embed, view=DarkShopView(), ephemeral=True)
 
 
-# ==================== 4. باقي الأوامر القديمة (تغيير البطل، النقابات، الملف) ====================
+# ==================== 5. باقي الأوامر القديمة (تغيير البطل، النقابات، الملف) ====================
 class ChangeHeroView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
@@ -185,13 +258,13 @@ class ChangeHeroDropdown(discord.ui.Select):
         user_id = interaction.user.id
         eco = get_user_economy(user_id)
         if eco["coins"] < 200:
-            await interaction.response.send_message(f"❌ تحتاج 200 عملة لتغيير البطل! رصيدك: {eco['coins']}", ephemeral=True)
+            await interaction.response.send_message(f"❌ تحتاج 200 عملة عادية لتغيير البطل! رصيدك: {eco['coins']}", ephemeral=True)
             return
         new_hero = self.values[0]
         eco["coins"] -= 200
         REGISTERED_USERS[user_id]["hero"] = new_hero
         eco["hero"] = new_hero
-        await interaction.response.send_message(f"🔄 تم تغيير البطل إلى **{new_hero}** مقابل 200 عملة!", ephemeral=True)
+        await interaction.response.send_message(f"🔄 تم تغيير البطل إلى **{new_hero}** مقابل 200 عملة عادية!", ephemeral=True)
 
 @bot.tree.command(name="تغيير_البطل", description="تغيير بطلك مقابل 200 عملة")
 async def change_hero(interaction: discord.Interaction):
@@ -207,7 +280,7 @@ async def create_guild(interaction: discord.Interaction, اسم_النقابة: 
         return
     eco = get_user_economy(interaction.user.id)
     if eco["coins"] < 299:
-        await interaction.response.send_message("❌ رصيدك لا يكفي (تحتاج 299 عملة)!", ephemeral=True)
+        await interaction.response.send_message("❌ رصيدك لا يكفي (تحتاج 299 عملة عادية)!", ephemeral=True)
         return
     eco["coins"] -= 299
     GUILDS_DATA[اسم_النقابة] = {"owner": interaction.user.id, "level": 1, "exp": 0, "bank_coins": 0, "bank_items": [], "members": [interaction.user.id]}
@@ -230,7 +303,7 @@ async def donate_guild(interaction: discord.Interaction, نوع_التبرع: ap
     if نوع_التبرع.value == "coins":
         amount = int(القيمة_أو_الاسم)
         if eco["coins"] < amount:
-            await interaction.response.send_message("❌ رصيدك لا يكفي!", ephemeral=True)
+            await interaction.response.send_message("❌ رصيدك لا يكفي من العملات العادية!", ephemeral=True)
             return
         eco["coins"] -= amount
         guild_info["bank_coins"] += amount
@@ -254,8 +327,9 @@ async def profile(interaction: discord.Interaction):
     embed = discord.Embed(title=f"👑 الملف الشخصي | {interaction.user.display_name}", color=0xE67E22)
     embed.add_field(name="الشخصية", value=user_data['name'], inline=True)
     embed.add_field(name="البطل", value=user_data['hero'], inline=True)
-    embed.add_field(name="العملات", value=f"{eco['coins']} عملة", inline=True)
-    embed.add_field(name="الحقيبة", value=", ".join(eco['inventory']) if eco['inventory'] else "فارغة", inline=False)
+    embed.add_field(name="🪙 العملات العادية", value=f"{eco['coins']} عملة", inline=True)
+    embed.add_field(name="💎 جواهر الظلام", value=f"{eco['gems']} جوهرة", inline=True)
+    embed.add_field(name="🎒 الحقيبة", value=", ".join(eco['inventory']) if eco['inventory'] else "فارغة", inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
 bot.run(os.getenv('TOKEN'))
