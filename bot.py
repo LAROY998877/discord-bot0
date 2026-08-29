@@ -166,7 +166,7 @@ class DarkShopView(discord.ui.View):
 async def dark_shop(interaction: discord.Interaction):
     embed = discord.Embed(title="🌑 متجر الظلام الأسطوري", description="معدات الرتب العليـا (الشيطان - الجحيم - السفاح):", color=0x111111)
     for name, data in DARK_SHOP_ITEMS.items():
-        embed.add_field(name=f"{data['rank']} | {name}", value=ل={`السعر: ${data['price']} عملة`} + `\nقوة: ${data['power']}`, inline=False)
+        embed.add_field(name=f"{data['rank']} | {name}", value=f"السعر: {data['price']} عملة\nقوة: {data['power']}", inline=False)
     await interaction.response.send_message(embed=embed, view=DarkShopView(), ephemeral=True)
 
 
