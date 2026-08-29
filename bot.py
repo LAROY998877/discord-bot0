@@ -8,13 +8,15 @@ from discord.ext import commands
 db_connection = sqlite3.connect("bot_database.db")
 cursor = db_connection.cursor()
 
-# جدول بيانات المستخدمين والرصيد (الحفظ التلقائي)
+# جدول بيانات المستخدمين (الرصيد، المعدات، الطوابق) - الحفظ التلقائي
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS user_data (
         user_id INTEGER PRIMARY KEY,
         username TEXT,
-        balance INTEGER DEFAULT 100
+        balance INTEGER DEFAULT 100,
+        equipment_score INTEGER DEFAULT 0,
+        floors INTEGER DEFAULT 0
     )
 """
 )
@@ -41,7 +43,6 @@ class MyBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
-        # مزامنة الأوامر لتظهر تلقائياً في Discord
         await self.tree.sync()
         print("تم مزامنة أوامر السلاش بنجاح!")
 
@@ -62,33 +63,25 @@ def is_dev(user_id: int) -> bool:
     return cursor.fetchone() is not None
 
 
-# دالة مساعدة لجلب رصيد المستخدم أو إنشائه تلقائياً بقاعدة البيانات
+# دالة لجلب أو إنشاء المستخدم تلقائياً بقاعدة البيانات
 def get_or_create_user(user_id, username):
     cursor.execute(
-        "SELECT balance FROM user_data WHERE user_id = ?", (user_id,)
+        "SELECT balance, equipment_score, floors FROM user_data WHERE user_id = ?",
+        (user_id,),
     )
     result = cursor.fetchone()
     if result is None:
         cursor.execute(
-            "INSERT INTO user_data (user_id, username, balance) VALUES (?, ?, 100)",
+            "INSERT INTO user_data (user_id, username, balance, equipment_score, floors) VALUES (?, ?, 100, 10, 1)",
             (user_id, username),
         )
         db_connection.commit()
-        return 100
-    return result[0]
-
-
-# دالة لتحديث الرصيد وحفظه تلقائياً
-def update_balance(user_id, amount):
-    cursor.execute(
-        "UPDATE user_data SET balance = balance + ? WHERE user_id = ?",
-        (amount, user_id),
-    )
-    db_connection.commit()
+        return 100, 10, 1
+    return result[0], result[1], result[2]
 
 
 # ==========================================
-# 3. واجهة الألعاب والمصرف (أزرار تفاعلية مع حفظ تلقائي)
+# 3. واجهة الألعاب والمصرف (حفظ تلقائي)
 # ==========================================
 
 
@@ -110,7 +103,12 @@ class BankView(discord.ui.View):
         username = str(interaction.user)
         get_or_create_user(user_id, username)
 
-        update_balance(user_id, 50)
+        cursor.execute(
+            "UPDATE user_data SET balance = balance + 50 WHERE user_id = ?",
+            (user_id,),
+        )
+        db_connection.commit()
+
         cursor.execute(
             "SELECT balance FROM user_data WHERE user_id = ?", (user_id,)
         )
@@ -134,14 +132,19 @@ class BankView(discord.ui.View):
         username = str(interaction.user)
         get_or_create_user(user_id, username)
 
-        update_balance(user_id, 100)
+        cursor.execute(
+            "UPDATE user_data SET balance = balance + 100, floors = floors + 1 WHERE user_id = ?",
+            (user_id,),
+        )
+        db_connection.commit()
+
         cursor.execute(
             "SELECT balance FROM user_data WHERE user_id = ?", (user_id,)
         )
         new_balance = cursor.fetchone()[0]
 
         await interaction.response.send_message(
-            f"🎉 استلمت المنحة الملكية (100 جوهرة)! رصيدك الآن: `{new_balance}` 💎",
+            f"🎉 استلمت المنحة الملكية وطابقاً جديداً! رصيدك الآن: `{new_balance}` 💎",
             ephemeral=True,
         )
 
@@ -153,10 +156,10 @@ class BankView(discord.ui.View):
     ):
         user_id = interaction.user.id
         username = str(interaction.user)
-        balance = get_or_create_user(user_id, username)
+        bal, eq, fl = get_or_create_user(user_id, username)
 
         await interaction.response.send_message(
-            f"💼 رصيدك المحفوظ في بنك الإمبراطورية: `{balance}` جوهرة 💎",
+            f"💼 رصيدك: `{bal}` 💎 | معداتك: `{eq}` 🛡️ | طوابقك: `{fl}` 🏢",
             ephemeral=True,
         )
 
@@ -169,17 +172,135 @@ async def bank_panel(interaction: discord.Interaction):
         title="✨ المصرف الإمبراطوري - الأمان المطلق",
         description=(
             "**الرفاهية المالية لجميع المغامرين.**\n\n"
-            "اضغط على الأزرار بالأسفل لتنفيذ العمليات، وسيتم **حفظ بياناتك ورصيدك تلقائياً** في قاعدة البيانات بشكل دائم! 🛡️"
+            "اضغط على الأزرار بالأسفل لتنفيذ العمليات والحفظ التلقائي! 🛡️"
         ),
         color=discord.Color.gold(),
     )
-    embed.set_footer(text="نظام SQLite التلقائي - آمن ومحدث فورياً")
+    embed.set_footer(text="نظام SQLite التلقائي")
     view = BankView()
     await interaction.response.send_message(embed=embed, view=view)
 
 
 # ==========================================
-# 4. لوحة المطورين الفخمة (مع جلب الأوامر المضافة تلقائياً)
+# 4. نظام ليدربورد (المصدرين: أغنياء، معدات، طوابق)
+# ==========================================
+
+
+class LeaderboardView(discord.ui.View):
+
+    def __init__(self, author_id):
+        super().__init__(timeout=60)
+        self.author_id = author_id
+
+    @discord.ui.button(
+        label="أغنى اللاعبين", style=discord.ButtonStyle.success, emoji="💰", row=0
+    )
+    async def lb_money(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute(
+            "SELECT username, balance FROM user_data ORDER BY balance DESC LIMIT 10"
+        )
+        data = cursor.fetchall()
+
+        desc = ""
+        for i, row in enumerate(data, 1):
+            medal = (
+                "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"`{i}.`"
+            )
+            desc += f"{medal} **{row[0]}** — `{row[1]}` جوهرة 💎\n"
+
+        embed = discord.Embed(
+            title="💰 قائمة أغنى اللاعبين (المتصدرين)",
+            description=desc if desc else "لا توجد بيانات مسجلة بعد.",
+            color=discord.Color.gold(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(
+        label="ترتيب المعدات", style=discord.ButtonStyle.primary, emoji="🛡️", row=0
+    )
+    async def lb_equipment(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute(
+            "SELECT username, equipment_score FROM user_data ORDER BY equipment_score DESC LIMIT 10"
+        )
+        data = cursor.fetchall()
+
+        desc = ""
+        for i, row in enumerate(data, 1):
+            medal = (
+                "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"`{i}.`"
+            )
+            desc += f"{medal} **{row[0]}** — قوة معدات: `{row[1]}` 🛡️\n"
+
+        embed = discord.Embed(
+            title="🛡️ ترتيب اللاعبين حسب المعدات",
+            description=desc if desc else "لا توجد بيانات مسجلة بعد.",
+            color=discord.Color.blue(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(
+        label="أعلى الطوابق", style=discord.ButtonStyle.danger, emoji="🏢", row=0
+    )
+    async def lb_floors(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute(
+            "SELECT username, floors FROM user_data ORDER BY floors DESC LIMIT 10"
+        )
+        data = cursor.fetchall()
+
+        desc = ""
+        for i, row in enumerate(data, 1):
+            medal = (
+                "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"`{i}.`"
+            )
+            desc += f"{medal} **{row[0]}** — الطابق: `{row[1]}` 🏢\n"
+
+        embed = discord.Embed(
+            title="🏢 ترتيب اللاعبين حسب الطوابق",
+            description=desc if desc else "لا توجد بيانات مسجلة بعد.",
+            color=discord.Color.red(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
+@bot.tree.command(
+    name="ليدربورد", description="عرض لوحة المتصدرين (الأموال، المعدات، الطوابق)"
+)
+async def leaderboard_command(interaction: discord.Interaction):
+    # افتراضياً نعرض قائمة أغنى اللاعبين عند فتح القائمة أول مرة
+    cursor.execute(
+        "SELECT username, balance FROM user_data ORDER BY balance DESC LIMIT 10"
+    )
+    data = cursor.fetchall()
+
+    desc = ""
+    for i, row in enumerate(data, 1):
+        medal = (
+            "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"`{i}.`"
+        )
+        desc += f"{medal} **{row[0]}** — `{row[1]}` جوهرة 💎\n"
+
+    embed = discord.Embed(
+        title="🏆 لوحة متصدري الإمبراطورية",
+        description=(
+            "اختر من الأزرار بالأسفل لعرض الفئة التي تريدها:\n\n"
+            + (desc if desc else "لا توجد بيانات مسجلة بعد.")
+        ),
+        color=discord.Color.from_rgb(40, 40, 45),
+    )
+    embed.set_footer(text="قائمة تفاعلية محدثة تلقائياً عبر SQLite")
+
+    view = LeaderboardView(interaction.user.id)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+# ==========================================
+# 5. لوحة المطورين الفخمة (مع رصد الأوامر تلقائياً)
 # ==========================================
 
 
@@ -214,7 +335,7 @@ class DevPanelView(discord.ui.View):
         cursor.execute("SELECT COUNT(*) FROM developers")
         total_devs = cursor.fetchone()[0]
 
-        # جلب الأوامر المسجلة تلقائياً في البوت وتوليد قائمة بها
+        # جلب الأوامر المسجلة تلقائياً بالبوت وعرضها للوحة المطورين
         synced_commands = bot.tree.get_commands()
         commands_list = (
             ", ".join([f"`/{cmd.name}`" for cmd in synced_commands])
@@ -242,13 +363,12 @@ class DevPanelView(discord.ui.View):
             value=commands_list,
             inline=False,
         )
-        embed.set_footer(text="حفظ تلقائي SQLite 100% - تحديث ديناميكي للأوامر")
+        embed.set_footer(text="حفظ تلقائي SQLite 100%")
         await interaction.response.edit_message(embed=embed, view=self)
 
 
 @bot.tree.command(name="مطور", description="فتح لوحة تحكم المطورين الفخمة")
 async def dev_panel(interaction: discord.Interaction):
-    # جعل أول شخص يستخدم الأمر مطوراً تلقائياً إذا لم يكن هناك مطورين مسجلين
     cursor.execute("SELECT COUNT(*) FROM developers")
     if cursor.fetchone()[0] == 0:
         cursor.execute(
@@ -270,7 +390,7 @@ async def dev_panel(interaction: discord.Interaction):
         title="✨ لوحة تحكم المطورين المركزية",
         description=(
             "مرحباً بك يا فنان.\n"
-            "من خلال هذه الواجهة يمكنك مراقبة النظام، الأوامر الجديدة المضافة، وحالة الحفظ التلقائي.\n\n"
+            "من خلال هذه الواجهة يمكنك مراقبة النظام، الأوامر المضافة تلقائياً، وحالة الحفظ.\n\n"
             "📌 **اختر من الأزرار أدناه:**"
         ),
         color=discord.Color.from_rgb(40, 40, 45),
@@ -304,7 +424,7 @@ async def add_developer(interaction: discord.Interaction, member: discord.Member
 
 
 # ==========================================
-# 5. تشغيل البوت
+# 6. تشغيل البوت
 # ==========================================
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
