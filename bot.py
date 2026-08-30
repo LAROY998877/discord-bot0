@@ -39,65 +39,46 @@ def is_developer(user_id):
         return True
     return devs_col.find_one({"user_id": str(user_id)}) is not None
 
-# ================== قاعدة بيانات الأبطال ==================
+# ================== قاعدة بيانات الأبطال والطوابق ==================
 HEROES_DATA = {
     "zeal": {
         "name": "زيل - كاسر الظلال (Zeal)",
-        "gender": "ذكر",
         "emoji": "⚡",
-        "power": "سرعة البرق الخاطفة والتحكم في طاقة البلازما المدمرة",
-        "story": "محارب وُلِد في قلب العواصف الرعدية الكونية."
+        "power_boost": 500
     },
     "draven": {
         "name": "دريفان - سيد الجحيم (Draven)",
-        "gender": "ذكر",
         "emoji": "🔥",
-        "power": "استدعاء نيران التنانين الأسطورية وتصلب الجلد البركاني",
-        "story": "قائد عسكري سابق لجيوش الحمم المظلمة."
+        "power_boost": 600
     },
     "kaelen": {
         "name": "كايلين - حارس الأبعاد (Kaelen)",
-        "gender": "ذكر",
         "emoji": "🌌",
-        "power": "التلاعب بالزمن والقدرة على فتح ثواني للقفز بين الأبعاد",
-        "story": "حكيم كوني أمضى آلاف السنين يدرس أسرار الكون."
+        "power_boost": 750
     },
     "lyra": {
         "name": "ليرا - ملكة الصقيع (Lyra)",
-        "gender": "أنثى",
         "emoji": "❄️",
-        "power": "تجميد جزيئات الهواء المطلق وصنع أسلحة من الجليد الصلب",
-        "story": "أميرة قطبية أُمطرت مدينتها بلعنة النار."
+        "power_boost": 550
     },
     "vortexa": {
         "name": "فورتيكسا - ساحرة الثقوب السوداء (Vortexa)",
-        "gender": "أنثى",
         "emoji": "🌀",
-        "power": "امتصاص ضربات الخصوم وإطلاقها كطاقة جاذبية مميتة",
-        "story": "مقاتلة استدمجت طاقة الثقوب السوداء في جسدها."
+        "power_boost": 800
     },
     "valeria": {
         "name": "فاليريا - فارسة الفجر الذهبي (Valeria)",
-        "gender": "أنثى",
         "emoji": "☀️",
-        "power": "الشفاء السريع، القوة البدنية المطلقة، وهالة النور المقدس",
-        "story": "قائدة حرس الفجر الأسطوريون تحمل درعاً مقدساً."
+        "power_boost": 650
     },
     "assassin_dev": {
         "name": "💀 السفاح الأبدي - حاصد الأرواح (The Executioner)",
-        "gender": "مطور مطلق",
         "emoji": "🩸",
-        "power": "طمس الوجود، التحكم المطلق في الأكوان، ومحو أي كائن بنظرة واحدة",
-        "story": "كيان مرعب هبط من الفراغ المطلق.",
-        "stats": {
-            "power": 9999999,
-            "max_floor": 999,
-            "kills": 99999
-        }
+        "power_boost": 999999
     }
 }
 
-# ================== نظام البنك والتحويل (مع منع انتهاء المهلة) ==================
+# ================== نظام البنك والتحويل ==================
 
 class BankDepositModal(discord.ui.Modal, title="إيداع أموال في خزينة البنك"):
     amount = discord.ui.TextInput(label="المبلغ المراد إيداعه", placeholder="مثال: 100000", required=True)
@@ -177,12 +158,10 @@ class TransferModal(discord.ui.Modal, title="تحويل أموال لشخص آخ
 class TransferUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
-        
         @discord.ui.select(cls=discord.ui.UserSelect, placeholder="👥 اختر العضو المراد تحويل العملات له...", min_values=1, max_values=1)
         async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
             chosen_member = select.values[0]
             await inter.response.send_modal(TransferModal(receiver=chosen_member))
-
         self.add_item(select_callback)
 
 class BankSelect(discord.ui.Select):
@@ -196,7 +175,6 @@ class BankSelect(discord.ui.Select):
         super().__init__(placeholder="🌟 اختر المعاملة المصرفية المطلوبة من القائمة...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        # الاستجابة الفورية لمنع رسالة "لم يستجب البوت"
         user_id = str(interaction.user.id)
         user_data = users_col.find_one({"user_id": user_id})
         if not user_data:
@@ -208,8 +186,7 @@ class BankSelect(discord.ui.Select):
         if self.values[0] == "view":
             embed = discord.Embed(
                 title=f"🏛️ البنك المركزي الإمبراطوري - {interaction.user.display_name}",
-                description="«حيث تُحفظ ثروات الأبطال وتصان مقدرات العوالم الكبرى من السرقة والتلف.»\n\n"
-                            f"💵 **السيولة النقدية (المحفظة):** `{wallet:,}` 🪙\n"
+                description=f"💵 **السيولة النقدية (المحفظة):** `{wallet:,}` 🪙\n"
                             f"🔐 **الودائع الملكية (البنك):** `{bank:,}` 🪙\n"
                             f"👑 **إجمالي الثروة الكلية:** `{wallet + bank:,}` 🪙",
                 color=discord.Color.dark_gold()
@@ -238,7 +215,81 @@ async def bank_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=BankView(), ephemeral=True)
 
 
-# ================== لوحة المطور (مع منع انتهاء المهلة) ==================
+# ================== نظام الطوابق (الأبراج القتالية) الكامل ==================
+
+class TowerSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="الطوابق العادية (1 - 50)", description="معارك تدريجية ضد حراس الأبعاد الأوائل", emoji="🏢", value="normal_tower"),
+            discord.SelectOption(label="طوابق الزعماء الأسطوريين", description="مواجهة حامية ضد زعماء العوالم المظلمة", emoji="👹", value="boss_tower"),
+            discord.SelectOption(label="هاوية اللانهائية (Endless)", description="صعد بلا حدود واختبر قوتك المطلقة ضد أعداء لا تهزم", emoji="🌌", value="endless_tower"),
+            discord.SelectOption(label="متجر وحلبة الغنائم", description="استعراض طوابقك المفتوحة وجمع غنائم المعارك", emoji="🎁", value="tower_rewards")
+        ]
+        super().__init__(placeholder="🗼 اختر فئة الطوابق والبرج القتالي...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id})
+        if not user_data:
+            return await interaction.followup.send("❌ أنت غير مسجل في اللعبة! استخدم `/تسجيل` أولاً.", ephemeral=True)
+        
+        choice = self.values[0]
+        max_floor = user_data.get("max_floor", 0)
+
+        if choice == "normal_tower":
+            embed = discord.Embed(
+                title="🏢 برج الطوابق العادية (المستويات 1 إلى 50)",
+                description=f"أنت الآن في رحلة الصعود الكبرى.\n📈 **أعلى طابق وصلته:** `{max_floor}`\n\n"
+                            "اختر الطابق الذي تريد اقتحامه ومقاتلة وحوشه للحصول على خبرة وأموال!",
+                color=discord.Color.blue()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        elif choice == "boss_tower":
+            embed = discord.Embed(
+                title="👹 برج زعماء الأبعاد الكبرى",
+                description="«هنا تقف وجهاً لوجه أمام عمالقة الشر المطلق.»\n\n"
+                            "كل زعيم تحطمه يمنحك ألقاباً نادرة، طاقة هائلة، ومكافآت مالية ضخمة تتجاوز ملايين العملات!",
+                color=discord.Color.dark_red()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        elif choice == "endless_tower":
+            embed = discord.Embed(
+                title="🌌 هاوية الطوابق اللانهائية (Endless Abyss)",
+                description="طابق بلا نهاية ولا رحم... كلما صعدت خطوة زادت قوة الخصوم بشكل جنوني.\n"
+                            "هل تمتلك الشجاعة الكافية لتسجيل اسمك في قمة قادة الأبعاد؟",
+                color=discord.Color.purple()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        elif choice == "tower_rewards":
+            embed = discord.Embed(
+                title="🎁 صندوق غنائم الطوابق والأبراج",
+                description=f"إنجازاتك الحالية في الأبراج:\n"
+                            f"🏆 **الطابق الأقصى:** `{max_floor}`\n"
+                            f"💎 **مكافآت جاهزة للاستلام:** متوفرة بناءً على تقدمك القتالي!",
+                color=discord.Color.gold()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+class TowerView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(TowerSelect())
+
+@bot.tree.command(name="الطوابق", description="فتح بوابة الأبراج القتالية العلوية ومعارك الصعود الأسطورية")
+async def tower_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🗼 قمة برج الأبعاد والكواكب العظمى",
+        description="مرحباً بك في ساحة التجارب واختبار القوة الكونية. استعمل القائمة أدناه لاختيار مسار الصعود والتحدي:",
+        color=discord.Color.teal()
+    )
+    await interaction.response.send_message(embed=embed, view=TowerView(), ephemeral=True)
+
+
+# ================== لوحة المطور ==================
 
 class DevGiftModal(discord.ui.Modal, title="إهداء عتاد لعضو"):
     gear_name = discord.ui.TextInput(label="اسم قطعة العتاد أو السلاح", placeholder="مثال: سيف التنين الاسطوري", required=True)
@@ -270,42 +321,36 @@ class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو")
 class DevGiftUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
-        
         @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🎁 اختر العضو لإهداء العتاد له...", min_values=1, max_values=1)
         async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
             chosen_member = select.values[0]
             await inter.response.send_modal(DevGiftModal(receiver=chosen_member))
-
         self.add_item(select_callback)
 
 class DevBalanceUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
-        
         @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🪙 اختر العضو لإضافة الرصيد له...", min_values=1, max_values=1)
         async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
             chosen_member = select.values[0]
             await inter.response.send_modal(DevAddBalanceModal(receiver=chosen_member))
-
         self.add_item(select_callback)
 
 class DevAddUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
-        
         @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🛠️ اختر العضو لترقيته لمطور...", min_values=1, max_values=1)
         async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
             chosen_member = select.values[0]
             devs_col.update_one({"user_id": str(chosen_member.id)}, {"$set": {"user_id": str(chosen_member.id)}}, upsert=True)
             await inter.response.send_message(f"🛠️ **تمت الترقية بنجاح!** أصبح العضو {chosen_member.mention} مطوراً معتمداً في النظام الإمبراطوري.", ephemeral=True)
-
         self.add_item(select_callback)
 
 class DevSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="تفعيل شخصية 'السفاح' المطلقة", description="رفع إحصائياتك وقوتك للحد الأقصى المدمر", emoji="🩸", value="assassin"),
-            discord.SelectOption(label="الحصول على الثروات اللاانهائية", description="ضخ بلاهايد من العملات العادية والنادرة لمحفظتك", emoji="💎", value="wealth"),
+            discord.SelectOption(label="الحصول على الثروات اللاانهائية", description="ضخ بلايين العملات العادية والنادرة لمحفظتك", emoji="💎", value="wealth"),
             discord.SelectOption(label="تطوير العتاد والمعدلات لأقصى حد", description="رفع كافة معدلاتك القتالية والعتاد للقمة بلا حدود", emoji="⚡", value="max_gear"),
             discord.SelectOption(label="إهداء عتاد لعضو", description="اختر العضو من القائمة واكتب اسم العتاد لإرساله له", emoji="🎁", value="dev_gift"),
             discord.SelectOption(label="إضافة رصيد عملات لعضو", description="اختر العضو من القائمة وحدد المبلغ المالي لإضافته", emoji="🪙", value="dev_bal"),
@@ -324,9 +369,9 @@ class DevSelect(discord.ui.Select):
                 {
                     "$set": {
                         "selected_hero": assassin['name'],
-                        "power": assassin['stats']['power'],
-                        "max_floor": assassin['stats']['max_floor'],
-                        "kills": assassin['stats']['kills'],
+                        "power": assassin['power_boost'],
+                        "max_floor": 999,
+                        "kills": 99999,
                         "custom_title": "💀 حاكم الأبعاد ومالك السفاح"
                     }
                 },
@@ -347,15 +392,15 @@ class DevSelect(discord.ui.Select):
                 {"user_id": user_id},
                 {
                     "$set": {
-                        "aim": 999999999999, "evasion": 999999999999,
-                        "attack": 999999999999, "accuracy": 999999999999,
-                        "defense": 999999999999, "critical": 999999999999,
-                        "magic": 999999999999, "intelligence": 999999999999
+                        "aim": 9999999999, "evasion": 9999999999,
+                        "attack": 9999999999, "accuracy": 9999999999,
+                        "defense": 9999999999, "critical": 9999999999,
+                        "magic": 9999999999, "intelligence": 9999999999
                     }
                 },
                 upsert=True
             )
-            await interaction.response.send_message("⚡ **تمت ترقية كافة المعدلات والعتاد للأقصى المطلق (مليارات القيم)!**", ephemeral=True)
+            await interaction.response.send_message("⚡ **تمت ترقية كافة المعدلات والعتاد للأقصى المطلق!**", ephemeral=True)
             
         elif choice == "dev_gift":
             await interaction.response.send_message("🎁 يرجى اختيار العضو المراد إهداء العتاد له من القائمة:", view=DevGiftUserSelectView(), ephemeral=True)
@@ -432,13 +477,6 @@ async def profile_command(interaction: discord.Interaction):
     embed.add_field(name="💀 الخصوم المقضي عليهم", value=str(kills), inline=True)
     embed.add_field(name="💰 المحفظة والبنك", value=f"{balance:,} 🪙 | 💳 {bank:,} 🪙", inline=False)
     embed.add_field(name="💎 الألماس والنقاد", value=f"{diamonds:,} 💎", inline=True)
-    
-    if "السفاح" in selected_hero:
-        embed.add_field(
-            name="🩸 حالة الكيان المرعب",
-            value="*«كيان مدمر يطمس الأبعاد ولا يرحم أحداً... طاقته تفوق مقاييس الكون.»*",
-            inline=False
-        )
 
     embed.set_footer(text=f"معرف المستخدم: {user_id}", icon_url=interaction.user.display_avatar.url)
     await interaction.followup.send(embed=embed, ephemeral=False)
