@@ -39,7 +39,7 @@ def is_developer(user_id):
         return True
     return devs_col.find_one({"user_id": str(user_id)}) is not None
 
-# دالة مسلعة لاستخراج الآيدي الصافي من المنشن أو النص
+# دالة مساعدة لاستخراج الآيدي الصافي من المنشن أو النص
 def extract_user_id(text):
     clean = text.strip().replace("<@", "").replace(">", "").replace("!", "")
     return str(int(clean))
@@ -455,6 +455,42 @@ async def battle_command(interaction: discord.Interaction):
     view = BattleMenuView(interaction.user.id)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
+# ================== منيو اختيار الألقاب السريعة للمطور ==================
+class DevGiveTitleSelect(discord.ui.Select):
+    def __init__(self):
+        titles = [
+            ("المبتدئ", "🟢"), ("الامبراطور", "👑"), ("الملك", "🔱"), 
+            ("الغني", "💰"), ("القاتل", "🗡️"), ("السفاح", "🩸"), 
+            ("اسطورة القتال", "⚡"), ("اقوى الاقوياء", "🔥")
+        ]
+        options = [discord.SelectOption(label=t[0], value=t[0], emoji=t[1]) for t in titles]
+        super().__init__(placeholder="اختر اللقب الذي تريد فتحه ومنحه لنفسك...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        chosen_title = self.values[0]
+        user_id = str(interaction.user.id)
+        
+        # التأكد من تسجيل المطور في قاعدة البيانات وفتح اللقب له وتفعيله مباشرة
+        user_data = users_col.find_one({"user_id": user_id})
+        if not user_data:
+            users_col.insert_one({
+                "user_id": user_id, "balance": 1000, "diamonds": 10, 
+                "max_floor": 0, "kills": 0, "battles_played": 0, "power": 100, 
+                "custom_title": chosen_title, "unlocked_titles": ["المبتدئ", chosen_title], "inventory": []
+            })
+        else:
+            unlocked = user_data.get("unlocked_titles", ["المبتدئ"])
+            if chosen_title not in unlocked:
+                unlocked.append(chosen_title)
+            users_col.update_one({"user_id": user_id}, {"$set": {"custom_title": chosen_title, "unlocked_titles": unlocked}})
+            
+        await interaction.response.send_message(f"👑 **تم فتح وتفعيل اللقب الأسطوري بنجاح:** `{chosen_title}` في سجلك الشخصي!", ephemeral=True)
+
+class DevGiveTitleView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(DevGiveTitleSelect())
+
 # ================== نظام لوحة المطورين الشاملة والمؤتمتة ==================
 class DeveloperControlView(discord.ui.View):
     def __init__(self, author_id):
@@ -478,6 +514,15 @@ class DeveloperControlView(discord.ui.View):
         user_id = str(interaction.user.id)
         users_col.update_one({"user_id": user_id}, {"$inc": {"diamonds": 999999}}, upsert=True)
         await interaction.response.send_message("💎 **تم إضافة مخزون ضخم من الألماس النادر إلى حسابك!**", ephemeral=True)
+
+    @discord.ui.button(label="الألقاب الأسطورية 👑", style=discord.ButtonStyle.success, row=0)
+    async def get_any_title_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="👑 اختيار الألقاب الإمبراطورية الفورية",
+            description="اختر من القائمة أدناه أي لقب ترغب في الحصول عليه وتفعيله فوراً في ملفك الشخصي:",
+            color=discord.Color.gold()
+        )
+        await interaction.response.send_message(embed=embed, view=DevGiveTitleView(), ephemeral=True)
 
     @discord.ui.button(label="إضافة مطور جديد ⚡", style=discord.ButtonStyle.blurple, row=1)
     async def add_dev_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -591,6 +636,7 @@ async def developer_panel(interaction: discord.Interaction):
             "✨ *«أهلاً بك أيها المطور العظيم في قلب النظام المركزي. من هنا تستطيع إدارة كل صغيرة وكبيرة في عالم المقاتلين والأبراج، وتوجيه مقاليد السلطة والثروات بلمسة زر واحدة.»*\n\n"
             "🛡️ **صلاحياتك المطلقة المتاحة في هذه اللوحة:**\n"
             "• ضخ كميات لا نهائية من العملات النقدية والألماس النادر.\n"
+            "• اختيار وفتح أي لقب أسطوري فوراً لنفسك عبر منيو الألقاب.\n"
             "• ترقية وإضافة مطورين جدد لدعم إدارة النظام بالمنشن الفوري.\n"
             "• إزالة المطورين غير المرغوب بهم من لوحة التحكم بالمنشن.\n"
             "• تحويل الأموال والأرصدة الفورية لأي مقاتل عبر منشنه.\n"
