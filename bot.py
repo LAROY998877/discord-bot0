@@ -49,18 +49,6 @@ WOULD_YOU_RATHER = [
     ("تصير مشهور جداً وكل الناس تعرفك 🌟", "تصير غني جداً بس محد يعرفك 💵")
 ]
 
-# ==================== [3] بيانات لعبة المشاهير (روابط صور مباشرة وثابتة) ====================
-CELEBRITIES = [
-    {"names": ["عادل امام", "عادل إمام"], "image": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500"}, # ملاحظة: ضع روابط صور مباشرة للمشاهير هنا
-    {"names": ["ميسي", "ليونيل ميسي"], "image": "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=500"},
-    {"names": ["محمد صلاح", "صلاح"], "image": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500"},
-    {"names": ["رونالدو", "كريستيانو رونالدو", "كريستيانو"], "image": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500"},
-    {"names": ["عمرو دياب"], "image": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500"},
-    {"names": ["كاظم الساهر"], "image": "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500"},
-    {"names": ["توم كروز", "Tom Cruise"], "image": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500"},
-    {"names": ["جاكي شان", "Jackie Chan"], "image": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500"}
-]
-
 
 # ==================== [اللعبة 1] لابي الأسئلة والصراحة ====================
 class QuestionsLobbyView(discord.ui.View):
@@ -202,105 +190,12 @@ class WouldYouRatherLobbyView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=None)
 
 
-# ==================== [اللعبة 3] لعبة المشاهير ====================
-async def start_celeb_game_round(interaction: discord.Interaction, host: discord.User):
-    celeb = random.choice(CELEBRITIES)
-    embed = discord.Embed(
-        title="📸 من هو هذا المشهور؟",
-        description="💡 **اكتب اسم المشهور في الشات بسرعة!**\n⏰ معك **25 ثانية** للتخمين.",
-        color=discord.Color.purple()
-    )
-    embed.set_image(url=celeb["image"])
-    embed.set_footer(text="لعبة المشاهير | جارية الآن...")
-
-    await interaction.response.edit_message(embed=embed, view=None)
-    message = await interaction.original_response()
-
-    def check(m):
-        if m.channel.id != interaction.channel_id or m.author.bot: return False
-        user_msg = m.content.strip().lower()
-        return any(alias.lower() in user_msg for alias in celeb["names"])
-
-    try:
-        winner_msg = await bot.wait_for("message", check=check, timeout=25.0)
-        win_embed = discord.Embed(
-            title="🎉 إجابة صحيحة!",
-            description=f"🏆 **الفائز السريع:** {winner_msg.author.mention}\n\n👤 **المشهور هو:** `{celeb['names'][0]}`",
-            color=discord.Color.green()
-        )
-        win_embed.set_image(url=celeb["image"])
-        view = CelebrityNextView(host=host)
-        await message.edit(embed=win_embed, view=view)
-    except asyncio.TimeoutError:
-        loss_embed = discord.Embed(
-            title="⏰ انتهى الوقت!",
-            description=f"للأسف محد عرف المشهور! 😅\n\n👤 **المشهور هو:** `{celeb['names'][0]}`",
-            color=discord.Color.red()
-        )
-        loss_embed.set_image(url=celeb["image"])
-        view = CelebrityNextView(host=host)
-        await message.edit(embed=loss_embed, view=view)
-
-
-class CelebrityNextView(discord.ui.View):
-    def __init__(self, host: discord.User):
-        super().__init__(timeout=300)
-        self.host = host
-
-    @discord.ui.button(label="جولة تالية 🔄", style=discord.ButtonStyle.success)
-    async def next_round_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await start_celeb_game_round(interaction, self.host)
-
-    @discord.ui.button(label="إيقاف 🛑", style=discord.ButtonStyle.danger)
-    async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
-        if interaction.user != self.host and not is_admin:
-            await interaction.response.send_message("❌ فقط المنظم أو المسؤولين يمكنهم الإيقاف!", ephemeral=True)
-            return
-        embed = discord.Embed(title="🛑 تم إيقاف لعبة المشاهير", description=f"قام {interaction.user.mention} بالإيقاف.", color=discord.Color.red())
-        self.stop()
-        await interaction.response.edit_message(embed=embed, view=None)
-
-
-class CelebrityLobbyView(discord.ui.View):
-    def __init__(self, host: discord.User):
-        super().__init__(timeout=300)
-        self.host = host
-
-    def generate_embed(self) -> discord.Embed:
-        embed = discord.Embed(
-            title="📸 لعبة المشاهير",
-            description="سيظهر لك البوت صورة لمشهور (عربي أو أجنبي).\nأول شخص يكتب اسمه صح بالشات هو الفائز!\n\n**المنظم:** " + self.host.mention,
-            color=discord.Color.gold()
-        )
-        embed.set_footer(text="اضغط على (بدء 🚀) لبدء الجولة!")
-        return embed
-
-    @discord.ui.button(label="بدء 🚀", style=discord.ButtonStyle.primary, row=0)
-    async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.host:
-            await interaction.response.send_message("❌ فقط المنظم يمكنه بدء اللعبة!", ephemeral=True)
-            return
-        await start_celeb_game_round(interaction, self.host)
-
-    @discord.ui.button(label="إيقاف 🛑", style=discord.ButtonStyle.danger, row=0)
-    async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
-        if interaction.user != self.host and not is_admin:
-            await interaction.response.send_message("❌ فقط المنظم أو المسؤولين يمكنهم الإيقاف!", ephemeral=True)
-            return
-        embed = discord.Embed(title="🛑 تم إيقاف لعبة المشاهير", description=f"قام {interaction.user.mention} بالإيقاف.", color=discord.Color.red())
-        self.stop()
-        await interaction.response.edit_message(embed=embed, view=None)
-
-
 # ==================== منيو الاختيار الرئيسي ====================
 class MainGameSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="لعبة الأسئلة والصراحة", description="3 مستويات: عادي، متوسط، وجريء جداً", emoji="🎯"),
             discord.SelectOption(label="لعبة لو خيروك", description="خيارات صعبة ومواقف مضحكة", emoji="🆚"),
-            discord.SelectOption(label="لعبة المشاهير", description="تخمين صورة المشهور (عرب وأجانب)", emoji="📸"),
             discord.SelectOption(label="قريباً...", description="مكان مخصص للعبتك القادمة", emoji="⏳")
         ]
         super().__init__(placeholder="اختر لعبة من المنيو لتشغيلها...", min_values=1, max_values=1, options=options)
@@ -312,9 +207,6 @@ class MainGameSelect(discord.ui.Select):
             await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
         elif "لو خيروك" in selected:
             lobby_view = WouldYouRatherLobbyView(host=interaction.user)
-            await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
-        elif "المشاهير" in selected:
-            lobby_view = CelebrityLobbyView(host=interaction.user)
             await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
         else:
             await interaction.response.send_message("⏳ هذه الخانة مخصصة للعبة القادمة!", ephemeral=True)
@@ -346,9 +238,7 @@ def generate_main_embed() -> discord.Embed:
                     "🎯 **1. لعبة الأسئلة والصراحة**\n"
                     "أسئلة تفاعلية بـ 3 مستويات (عادي، متوسط، جريء جداً 🔥)\n\n"
                     "🆚 **2. لعبة لو خيروك**\n"
-                    "تخيير اللاعبين بين خيارين صعبين ومضحكين!\n\n"
-                    "📸 **3. لعبة المشاهير**\n"
-                    "تخمين اسم المشهور من الصورة بسرعة قبل انتهاء الوقت!",
+                    "تخيير اللاعبين بين خيارين صعبين ومضحكين!",
         color=discord.Color.from_rgb(255, 105, 180)
     )
 
@@ -365,7 +255,7 @@ async def games_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ البوت {bot.user} شغال والصور تظهر بشكل ممتاز!")
+    print(f"✅ البوت {bot.user} شغال والألعاب جاهزة!")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 bot.run(TOKEN)
