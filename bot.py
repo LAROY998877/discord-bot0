@@ -126,54 +126,132 @@ class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو")
             await interaction.followup.send("❌ يرجى إدخال رقم صحيح للمبلغ!", ephemeral=True)
 
 
-# ================== واجهات المتاجر (Views) ==================
+# ================== قوائم اختيار وا شراء المتاجر (Select Menus) ==================
 
-class DarkShopView(discord.ui.View):
+class NormalShopSelect(discord.ui.Select):
+    def __init__(self, category_name: str):
+        self.category_name = category_name
+        items = NORMAL_SHOP.get(category_name, [])[:25] # أول 25 عنصر
+        options = []
+        for idx, item in enumerate(items):
+            options.append(discord.SelectOption(
+                label=item["name"][:100],
+                description=f"السعر: {item['price']:,} ذهب | القوة: +{item['power']}",
+                value=str(idx)
+            ))
+        super().__init__(placeholder=f"اختر من فئة {category_name}...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id})
+        if not user_data:
+            return await interaction.followup.send("❌ يرجى التسجيل أولاً باستخدام `/تسجيل`.", ephemeral=True)
+        
+        item_idx = int(self.values[0])
+        item = NORMAL_SHOP[self.category_name][item_idx]
+        price = item["price"]
+        balance = user_data.get("balance", 0)
+
+        if balance < price:
+            return await interaction.followup.send(f"❌ رصيدك الإمبراطوري ({balance:,} 🪙) لا يكفي لشراء `{item['name']}` السعر المطلوب ({price:,} 🪙).", ephemeral=True)
+
+        users_col.update_one(
+            {"user_id": user_id},
+            {
+                "$inc": {"balance": -price, "power": item["power"]},
+                "$push": {"inventory": item["name"]}
+            }
+        )
+        await interaction.followup.send(f"✅ **تم الشراء بنجاح!** حصلت على `{item['name']}` وتمت إضافة طاقتها لرصيدك.", ephemeral=True)
+
+class NormalShopCategorySelect(discord.ui.Select):
+    def __init__(self):
+        options = [discord.SelectOption(label=cat, description=f"تصفح قسم الـ {cat}", emoji="🛡️") for cat in CATEGORIES]
+        super().__init__(placeholder="📁 اختر قسم العتاد الإمبراطوري...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_cat = self.values[0]
+        view = discord.ui.View()
+        view.add_item(NormalShopSelect(selected_cat))
+        await interaction.response.send_message(f"🏛️ **أنت تستعرض الآن قسم: {selected_cat}**\nاختر القطعة المناسبة للشراء:", view=view, ephemeral=True)
+
+class NormalShopDropdownView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=180)
+        self.add_item(NormalShopCategorySelect())
 
-    @discord.ui.button(label="عروض رتب الشياطين الحصرية", style=discord.ButtonStyle.danger, emoji="👑", row=0)
-    async def dark_catalog(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="الانتقال للسوق المظلم 🕳️", style=discord.ButtonStyle.danger, emoji="🩸", row=1)
+    async def go_dark_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
-            title="🔥 عرش الأسلحة المحرمة والرتب المطلقة",
-            description="أنت تستعرض الآن أقوى العتاد في اللعبة بأسرها:\n\n1️⃣ **رتبة الشيطان الأبدي**\n2️⃣ **رتبة الجحيم القاتل**\n3️⃣ **رتبة السفاح القرمزي**\n\nكل فئة تحتوي على 25 قطعة مظلمة ترفع قوتك للحد الأقصى!",
-            color=discord.Color.dark_red()
+            title="🩸 تحذير: سوق الظلال الملعون",
+            description="هنا تُباع أسلحة الرتب الثلاث المرعبة:\n• **الشيطان الأبدي** 👑\n• **الجحيم القاتل** 🔥\n• **السفاح القرمزي** 🔴\n\nالعملة المستخدمة: **الألماس الأسود** 💎.",
+            color=discord.Color.dark_embed()
         )
-        embed.set_footer(text="العملة المستخدمة: الألماس الأسود النادر 💎")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.edit_message(embed=embed, view=DarkShopDropdownView())
 
-    @discord.ui.button(label="العودة للمنطقة الآمنة 🏛️", style=discord.ButtonStyle.secondary, emoji="🔙", row=0)
+
+class DarkShopSelect(discord.ui.Select):
+    def __init__(self, category_name: str):
+        self.category_name = category_name
+        items = DARK_SHOP.get(category_name, [])[:25]
+        options = []
+        for idx, item in enumerate(items):
+            options.append(discord.SelectOption(
+                label=item["name"][:100],
+                description=f"السعر: {item['price']:,} ألماس أسود | القوة: +{item['power']}",
+                value=str(idx)
+            ))
+        super().__init__(placeholder=f"اختر من أسلحة الظلال {category_name}...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id})
+        if not user_data:
+            return await interaction.followup.send("❌ يرجى التسجيل أولاً باستخدام `/تسجيل`.", ephemeral=True)
+        
+        item_idx = int(self.values[0])
+        item = DARK_SHOP[self.category_name][item_idx]
+        price = item["price"]
+        diamonds = user_data.get("diamonds", 0)
+
+        if diamonds < price:
+            return await interaction.followup.send(f"❌ رصيدك من الألماس الأسود ({diamonds:,} 💎) لا يكفي لشراء `{item['name']}` السعر المطلوب ({price:,} 💎).", ephemeral=True)
+
+        users_col.update_one(
+            {"user_id": user_id},
+            {
+                "$inc": {"diamonds": -price, "power": item["power"]},
+                "$push": {"inventory": item["name"]}
+            }
+        )
+        await interaction.followup.send(f"🩸 **تمت صفقة الظلال بنجاح!** اقتنيت `{item['name']}` المرعب وتمت إضافة طاقته الخارقة.", ephemeral=True)
+
+class DarkShopCategorySelect(discord.ui.Select):
+    def __init__(self):
+        options = [discord.SelectOption(label=cat, description=f"تصفح قسم ظلال الـ {cat}", emoji="🔥") for cat in CATEGORIES]
+        super().__init__(placeholder="🕳️ اختر قسم أسلحة الظلال المحرمة...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_cat = self.values[0]
+        view = discord.ui.View()
+        view.add_item(DarkShopSelect(selected_cat))
+        await interaction.response.send_message(f"🩸 **أنت تستعرض قسم الظلال المحرم: {selected_cat}**\nاختر السلاح المرعب لشرائه:", view=view, ephemeral=True)
+
+class DarkShopDropdownView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(DarkShopCategorySelect())
+
+    @discord.ui.button(label="العودة للمنطقة الآمنة 🏛️", style=discord.ButtonStyle.secondary, emoji="🔙", row=1)
     async def return_normal_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
             title="🏛️ متجر الإمبراطورية المركزي (المنطقة الآمنة)",
-            description="أهلاً بك مجدداً في النور. اختر القسم المناسب لتجهيز بطلك بأفضل معدات الإمبراطورية.",
+            description="أهلاً بك مجدداً في النور. اختر القسم المناسب لتجهيز بطلك.",
             color=discord.Color.gold()
         )
-        await interaction.response.edit_message(embed=embed, view=NormalShopView())
-
-class NormalShopView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=180)
-
-    @discord.ui.button(label="استعراض المتجر الإمبراطوري", style=discord.ButtonStyle.success, emoji="🏛️", row=0)
-    async def normal_catalog(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="🏛️ كتالوج متجر الإمبراطورية المركزي",
-            description="مرحباً بك في السوق الآمن. يتوفر هنا 200 قطعة عتاد رسمية موزعة على 8 فئات أساسية.",
-            color=discord.Color.gold()
-        )
-        embed.add_field(name="🛡️ الفئات المتاحة", value="خوذة | درع | بنطال | حذاء | سيف | مطرقة | خنجر | عصا سحرية", inline=False)
-        embed.set_footer(text="العملة المستخدمة: العملات الذهبية 🪙")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @discord.ui.button(label="الدخول للسوق المظلم 🕳️", style=discord.ButtonStyle.danger, emoji="🩸", row=0)
-    async def enter_dark_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="🩸 تحذير: أنت على وشك دخول سوق الظلال الملعون!",
-            description="هنا حيث تسود الشياطين وتُباع أسلحة الرتب الثلاث المرعبة:\n• **الشيطان الأبدي** 👑\n• **الجحيم القاتل** 🔥\n• **السفاح القرمزي** 🔴\n\nالعملة الوحيدة المقبولة هنا هي **الألماس الأسود** 💎.",
-            color=discord.Color.dark_embed()
-        )
-        await interaction.response.edit_message(embed=embed, view=DarkShopView())
+        await interaction.response.edit_message(embed=embed, view=NormalShopDropdownView())
 
 
 # ================== واجهات البنك (Bank Views) ==================
@@ -247,6 +325,85 @@ class BankWithdrawModal(discord.ui.Modal, title="سحب أموال من البن
         
         users_col.update_one({"user_id": user_id}, {"$inc": {"bank": -val, "balance": val}})
         await interaction.followup.send(f"✅ تم سحب `{val:,}` 🪙 من البنك إلى محفظتك بنجاح!", ephemeral=True)
+
+
+# ================== واجهات الطوابق الشاملة بالأزرار المطلوبة ==================
+
+class FloorsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(label="الطابق التالي", style=discord.ButtonStyle.success, emoji="🏢", row=0)
+    async def next_floor_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id})
+        if not user_data:
+            return await interaction.response.send_message("❌ يرجى التسجيل أولاً باستخدام `/تسجيل`.", ephemeral=True)
+        
+        current_floor = user_data.get("max_floor", 0) + 1
+        power = user_data.get("power", 100)
+        required_power = current_floor * 80
+
+        if power >= required_power:
+            reward = current_floor * 500
+            users_col.update_one(
+                {"user_id": user_id},
+                {
+                    "$inc": {"balance": reward, "kills": 1},
+                    "$set": {"max_floor": current_floor}
+                }
+            )
+            embed = discord.Embed(
+                title=f"🏢 الطابق #{current_floor} - انتصار باهر!",
+                description=f"تم سحق وحوش الطابق `{current_floor}` بنجاح بفضل قوتك (`{power:,}`)!",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="🎁 مكافأة الصعود", value=f"+{reward:,} 🪙", inline=False)
+        else:
+            embed = discord.Embed(
+                title=f"🏢 الطابق #{current_floor} - هزيمة قاسية!",
+                description=f"طاقتك (`{power:,}`) غير كافية لصد وحوش هذا الطابق! المطلوب `{required_power:,}` طاقة كحد أدنى.",
+                color=discord.Color.red()
+            )
+            embed.set_footer(text="قم بترقية معداتك لتجاوز هذا الطابق.")
+
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="المتجر", style=discord.ButtonStyle.primary, emoji="🏛️", row=0)
+    async def shop_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🏛️ متجر الإمبراطورية المركزي",
+            description="اختر القسم وتصفح العتاد عبر القوائم المنسدلة المتاحة بالأسفل.",
+            color=discord.Color.gold()
+        )
+        await interaction.response.send_message(embed=embed, view=NormalShopDropdownView(), ephemeral=True)
+
+    @discord.ui.button(label="تطوير معدات", style=discord.ButtonStyle.secondary, emoji="⚡", row=0)
+    async def upgrade_gear_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        users_col.update_one({"user_id": user_id}, {"$inc": {"power": 500, "balance": -2000}}, upsert=True)
+        await interaction.response.send_message("⚡ **تم تطوير معداتك!** زادت طاقتك بمقدار `500` مقابل خصم `2,000` ذهبة.", ephemeral=True)
+
+    @discord.ui.button(label="حقيبتي", style=discord.ButtonStyle.secondary, emoji="🎒", row=1)
+    async def inventory_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id})
+        if not user_data:
+            return await interaction.response.send_message("❌ غير مسجل.", ephemeral=True)
+        inv = user_data.get("inventory", [])
+        inv_text = "\n".join([f"• {item}" for item in inv]) if inv else "الحقيبة فارغة حالياً."
+        embed = discord.Embed(
+            title=f"🎒 حقيبة العتاد الخاصة بك",
+            description=inv_text,
+            color=discord.Color.blurple()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="تطوير معدلاتي", style=discord.ButtonStyle.secondary, emoji="📊", row=1)
+    async def upgrade_stats_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        users_col.update_one({"user_id": user_id}, {"$inc": {"attack": 50, "defense": 50, "critical": 25}}, upsert=True)
+        await interaction.response.send_message("📊 **تم تطوير المعدلات القتالية!** ارتفعت معدلات الهجوم والدفاع والضربة القاتلة بنجاح.", ephemeral=True)
 
 
 # ================== واجهات واختيارات المطورين ==================
@@ -365,11 +522,10 @@ class DevControlView(discord.ui.View):
 async def shop_command(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🏛️ متجر الإمبراطورية المركزي",
-        description="أهلاً بك أيها المقاتل. يمكنك الانتقال للسوق المظلم الخطير عبر الأزرار أسفل القائمة.",
+        description="أهلاً بك أيها المقاتل. اختر القسم وتصفح العتاد عبر القوائم المنسدلة بالأسفل.",
         color=discord.Color.gold()
     )
-    embed.add_field(name="⚔️ الأقسام المتوفرة", value="• خوذة | درع | بنطال | حذاء\n• سيف | مطرقة | خنجر | عصا سحرية\n*(25 قطعة فريدة لكل فئة)*", inline=False)
-    await interaction.response.send_message(embed=embed, view=NormalShopView(), ephemeral=True)
+    await interaction.response.send_message(embed=embed, view=NormalShopDropdownView(), ephemeral=True)
 
 @bot.tree.command(name="البنك", description="فتح لوحة البنك المركزي لإدارة أموالك (إيداع وسحب)")
 async def bank_command(interaction: discord.Interaction):
@@ -399,34 +555,12 @@ async def floors_command(interaction: discord.Interaction):
         return await interaction.response.send_message("❌ يرجى التسجيل أولاً باستخدام `/تسجيل`.", ephemeral=True)
     
     current_floor = user_data.get("max_floor", 0) + 1
-    power = user_data.get("power", 100)
-    
-    # محاكاة بسيطة لصعود الطابق
-    required_power = current_floor * 80
-    if power >= required_power:
-        reward = current_floor * 500
-        users_col.update_one(
-            {"user_id": user_id},
-            {
-                "$inc": {"balance": reward, "kills": 1},
-                "$set": {"max_floor": current_floor}
-            }
-        )
-        embed = discord.Embed(
-            title=f"🏢 الطابق #{current_floor} - الانتصار!",
-            description=f"لقد واجهت وحوش الطابق `{current_floor}` وسحقتهم باقتدار بفضل طاقتك (`{power:,}`)!",
-            color=discord.Color.green()
-        )
-        embed.add_field(name="🎁 مكافأة الصعود", value=f"+{reward:,} 🪙", inline=False)
-    else:
-        embed = discord.Embed(
-            title=f"🏢 الطابق #{current_floor} - هزيمة!",
-            description=f"طاقتك الحالية (`{power:,}`) لا تكفي لتجاوز وحوش هذا الطابق! المطلوب على الأقل `{required_power:,}` طاقة.",
-            color=discord.Color.red()
-        )
-        embed.set_footer(text="قم بترقية عتادك من المتاجر أو اطلب الدعم لتجاوز الطابق.")
-    
-    await interaction.response.send_message(embed=embed, ephemeral=False)
+    embed = discord.Embed(
+        title=f"🏢 بوابة الطوابق الإمبراطورية - الطابق التالي: #{current_floor}",
+        description="اضغط على زر **"الطابق التالي"** للبدء بالمعركة وصعود البرج، أو استخدم الأزرار الأخرى للإدارة.",
+        color=discord.Color.gold()
+    )
+    await interaction.response.send_message(embed=embed, view=FloorsView(), ephemeral=False)
 
 @bot.tree.command(name="تحويل", description="تحويل أموال من رصيدك لعضو آخر بالمنشن")
 @app_commands.describe(member="العضو المراد التحويل له", amount="المبلغ المراد تحويله")
