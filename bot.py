@@ -39,6 +39,11 @@ def is_developer(user_id):
         return True
     return devs_col.find_one({"user_id": str(user_id)}) is not None
 
+# دالة مسلعة لاستخراج الآيدي الصافي من المنشن أو النص
+def extract_user_id(text):
+    clean = text.strip().replace("<@", "").replace(">", "").replace("!", "")
+    return str(int(clean))
+
 # ================== نظام فحص ومنح الألقاب تلقائياً ==================
 def check_and_update_titles(user_id):
     user_data = users_col.find_one({"user_id": user_id})
@@ -477,27 +482,26 @@ class DeveloperControlView(discord.ui.View):
     @discord.ui.button(label="إضافة مطور جديد ⚡", style=discord.ButtonStyle.blurple, row=1)
     async def add_dev_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         class DevModal(discord.ui.Modal, title="إضافة مطور جديد للنظام"):
-            target_user = discord.ui.TextInput(label="أيدي المستخدم (User ID)", placeholder="اكتب آيدي العضو هنا...", required=True)
+            target_user = discord.ui.TextInput(label="منشن العضو (أو الأيدي)", placeholder="مثال: @Username", required=True)
             
             async def on_submit(self, interaction: discord.Interaction):
                 try:
-                    uid = str(int(self.target_user.value.strip()))
+                    uid = extract_user_id(self.target_user.value)
                     devs_col.update_one({"user_id": uid}, {"$set": {"user_id": uid}}, upsert=True)
                     await interaction.response.send_message(f"👑 **تم ترقية العضو <@{uid}> ليصبح مطوراً رسمياً في النظام!** (سيظهر له أمر `/المطور` الآن)", ephemeral=True)
-                except ValueError:
-                    await interaction.response.send_message("❌ الآيدي المدخل غير صحيح! تأكد من إدخال أرقام صحيحة.", ephemeral=True)
+                except Exception:
+                    await interaction.response.send_message("❌ الصيغة المدخلة غير صحيحة! تأكد من منشن العضو بشكل صحيح.", ephemeral=True)
 
         await interaction.response.send_modal(DevModal())
 
     @discord.ui.button(label="إزالة مطور 🗑️", style=discord.ButtonStyle.danger, row=1)
     async def remove_dev_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         class RemoveDevModal(discord.ui.Modal, title="إزالة مطور من النظام"):
-            target_user = discord.ui.TextInput(label="أيدي المستخدم أو منشنه", placeholder="اكتب آيدي العضو المراد إزالته...", required=True)
+            target_user = discord.ui.TextInput(label="منشن العضو المراد إزالته", placeholder="مثال: @Username", required=True)
             
             async def on_submit(self, interaction: discord.Interaction):
                 try:
-                    raw_target = self.target_user.value.strip().replace("<@", "").replace(">", "").replace("!", "")
-                    uid = str(int(raw_target))
+                    uid = extract_user_id(self.target_user.value)
                     
                     if int(uid) == OWNER_ID:
                         return await interaction.response.send_message("❌ لا يمكنك إزالة المالك الأساسي (أنت) من قائمة المطورين!", ephemeral=True)
@@ -507,20 +511,20 @@ class DeveloperControlView(discord.ui.View):
                         await interaction.response.send_message(f"🗑️ **تمت إزالة العضو <@{uid}> من قائمة المطورين بنجاح!**", ephemeral=True)
                     else:
                         await interaction.response.send_message("❌ هذا المستخدم ليس مدرجاً في قائمة المطورين الإضافيين.", ephemeral=True)
-                except ValueError:
-                    await interaction.response.send_message("❌ الآيدي المدخل غير صحيح! تأكد من إدخال أرقام صحيحة.", ephemeral=True)
+                except Exception:
+                    await interaction.response.send_message("❌ الصيغة المدخلة غير صحيحة! تأكد من منشن العضو بشكل صحيح.", ephemeral=True)
 
         await interaction.response.send_modal(RemoveDevModal())
 
     @discord.ui.button(label="تحويل عملات لشخص 💸", style=discord.ButtonStyle.blurple, row=2)
     async def transfer_money_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        class TransferModal(discord.ui.Modal, title="تحويل عملات بالمنشن أو الآيدي"):
-            target = discord.ui.TextInput(label="منشن العضو أو الأيدي", placeholder="مثال: @user أو الـ ID", required=True)
+        class TransferModal(discord.ui.Modal, title="تحويل عملات بالمنشن"):
+            target = discord.ui.TextInput(label="منشن العضو المراد التحويل له", placeholder="مثال: @Username", required=True)
             amount = discord.ui.TextInput(label="المبلغ المراد تحويله", placeholder="مثال: 50000", required=True)
             
             async def on_submit(self, interaction: discord.Interaction):
                 try:
-                    raw_target = self.target.value.strip().replace("<@", "").replace(">", "").replace("!", "")
+                    raw_target = extract_user_id(self.target.value)
                     amt = int(self.amount.value.strip())
                     
                     target_data = users_col.find_one({"user_id": raw_target})
@@ -531,39 +535,42 @@ class DeveloperControlView(discord.ui.View):
                         
                     await interaction.response.send_message(f"💸 **تم تحويل مبلغ `{amt:,}` 🪙 بنجاح إلى حساب العضو <@{raw_target}>!**", ephemeral=True)
                 except Exception:
-                    await interaction.response.send_message("❌ حدث خطأ في البيانات المدخلة، تأكد من صحة الآيدي والمبلغ.", ephemeral=True)
+                    await interaction.response.send_message("❌ حدث خطأ في البيانات المدخلة، تأكد من منشن العضو وكتابة رقم صحيح للمبلغ.", ephemeral=True)
 
         await interaction.response.send_modal(TransferModal())
 
     @discord.ui.button(label="إدارة عتاد اللاعب ⚔️", style=discord.ButtonStyle.danger, row=2)
     async def manage_gear_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         class GearModal(discord.ui.Modal, title="منح أو سحب عتاد وسلاح للمقاتل"):
-            target = discord.ui.TextInput(label="آيدي اللاعب أو منشنه", placeholder="أدخل الآيدي هنا...", required=True)
+            target = discord.ui.TextInput(label="منشن اللاعب المستهدف", placeholder="مثال: @Username", required=True)
             gear_name = discord.ui.TextInput(label="اسم العتاد أو السلاح", placeholder="مثال: سيف التنين الأسطوري", required=True)
             action_type = discord.ui.TextInput(label="العملية (إضافة / سحب)", placeholder="اكتب: إضافة أو سحب", required=True)
             
             async def on_submit(self, interaction: discord.Interaction):
-                raw_target = self.target.value.strip().replace("<@", "").replace(">", "").replace("!", "")
-                gear = self.gear_name.value.strip()
-                act = self.action_type.value.strip().lower()
-                
-                user_data = users_col.find_one({"user_id": raw_target})
-                if not user_data:
-                    return await interaction.response.send_message("❌ هذا المستخدم غير مسجل في قاعدة البيانات!", ephemeral=True)
-                
-                inv = user_data.get("inventory", [])
-                if "إضافة" in act or "add" in act:
-                    if gear not in inv:
-                        inv.append(gear)
-                    users_col.update_one({"user_id": raw_target}, {"$set": {"inventory": inv}})
-                    await interaction.response.send_message(f"⚔️ **تم منح العتاد `{gear}` بنجاح للمقاتل <@{raw_target}>!**", ephemeral=True)
-                elif "سحب" in act or "remove" in act:
-                    if gear in inv:
-                        inv.remove(gear)
-                    users_col.update_one({"user_id": raw_target}, {"$set": {"inventory": inv}})
-                    await interaction.response.send_message(f"🛡️ **تم سحب العتاد `{gear}` من المقاتل <@{raw_target}> بنجاح!**", ephemeral=True)
-                else:
-                    await interaction.response.send_message("❌ نوع العملية غير صحيح، اكتب (إضافة) أو (سحب).", ephemeral=True)
+                try:
+                    raw_target = extract_user_id(self.target.value)
+                    gear = self.gear_name.value.strip()
+                    act = self.action_type.value.strip().lower()
+                    
+                    user_data = users_col.find_one({"user_id": raw_target})
+                    if not user_data:
+                        return await interaction.response.send_message("❌ هذا المستخدم غير مسجل في قاعدة البيانات!", ephemeral=True)
+                    
+                    inv = user_data.get("inventory", [])
+                    if "إضافة" in act or "add" in act:
+                        if gear not in inv:
+                            inv.append(gear)
+                        users_col.update_one({"user_id": raw_target}, {"$set": {"inventory": inv}})
+                        await interaction.response.send_message(f"⚔️ **تم منح العتاد `{gear}` بنجاح للمقاتل <@{raw_target}>!**", ephemeral=True)
+                    elif "سحب" in act or "remove" in act:
+                        if gear in inv:
+                            inv.remove(gear)
+                        users_col.update_one({"user_id": raw_target}, {"$set": {"inventory": inv}})
+                        await interaction.response.send_message(f"🛡️ **تم سحب العتاد `{gear}` من المقاتل <@{raw_target}> بنجاح!**", ephemeral=True)
+                    else:
+                        await interaction.response.send_message("❌ نوع العملية غير صحيح، اكتب (إضافة) أو (سحب).", ephemeral=True)
+                except Exception:
+                    await interaction.response.send_message("❌ حدث خطأ، تأكد من منشن العضو بشكل صحيح.", ephemeral=True)
 
         await interaction.response.send_modal(GearModal())
 
@@ -584,10 +591,10 @@ async def developer_panel(interaction: discord.Interaction):
             "✨ *«أهلاً بك أيها المطور العظيم في قلب النظام المركزي. من هنا تستطيع إدارة كل صغيرة وكبيرة في عالم المقاتلين والأبراج، وتوجيه مقاليد السلطة والثروات بلمسة زر واحدة.»*\n\n"
             "🛡️ **صلاحياتك المطلقة المتاحة في هذه اللوحة:**\n"
             "• ضخ كميات لا نهائية من العملات النقدية والألماس النادر.\n"
-            "• ترقية وإضافة مطورين جدد لدعم إدارة النظام بالمنشن.\n"
-            "• إزالة المطورين غير المرغوب بهم من لوحة التحكم بضغطة زر.\n"
+            "• ترقية وإضافة مطورين جدد لدعم إدارة النظام بالمنشن الفوري.\n"
+            "• إزالة المطورين غير المرغوب بهم من لوحة التحكم بالمنشن.\n"
             "• تحويل الأموال والأرصدة الفورية لأي مقاتل عبر منشنه.\n"
-            "• حقيبة الأسلحة والعتاد: منح أو سحب أي درع أو سلاح أسطوري.\n\n"
+            "• حقيبة الأسلحة والعتاد: منح أو سحب أي درع أو سلاح أسطوري بالمنشن.\n\n"
             f"📋 **قائمة الأوامر الفعالة والمضافة حديثاً في النظام:**\n{commands_list_str}"
         ),
         color=discord.Color.from_rgb(138, 43, 226)
