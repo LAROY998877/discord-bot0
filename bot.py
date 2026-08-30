@@ -77,35 +77,54 @@ FAST_WORDS = [
 ]
 
 
-# ==================== دالة توليد صورة الكلمة للعبة أسرع ====================
+# ==================== دالة توليد صورة الكلمة فقط (حجم كبير ومنتصف) ====================
 def create_word_image(word: str) -> discord.File:
-    width, height = 750, 320
+    width, height = 700, 220
     image = Image.new("RGB", (width, height), color=(18, 18, 24))
     draw = ImageDraw.Draw(image)
     
     # إطار جانبي أنيق بنفس لون الثيم الأزرق
     draw.rectangle([0, 0, 12, height], fill=(0, 162, 255))
     
-    try:
-        font_small = ImageFont.truetype("DejaVuSans-Bold.ttf", 26)
-        font_word = ImageFont.truetype("DejaVuSans-Bold.ttf", 46)
-    except IOError:
-        font_small = ImageFont.load_default()
+    # محاولة تحميل خط بحجم كبير جداً وواضح من مسارات السيرفرات
+    font_word = None
+    font_paths = [
+        "DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    ]
+    
+    for path in font_paths:
+        try:
+            font_word = ImageFont.truetype(path, 52)
+            break
+        except IOError:
+            continue
+            
+    if font_word is None:
         font_word = ImageFont.load_default()
         
-    # معالجة النصوص العربية لظهر متصلة وبشكل صحيح
+    # معالجة النصوص العربية لتظهر متصلة وبشكل صحيح تماماً
     try:
         reshaped_text = arabic_reshaper.reshape(word)
         display_word = get_display(reshaped_text)
     except:
         display_word = word
 
-    # كتابة النصوص داخل الصورة
-    draw.text((40, 50), "حاول كتابة الكلمة بسرعة", fill=(210, 210, 210), font=font_small)
-    draw.text((40, 95), "لديك 15 ثانية", fill=(130, 130, 150), font=font_small)
+    # حساب أبعاد النص لتوسيطه تماماً في منتصف الصورة
+    try:
+        bbox = draw.textbbox((0, 0), display_word, font=font_word)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+    except AttributeError:
+        text_width, text_height = draw.textsize(display_word, font=font_word)
+
+    x = (width - text_width) // 2
+    y = (height - text_height) // 2
     
-    # الكلمة الرئيسية بخط عريض وواضح
-    draw.text((40, 190), display_word, fill=(255, 255, 255), font=font_word)
+    # رسم الكلمة وحدها في منتصف الصورة وبدون أي إضافات
+    draw.text((x, y), display_word, fill=(255, 255, 255), font=font_word)
     
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
@@ -345,18 +364,18 @@ class CelebrityLobbyView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=None)
 
 
-# ==================== [اللعبة 4] لعبة أسرع ⚡ (بالصور والتصميم الجديد) ====================
+# ==================== [اللعبة 4] لعبة أسرع ⚡ (صورة الكلمة الكبيرة فقط) ====================
 async def start_fast_game_round(interaction: discord.Interaction, host: discord.User):
     word = random.choice(FAST_WORDS)
     file = create_word_image(word)
     
     embed = discord.Embed(
         title="⚡ لعبة أسرع!",
-        description="اكتب الكلمة الظاهرة في الصورة بالأسفل بأسرع وقت قبل انتهاء الوقت!",
+        description="اكتب الكلمة الظاهرة في الصورة أدناه بأسرع وقت!\n⏰ لديك **15 ثانية** فقط.",
         color=discord.Color.teal()
     )
     embed.set_image(url="attachment://fast_word.png")
-    embed.set_footer(text="لعبة أسرع | لديك 15 ثانية فقط!")
+    embed.set_footer(text="لعبة أسرع | أكتب الكلمة بالضبط كما في الصورة!")
 
     await interaction.response.edit_message(embed=embed, view=None, attachments=[file])
     message = await interaction.original_response()
@@ -417,7 +436,7 @@ class FastLobbyView(discord.ui.View):
     def generate_embed(self) -> discord.Embed:
         embed = discord.Embed(
             title="⚡ لعبة أسرع",
-            description="سيظهر لك البوت **صورة** تحتوي على كلمة صعبة (عربية أو أجنبية).\nأول شخص يكتبها بالشات خلال **15 ثانية** يفوز!\n\n**المنظم:** " + self.host.mention,
+            description="سيظهر لك البوت **صورة تحتوي على الكلمة فقط**.\nأول شخص يكتبها بالشات خلال **15 ثانية** يفوز!\n\n**المنظم:** " + self.host.mention,
             color=discord.Color.teal()
         )
         embed.set_footer(text="اضغط على (بدء 🚀) للبدء!")
@@ -448,7 +467,7 @@ class MainGameSelect(discord.ui.Select):
             discord.SelectOption(label="لعبة الأسئلة والصراحة", description="3 مستويات: عادي، متوسط، وجريء جداً", emoji="🎯"),
             discord.SelectOption(label="لعبة لو خيروك", description="خيارات صعبة ومواقف مضحكة", emoji="🆚"),
             discord.SelectOption(label="لعبة المشاهير", description="تخمين صورة المشهور (عرب وأجانب)", emoji="📸"),
-            discord.SelectOption(label="لعبة أسرع", description="كتابة الكلمة من الصورة بأسرع وقت (15 ثانية)", emoji="⚡"),
+            discord.SelectOption(label="لعبة أسرع", description="كتابة الكلمة الكبيرة من الصورة (15 ثانية)", emoji="⚡"),
             discord.SelectOption(label="قريباً...", description="مكان مخصص للعبتك القادمة", emoji="⏳")
         ]
         super().__init__(placeholder="اختر لعبة من المنيو لتشغيلها...", min_values=1, max_values=1, options=options)
@@ -501,7 +520,7 @@ def generate_main_embed() -> discord.Embed:
                     "📸 **3. لعبة المشاهير**\n"
                     "تخمين اسم المشهور من الصورة بسرعة قبل انتهاء الوقت!\n\n"
                     "⚡ **4. لعبة أسرع**\n"
-                    "اختبار سرعة الكتابة عبر صور تصميمية احترافية خلال 15 ثانية!",
+                    "تحدي سرعة الكتابة لكلمات واضحة وكبيرة داخل الصورة خلال 15 ثانية!",
         color=discord.Color.from_rgb(255, 105, 180)
     )
 
@@ -518,7 +537,7 @@ async def games_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ البوت {bot.user} شغال بنجاح وجاهز بصور لعبة أسرع ⚡!")
+    print(f"✅ البوت {bot.user} شغال وجاهز بصور لعبة أسرع المكبرة ⚡!")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 bot.run(TOKEN)
