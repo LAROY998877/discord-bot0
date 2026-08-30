@@ -329,8 +329,8 @@ class BankWithdrawModal(discord.ui.Modal, title="سحب أموال من البن
 
 # ================== نظام تطوير المعدلات المنفصل (Stats Upgrade) ==================
 
-STATS_COST = 5000  # تكلفة التطوير لكل ضغطة (تستطيع تعديلها حسب رغبتك)
-STATS_INCREMENT = 100  # مقدار الزيادة في المعدل
+STATS_COST = 5000
+STATS_INCREMENT = 100
 
 class StatsUpgradeSelect(discord.ui.Select):
     def __init__(self):
@@ -359,7 +359,6 @@ class StatsUpgradeSelect(discord.ui.Select):
 
         stat_key = self.values[0]
         
-        # خصم العملات وزيادة المعدل المطلوب بلا حدود
         users_col.update_one(
             {"user_id": user_id},
             {
@@ -379,6 +378,158 @@ class StatsUpgradeView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=180)
         self.add_item(StatsUpgradeSelect())
+
+
+# ================== نظام الليدربورد والترتيب الفخم (Leaderboard) ==================
+
+def get_leaderboard_embed(category: str):
+    embed = discord.Embed(color=discord.Color.gold())
+    
+    if category == "rich":
+        # ترتيب أغنى شخص (المحفظة + البنك)
+        users = list(users_col.find({}))
+        # حساب إجمالي الثروة للترتيب
+        sorted_users = sorted(users, key=lambda x: x.get("balance", 0) + x.get("bank", 0), reverse=True)[:10]
+        
+        embed.title = "👑 لوحة شرف الأثرياء - أغنى شخصيات الإمبراطورية"
+        embed.description = "أعظم أباطرة المال والأعمال الذين يمتلكون الثروات الطائلة والذهب الخالص."
+        
+        desc = ""
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        for idx, u in enumerate(sorted_users):
+            total_money = u.get("balance", 0) + u.get("bank", 0)
+            uid = u.get("user_id")
+            desc += f"{medals[idx]} <@{uid}> — **{total_money:,}** 🪙\n"
+        embed.add_field(name="💰 قائمة العشرة الأوائل (المحفظة + البنك)", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
+
+    elif category == "power":
+        # ترتيب أقوى شخص
+        sorted_users = list(users_col.find({}).sort("power", -1).limit(10))
+        embed.title = "⚡ لوحة شرف الأقوياء - أسياد القتال المطلق"
+        embed.description = "المقاتلون الذين وصلت طاقاتهم القتالية إلى مستويات مرعبة لا تُقهر."
+        
+        desc = ""
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        for idx, u in enumerate(sorted_users):
+            pwr = u.get("power", 0)
+            uid = u.get("user_id")
+            desc += f"{medals[idx]} <@{uid}> — الطاقة: **{pwr:,}** ⚡\n"
+        embed.add_field(name="⚔️ قائمة أقوى المقاتلين", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
+
+    elif category == "killers":
+        # ترتيب قاهر اللاعبين (حسب عدد الخصوم/القتلى أو الكيلز)
+        sorted_users = list(users_col.find({}).sort("kills", -1).limit(10))
+        embed.title = "💀 لوحة شرف قاهري اللاعبين والوحوش"
+        embed.description = "السفاحون والجلادون الذين أبادوا أكبر عدد من الخصوم في البرج."
+        
+        desc = ""
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        for idx, u in enumerate(sorted_users):
+            kills = u.get("kills", 0)
+            uid = u.get("user_id")
+            desc += f"{medals[idx]} <@{uid}> — الضحايا: **{kills:,}** 💀\n"
+        embed.add_field(name="🗡️ أبطال الإبادة والفتك", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
+
+    elif category == "imperial_weapons":
+        # ترتيب الأسلحة الإمبراطورية (حسب عدد الأسلحة العادية التي تحتوي كلمة "إمبراطوري" في الحقيبة)
+        users = list(users_col.find({}))
+        user_counts = []
+        for u in users:
+            inv = u.get("inventory", [])
+            count = sum(1 for item in inv if "إمبراطوري" in item)
+            user_counts.append((u.get("user_id"), count))
+        
+        sorted_users = sorted(user_counts, key=lambda x: x[1], reverse=True)[:10]
+        
+        embed.title = "🛡️ لوحة شرف أسياد الأسلحة الإمبراطورية"
+        embed.description = "المقاتلون الذين جمعوا أرقى وأقوى قطع العتاد الإمبراطوري النظامي."
+        
+        desc = ""
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        for idx, (uid, count) in enumerate(sorted_users):
+            desc += f"{medals[idx]} <@{uid}> — عدد القطع: **{count}** 🛡️\n"
+        embed.add_field(name="🏛️ امتلاك العتاد الإمبراطوري", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
+
+    elif category == "dark_weapons":
+        # ترتيب الأسلحة المحرمة / الظلال (حسب القطع في الحقيبة التي تحتوي على كلمات ظلال/محرم/رتب الظلال)
+        users = list(users_col.find({}))
+        user_counts = []
+        dark_keywords = ["ظلال", "محرم", "الشيطان", "الجحيم", "السفاح القرمزي"]
+        for u in users:
+            inv = u.get("inventory", [])
+            count = sum(1 for item in inv if any(k in item for k in dark_keywords))
+            user_counts.append((u.get("user_id"), count))
+        
+        sorted_users = sorted(user_counts, key=lambda x: x[1], reverse=True)[:10]
+        
+        embed.title = "🕳️ لوحة شرف حائزي الأسلحة المحرمة (الظلال)"
+        embed.description = "الأسياد المظلمون الذين تجرؤوا واقتنوا أسلحة السوق المظلم الملعونة."
+        
+        desc = ""
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        for idx, (uid, count) in enumerate(sorted_users):
+            desc += f"{medals[idx]} <@{uid}> — الترسانة المحرمة: **{count}** 🩸\n"
+        embed.add_field(name="🔥 مرعبة الظلال والأسلحة المحرمة", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
+
+    elif category == "titles":
+        # ترتيب الألقاب (حسب عدد الألقاب المفتوحة unlocked_titles)
+        users = list(users_col.find({}))
+        user_counts = []
+        for u in users:
+            titles = u.get("unlocked_titles", ["المبتدئ"])
+            count = len(titles)
+            user_counts.append((u.get("user_id"), count))
+        
+        sorted_users = sorted(user_counts, key=lambda x: x[1], reverse=True)[:10]
+        
+        embed.title = "👑 لوحة شرف هواة الألقاب الأسطورية"
+        embed.description = "الشخصيات الأكثر شرفاً وهيبة الحاصلة على ألقاب قيصرية متعددة."
+        
+        desc = ""
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        for idx, (uid, count) in enumerate(sorted_users):
+            desc += f"{medals[idx]} <@{uid}> — عدد الألقاب: **{count}** 👑\n"
+        embed.add_field(name="🏆 هيبة الألقاب الإمبراطورية", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
+
+    elif category == "floors":
+        # ترتيب الطوابق (حسب max_floor)
+        sorted_users = list(users_col.find({}).sort("max_floor", -1).limit(10))
+        embed.title = "🏢 لوحة شرف قاهري البرج (الطوابق)"
+        embed.description = "المغامرون الذين صعدوا أعمق وأعلى طوابق البرج القتالي."
+        
+        desc = ""
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        for idx, u in enumerate(sorted_users):
+            floor = u.get("max_floor", 0)
+            uid = u.get("user_id")
+            desc += f"{medals[idx]} <@{uid}> — الطابق: **{floor}** 🏢\n"
+        embed.add_field(name="🗼 صعود الأبراج القيصرية", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
+
+    embed.set_footer(text="✨ يتم تحديث الليدربورد تلقائياً وفورياً بناءً على إنجازات اللاعبين.")
+    return embed
+
+class LeaderboardSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="ترتيب أغنى شخص", description="أفضل الأثرياء من حيث الذهب (المحفظة والبنك)", emoji="👑", value="rich"),
+            discord.SelectOption(label="ترتيب أقوى شخص", description="أعلى المقاتلين من حيث الطاقة الإجمالية", emoji="⚡", value="power"),
+            discord.SelectOption(label="ترتيب قاهر اللاعبين", description="أكثر اللاعبين إبادة للخصوم والوحوش", emoji="💀", value="killers"),
+            discord.SelectOption(label="ترتيب الأسلحة الإمبراطورية", description="أكثر من يمتلك عتاداً إمبراطورياً نظامياً", emoji="🛡️", value="imperial_weapons"),
+            discord.SelectOption(label="ترتيب الأسلحة المحرمة", description="أكثر من يمتلك أسلحة الظلال والسوق المظلم", emoji="🕳️", value="dark_weapons"),
+            discord.SelectOption(label="ترتيب الألقاب", description="أكثر اللاعبين امتلاكاً للألقاب الأسطورية", emoji="🏆", value="titles"),
+            discord.SelectOption(label="ترتيب الطوابق", description="أبطال صعود البرج والطوابق القيصرية", emoji="🏢", value="floors"),
+        ]
+        super().__init__(placeholder="🌐 اختر صنف الليدربورد والترتيب المطلوب...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_cat = self.values[0]
+        embed = get_leaderboard_embed(selected_cat)
+        await interaction.response.edit_message(embed=embed, view=LeaderboardView())
+
+class LeaderboardView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(LeaderboardSelect())
 
 
 # ================== واجهات الطوابق الشاملة بالأزرار المطلوبة ==================
@@ -632,6 +783,16 @@ async def upgrade_stats_command(interaction: discord.Interaction):
         color=discord.Color.blurple()
     )
     await interaction.response.send_message(embed=embed, view=StatsUpgradeView(), ephemeral=True)
+
+@bot.tree.command(name="الترتيب", description="عرض لوحات الشرف والليدربورد التلقائي لكافة التصنيفات")
+async def leaderboard_command(interaction: discord.Interaction):
+    embed = get_leaderboard_embed("rich")
+    await interaction.response.send_message(embed=embed, view=LeaderboardView(), ephemeral=False)
+
+@bot.tree.command(name="ليدربورد", description="عرض لوحات الشرف والليدربورد التلقائي لكافة التصنيفات")
+async def l_command(interaction: discord.Interaction):
+    embed = get_leaderboard_embed("rich")
+    await interaction.response.send_message(embed=embed, view=LeaderboardView(), ephemeral=False)
 
 @bot.tree.command(name="تحويل", description="تحويل أموال من رصيدك لعضو آخر بالمنشن")
 @app_commands.describe(member="العضو المراد التحويل له", amount="المبلغ المراد تحويله")
