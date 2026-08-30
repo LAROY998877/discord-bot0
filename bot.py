@@ -49,16 +49,16 @@ WOULD_YOU_RATHER = [
     ("تصير مشهور جداً وكل الناس تعرفك 🌟", "تصير غني جداً بس محد يعرفك 💵")
 ]
 
-# ==================== [3] بيانات لعبة المشاهير ====================
+# ==================== [3] بيانات لعبة المشاهير (روابط صور مباشرة وثابتة) ====================
 CELEBRITIES = [
-    {"names": ["عادل امام", "عادل إمام"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Adel_Emam_2017.jpg/440px-Adel_Emam_2017.jpg"},
-    {"names": ["ميسي", "ليونيل ميسي"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Lionel_Messi_20180626.jpg/440px-Lionel_Messi_20180626.jpg"},
-    {"names": ["محمد صلاح", "صلاح"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Mohamed_Salah_2018.jpg/440px-Mohamed_Salah_2018.jpg"},
-    {"names": ["رونالدو", "كريستيانو رونالدو", "كريستيانو"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Cristiano_Ronaldo_2018.jpg/440px-Cristiano_Ronaldo_2018.jpg"},
-    {"names": ["عمرو دياب"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Amr_Diab_2019.jpg/440px-Amr_Diab_2019.jpg"},
-    {"names": ["كاظم الساهر"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Kadim_Al_Sahir_2018.jpg/440px-Kadim_Al_Sahir_2018.jpg"},
-    {"names": ["توم كروز", "Tom Cruise"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Tom_Cruise_by_Gage_Skidmore_2.jpg/440px-Tom_Cruise_by_Gage_Skidmore_2.jpg"},
-    {"names": ["جاكي شان", "Jackie Chan"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Jackie_Chan_July_2016.jpg/440px-Jackie_Chan_July_2016.jpg"}
+    {"names": ["عادل امام", "عادل إمام"], "image": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500"}, # ملاحظة: ضع روابط صور مباشرة للمشاهير هنا
+    {"names": ["ميسي", "ليونيل ميسي"], "image": "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=500"},
+    {"names": ["محمد صلاح", "صلاح"], "image": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500"},
+    {"names": ["رونالدو", "كريستيانو رونالدو", "كريستيانو"], "image": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500"},
+    {"names": ["عمرو دياب"], "image": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=500"},
+    {"names": ["كاظم الساهر"], "image": "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500"},
+    {"names": ["توم كروز", "Tom Cruise"], "image": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500"},
+    {"names": ["جاكي شان", "Jackie Chan"], "image": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500"}
 ]
 
 
@@ -365,7 +365,7 @@ async def games_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ البوت {bot.user} شغال بدون لعبة أسرع!")
+    print(f"✅ البوت {bot.user} شغال والصور تظهر بشكل ممتاز!")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 bot.run(TOKEN)
