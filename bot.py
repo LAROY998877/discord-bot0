@@ -309,7 +309,9 @@ class DevAddUserSelectView(discord.ui.View):
         async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
             chosen_member = select.values[0]
             devs_col.update_one({"user_id": str(chosen_member.id)}, {"$set": {"user_id": str(chosen_member.id)}}, upsert=True)
-            await inter.response.send_message(f"🛠️ **تمت الترقية بنجاح!** أصبح العضو {chosen_member.mention} مطوراً معتمداً في النظام الإمبراطوري.", ephemeral=True)
+            # تم التعديل هنا لاستخدام followup بدلاً من send_message لمنع حدوث خطأ
+            await inter.response.defer(ephemeral=True)
+            await inter.followup.send(f"🛠️ **تمت الترقية بنجاح!** أصبح العضو {chosen_member.mention} مطوراً معتمداً في النظام الإمبراطوري.", ephemeral=True)
         self.add_item(select_callback)
 
 class DevSelect(discord.ui.Select):
