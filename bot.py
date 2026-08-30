@@ -800,7 +800,6 @@ async def profile_command(interaction: discord.Interaction):
     )
     embed.set_thumbnail(url=interaction.user.display_avatar.url)
     
-    # [تم الإصلاح هنا]: تم استخدام الطريقة الآمنة لتنسيق النص وتجنب مشاكل f-string الـ yaml
     yaml_box = "```yaml\n" + custom_title + "\n```"
     embed.add_field(
         name="👑 الرتبة واللقب الحالي",
