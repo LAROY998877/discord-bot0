@@ -1125,9 +1125,8 @@ class ImperialBankView(discord.ui.View):
         placeholder="🏛️ اختر خدمة من البنك الإمبراطوري...",
         options=[
             discord.SelectOption(label="تحويل العملات", description="حوّل العملات إلى شخص آخر بالمنشن", emoji="💱"),
-            discord.SelectOption(label="القروض", description="طلب قرض أو متابعة وسداد القرض الحالي", emoji="🏦"),
             discord.SelectOption(label="الراتب اليومي", description=f"استلم راتبك اليومي ({DAILY_SALARY} عملة)", emoji="💰"),
-            discord.SelectOption(label="حسابي البنكي", description="عرض الرصيد والقرض وموعد السداد", emoji="📜")
+            discord.SelectOption(label="القروض", description="طلب قرض أو متابعة وسداد القرض الحالي", emoji="🏦")
         ]
     )
     async def bank_select(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -1169,32 +1168,6 @@ class ImperialBankView(discord.ui.View):
                     f"💵 الراتب: **{money(DAILY_SALARY)}** عملة\n"
                     f"💰 رصيدك الجديد: **{money(new_balance)}** عملة\n\n"
                     "⏰ عد بعد 24 ساعة لاستلام الراتب القادم."
-                ),
-                color=0xD4AF37
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-
-        if choice == "حسابي البنكي":
-            loan = user.get("loan", {})
-            if loan.get("active", False):
-                due = loan.get("due_at")
-                due_text = f"<t:{int(due.timestamp())}:F>" if due else "غير محدد"
-                loan_text = (
-                    f"🏦 قرض قائم\n"
-                    f"💳 المتبقي: **{money(loan.get('remaining', 0))}** عملة\n"
-                    f"📅 الموعد: {due_text}"
-                )
-            else:
-                loan_text = "✅ لا يوجد عليك قرض حالياً."
-
-            embed = discord.Embed(
-                title="📜 الحساب البنكي الإمبراطوري",
-                description=(
-                    f"👤 صاحب الحساب: {interaction.user.mention}\n\n"
-                    f"💰 الرصيد: **{money(user.get('balance', 0))}** عملة\n"
-                    f"💎 الألماس: **{money(user.get('diamonds', 0))}**\n\n"
-                    f"{loan_text}"
                 ),
                 color=0xD4AF37
             )
@@ -1272,51 +1245,64 @@ class LoanActionsView(discord.ui.View):
 
 
 async def process_overdue_loans():
-    """تسوية القروض المتأخرة عند تشغيل البوت وأثناء عمله."""
+    """فحص القروض المتأخرة وبيع المقتنيات تلقائياً لتسوية الدين."""
     now = utc_now()
-    overdue_users = users_col.find({"loan.active": True, "loan.due_at": {"$lte": now}})
 
-    for user in overdue_users:
-        user_id = user["user_id"]
+    for user in users_col.find({"loan.active": True}):
+        user_id = user.get("user_id")
         loan = user.get("loan", {})
-        remaining = int(loan.get("remaining", 0))
-        inventory = user.get("inventory", [])
-        sale_value = sell_inventory_for_loan(inventory)
+        due_at = loan.get("due_at")
 
-        # بيع جميع المقتنيات بالكامل، ثم استخدام قيمة البيع لتسوية الدين.
+        if not user_id or not due_at:
+            continue
+
+        # MongoDB قد يعيد التاريخ بدون timezone، لذلك نوحّده قبل المقارنة.
+        if due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=timezone.utc)
+
+        if due_at > now:
+            continue
+
+        remaining = max(0, int(loan.get("remaining", loan.get("total_due", 0))))
+        inventory = user.get("inventory", []) or []
+
+        if remaining <= 0:
+            users_col.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "loan.active": False,
+                    "loan.paid_at": now
+                }}
+            )
+            continue
+
+        # عند انتهاء المهلة يتم بيع كل المقتنيات الموجودة.
+        sale_value = sell_inventory_for_loan(inventory) if inventory else 0
         amount_paid_from_items = min(sale_value, remaining)
         new_remaining = remaining - amount_paid_from_items
-        new_balance = int(user.get("balance", 0))
 
-        if new_remaining == 0:
-            users_col.update_one(
-                {"user_id": user_id},
-                {"$set": {
-                    "inventory": [],
-                    "balance": new_balance,
-                    "loan": {
-                        "active": False,
-                        "paid_at": now,
-                        "settled_by_inventory": True,
-                        "sold_inventory_value": sale_value
-                    }
-                }}
-            )
+        update_data = {
+            "inventory": [],
+            "loan.last_collection_at": now,
+            "loan.sold_inventory_value": sale_value,
+            "loan.active": new_remaining > 0
+        }
+
+        if new_remaining > 0:
+            update_data["loan.remaining"] = new_remaining
         else:
-            users_col.update_one(
-                {"user_id": user_id},
-                {"$set": {
-                    "inventory": [],
-                    "loan.remaining": new_remaining,
-                    "loan.active": True,
-                    "loan.last_collection_at": now,
-                    "loan.sold_inventory_value": sale_value
-                }}
-            )
+            update_data["loan.remaining"] = 0
+            update_data["loan.paid_at"] = now
+            update_data["loan.settled_by_inventory"] = True
+
+        users_col.update_one(
+            {"user_id": user_id, "loan.active": True},
+            {"$set": update_data}
+        )
 
 
 class LoanCollectionLoop:
-    """حلقة بسيطة لفحص القروض المتأخرة كل دقيقة."""
+    """حلقة آمنة لفحص القروض المتأخرة كل دقيقة."""
     def __init__(self):
         self.task = None
 
@@ -1325,9 +1311,40 @@ class LoanCollectionLoop:
         while not bot.is_closed():
             try:
                 await process_overdue_loans()
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 print(f"⚠️ خطأ في فحص القروض: {e}")
             await asyncio.sleep(60)
 
 
-loan_collection_loop = LoanCollectionLo
+# مهم: يجب إنشاء الكائن بعد تعريف الكلاس، وليس قبل ذلك.
+loan_collection_loop = LoanCollectionLoop()
+
+
+# ==========================================
+# الأحداث والأوامر الأساسية للبوت
+# ==========================================
+@bot.event
+async def on_ready():
+    if loan_collection_loop.task is None or loan_collection_loop.task.done():
+        loan_collection_loop.task = asyncio.create_task(loan_collection_loop.start())
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ تم مزامنة {len(synced)} أمر بنجاح.")
+    except Exception as e:
+        print(e)
+
+    print(f"✅ البوت {bot.user} جاهز ويعمل بكفاءة عالية!")
+
+
+@bot.tree.command(
+    name="تسجيل",
+    description="تسجيل حساب جديد في النظام والحصول على الهدية"
+)
+async def register(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+
+    if users_col.find_one({"user_id": user_id}):
+        await interaction.response.send_message(
+          
