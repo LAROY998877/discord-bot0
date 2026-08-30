@@ -1,12 +1,14 @@
+import os
 import discord
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta
 from pymongo import MongoClient
 
-# ----------------- إعدادات قاعدة البيانات والبوت -----------------
-# ضع رابط الـ MongoDB الخاص بك هنا
-MONGO_URI = "YOUR_MONGODB_URI_HERE"
+# سحب الـ Token ورابط الـ Database من متغيرات البيئة في Railway أماناً وصحةً
+MONGO_URI = os.getenv("MONGO_URI")
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+
 client = MongoClient(MONGO_URI)
 db = client["discord_bot_db"]
 users_col = db["users"]
@@ -62,7 +64,6 @@ class SpecificItemSelect(discord.ui.Select):
         super().__init__(placeholder=f"اختر قطعة من قسم {category}...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        # استجابة أولية فورية تمنع خطأ الـ timeout تماماً
         await interaction.response.defer(ephemeral=True)
         
         item_id = self.values[0]
@@ -159,14 +160,12 @@ async def daily(interaction: discord.Interaction):
     last_claim = user_data.get("last_daily")
     now = datetime.utcnow()
 
-    # التحقق من مرور 24 ساعة بدقة (تم تصحيح الأقواس هنا لتجنب خطأ الـ syntax)
     if last_claim and now - last_claim < timedelta(hours=24):
         remaining = timedelta(hours=24) - (now - last_claim)
         hours, remainder = divmod(int(remaining.total_seconds()), 3600)
         minutes, _ = divmod(remainder, 60)
         return await interaction.followup.send(f"⏳ لقد استلمت راتبك مسبقاً! يمكنك الاستلام بعد `{hours} ساعة و {minutes} دقيقة`.", ephemeral=True)
 
-    # مكافأة الراتب
     reward = 5000
     users_col.update_one(
         {"user_id": user_id},
@@ -198,5 +197,5 @@ async def balance(interaction: discord.Interaction):
     await interaction.followup.send(embed=embed, ephemeral=True)
 
 
-# ضع توكن البوت الخاص بك هنا
-bot.run("YOUR_BOT_TOKEN_HERE")
+# تشغيل البوت باستخدام المتغير المحفوظ في إعدادات المنصة
+bot.run(DISCORD_TOKEN)
