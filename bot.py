@@ -23,7 +23,7 @@ class BotClient(commands.Bot):
 
     async def setup_hook(self):
         await self.tree.sync()
-        print("✅ تم مزامنة البنك والمتاجر الأسطورية بنجاح!")
+        print("✅ تم مزامنة البنك والمتاجر ونظام المعارك بنجاح!")
 
 bot = BotClient()
 
@@ -82,7 +82,7 @@ def generate_50_items(shop_type):
 NORMAL_SHOP_ITEMS = generate_50_items("normal")
 DARK_SHOP_ITEMS = generate_50_items("dark")
 
-# ================== القوائم المنسدلة للمتاجر مع نظام الصفحات (لتجاوز حد 25 خياراً في ديسكورد) ==================
+# ================== القوائم المنسدلة للمتاجر مع نظام الصفحات ==================
 class ShopSpecificSelect(discord.ui.Select):
     def __init__(self, items_pool, shop_type, category, page=0):
         self.items_pool = items_pool
@@ -195,6 +195,109 @@ async def normal_shop(interaction: discord.Interaction):
 async def dark_shop(interaction: discord.Interaction):
     view = ShopView(interaction.user.id, "dark")
     await interaction.response.send_message("🌌 **المتجر المظلم (سوق الأساطير)**\nمكان العتاد المحرم ورتب (الشيطان، الجحيم، السفاح) - 50 قطعة لكل فئة. اختر القسم بحذر:", view=view)
+
+# ================== نظام المعارك والقتال (أمر /معارك) ==================
+class JoinPvPButton(discord.ui.Button):
+    def __init__(self, host_id, mode):
+        super().__init__(style=discord.ButtonStyle.success, label="انضمام للقتال ⚔️", emoji="🔥")
+        self.host_id = host_id
+        self.mode = mode
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id == self.host_id:
+            return await interaction.response.send_message("❌ لا يمكنك الانضمام لمعركتك الخاصة كخصم!", ephemeral=True)
+        
+        # تحديث صلاحيات الروم لتسمح للخصم بالكتابة
+        channel = interaction.channel
+        await channel.set_permissions(interaction.user, read_messages=True, send_messages=True)
+        
+        embed = discord.Embed(
+            title=f"⚔️ اكتمل طرفا المعركة! ({self.mode})",
+            description=f"المستضيف: <@{self.host_id}>\nالخصم: <@{interaction.user.id}>\n\n🔥 **بدأت المعركة بين الأبطال! استخدموا مهاراتكم بحذر.**",
+            color=discord.Color.green()
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+        await channel.send(f"🎮 **انطلاق النزال!** <@{self.host_id}> ضد <@{interaction.user.id}>. المشاهدون يمكنكم متابعة الحماس بصمت!")
+
+class BattleSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="معركة 1v1", value="1v1", description="تحدي فردي وجهاً لوجه", emoji="⚔️"),
+            discord.SelectOption(label="معركة 2v2", value="2v2", description="معركة جماعية ثنائية", emoji="🛡️"),
+            discord.SelectOption(label="معركة 3v3", value="3v3", description="حرب الفرق الثلاثية", emoji="⚡"),
+            discord.SelectOption(label="الطوابق", value="floors", description="استكشاف الأبراج وقتال الوحوش", emoji="🗼"),
+            discord.SelectOption(label="المتجر", value="shop", description="الانتقال السريع لأسواق العتاد", emoji="🛒"),
+            discord.SelectOption(label="تطوير عتادك", value="upgrade", description="رفع مستوى قطعك الحالية", emoji="⚒️"),
+            discord.SelectOption(label="حقيبتك", value="inventory", description="استعراض مقتنياتك وأسلحتك", emoji="🎒")
+        ]
+        super().__init__(placeholder="اختر وجهتك في عالم المعارك...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        choice = self.values[0]
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id}) or {}
+        guild = interaction.guild
+
+        if choice in ["1v1", "2v2", "3v3"]:
+            # إنشاء روم مخصص للقتال
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=True, send_messages=False),
+                interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            }
+            channel_name = f"معركة-{choice}-{interaction.user.name}".lower().replace(" ", "-")
+            room = await guild.create_text_channel(channel_name, overwrites=overwrites)
+            
+            view = discord.ui.View(timeout=None)
+            view.add_item(JoinPvPButton(interaction.user.id, choice))
+            
+            embed = discord.Embed(
+                title=f"⚔️ ساحة تحدي ({choice})",
+                description=f"المستضيف: <@{interaction.user.id}>\n\n⏳ **في انتظار انضمام الخصم...**\n*ملاحظة: هذا الروم مخصص للنزال، المشاهدون بإمكانهم المتابعة بصمت تام.*",
+                color=discord.Color.red()
+            )
+            await room.send(embed=embed, view=view)
+            await interaction.response.send_message(f"✅ تم إنشاء روم المعركة الخاص بك بنجاح: {room.mention}!", ephemeral=True)
+
+        elif choice == "floors":
+            await interaction.response.send_message("🗼 **نظام الطوابق:** قريباً سيتم تفعيل أبراج الوحوش الطابقية وتحديات البوصات الصعبة!", ephemeral=True)
+
+        elif choice == "shop":
+            view = ShopView(interaction.user.id, "normal")
+            await interaction.response.send_message("🏬 **المتاجر السريعة:** اختر القسم من القائمة أدناه:", view=view, ephemeral=True)
+
+        elif choice == "upgrade":
+            await interaction.response.send_message("⚒️ **منطقة التطوير:** قريباً يمكنك دمج وتطوير قطع عتادك لزيادة قوتها!", ephemeral=True)
+
+        elif choice == "inventory":
+            inventory = user_data.get("inventory", [])
+            inv_list = "\n".join([f"• {item['name']} `[{item['tier']}]` - `{item['stats']}`" for item in inventory]) if inventory else "الحقيبة فارغة تماماً."
+            embed = discord.Embed(title="🎒 حقيبة العتاد الخاصة بك", description=inv_list, color=discord.Color.blue())
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class BattleView(discord.ui.View):
+    def __init__(self, author_id):
+        super().__init__(timeout=None)
+        self.author_id = author_id
+        self.add_item(BattleSelect())
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ عذراً، هذه القائمة خاصة بصاحب الأمر فقط!", ephemeral=True)
+            return False
+        return True
+
+@bot.tree.command(name="معارك", description="فتح لوحة نظام المعارك والساحات الشاملة")
+async def battle_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🏟️ ساحة المعارك الكبرى",
+        description="أهلاً بك أيها المقاتل في نظام النزالات الأسطوري.\nاختر وجهتك أو نوع التحدي من القائمة أدناه:",
+        color=discord.Color.dark_gold()
+    )
+    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/3211/3211183.png")
+    embed.set_footer(text="اختر بوعي واستعد للنزال القادم")
+    
+    view = BattleView(interaction.user.id)
+    await interaction.response.send_message(embed=embed, view=view)
 
 # ================== نظام البنك المركزي ==================
 class TransferModal(discord.ui.Modal, title='تحويل الأموال 💸'):
