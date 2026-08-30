@@ -28,8 +28,8 @@ db = client["discord_bot_db"]
 users_col = db["users"]
 config_col = db["config"]  # مجموعة خاصة لحفظ إعدادات المطورين
 
-# ضع هنا الآيدي الأساسي الخاص بك (المطور الأساسي الذي لا يمكن حذفه أبداً)
-OWNER_ID = "1103985971638325269" # <--- استبدل هذا الرقم بآيدي حسابك في ديسكورد
+# ضع هنا الآيدي الأساسي الخاص بك
+OWNER_ID = "YOUR_DISCORD_USER_ID_HERE" # <--- استبدل هذا الرقم بآيدي حسابك
 
 # ==========================================
 # توليد 500 قطعة عتاد لكل فئة ديناميكياً
@@ -107,7 +107,6 @@ def generate_shop_items(shop_type):
 NORMAL_SHOP_ITEMS = generate_shop_items("normal")
 DARK_SHOP_ITEMS = generate_shop_items("dark")
 
-# دمج كل العناصر لتسهيل البحث عليها من قبل المطور
 ALL_ITEMS_FLAT = []
 for cat, items in NORMAL_SHOP_ITEMS.items():
     ALL_ITEMS_FLAT.extend(items)
@@ -151,25 +150,24 @@ class RegisterModal(Modal, title="تسجيل بيانات المستخدم ال�
         except ValueError:
             return await interaction.response.send_message("❌ يرجى إدخال عمر صحيح وبمنطقية.", ephemeral=True)
 
+        # إنشاء الحساب مع العملات العادية والألماس النادر الابتدئي
         users_col.update_one(
             {"user_id": user_id},
             {
                 "$set": {"registered": True, "name": name, "age": age, "gender": gender},
-                "$setOnInsert": {"balance": 1000, "inventory": []}
+                "$setOnInsert": {"balance": 1000, "diamonds": 5, "inventory": []}
             },
             upsert=True
         )
 
         await interaction.response.send_message(
-            f"✅ **تم تسجيلك بنجاح تام!**\n👤 **الاسم:** {name}\n🎂 **العمر:** {age}\n⚧ **الجنس:** {gender}\n\nيمكنك الآن استخدام أوامر البوت.",
+            f"✅ **تم تسجيلك بنجاح تام!**\n👤 **الاسم:** {name}\n🎂 **العمر:** {age}\n⚧ **الجنس:** {gender}\n💎 **هدية التسجيل:** 5 ألماس نادر و 1000 عملة عادية.",
             ephemeral=True
         )
 
 # ==========================================
 # نوافذ وأوامر لوحة المطورين
 # ==========================================
-
-# 1. نافذة إضافة أو حذف مطور
 class DevManageModal(Modal, title="إدارة المطورين"):
     target_input = TextInput(label="منشن الشخص أو آيدي المستخدم (ID)", placeholder="مثال: @user أو 123456789", style=discord.TextStyle.short, required=True)
 
@@ -205,19 +203,22 @@ class DevManageModal(Modal, title="إدارة المطورين"):
             config_col.update_one({"type": "developers"}, {"$pull": {"devs": target_id}})
             await interaction.response.send_message(f"✅ تم إزالة العضو <@{target_id}> من قائمة المطورين.", ephemeral=True)
 
-# 2. نافذة إضافة عملات غير محدودة
-class DevAddCoinsModal(Modal, title="توليد عملات للمطور أو العضو"):
+# توليد العملات العادية أو الألماس النادر
+class DevAddCurrencyModal(Modal, title="توليد العملات والألماس النادر"):
     target_input = TextInput(label="المنشن أو الآيدي (اتركه فارغاً لنفسك)", placeholder="اختياري: @user أو ID", style=discord.TextStyle.short, required=False)
-    amount_input = TextInput(label="المبلغ المراد إضافته", placeholder="مثال: 999999999", style=discord.TextStyle.short, required=True)
+    coins_amount = TextInput(label="كمية العملات العادية", placeholder="مثال: 999999999", style=discord.TextStyle.short, required=True)
+    diamonds_amount = TextInput(label="كمية الألماس النادر 💎", placeholder="مثال: 5000", style=discord.TextStyle.short, required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         raw_target = self.target_input.value.strip()
-        raw_amount = self.amount_input.value.strip()
+        raw_coins = self.coins_amount.value.strip()
+        raw_diamonds = self.diamonds_amount.value.strip()
 
         try:
-            amount = int(raw_amount)
+            coins = int(raw_coins)
+            diamonds = int(raw_diamonds)
         except ValueError:
-            return await interaction.response.send_message("❌ يرجى إدخال رقم صحيح للمبلغ.", ephemeral=True)
+            return await interaction.response.send_message("❌ يرجى إدخال أرقام صحيحة للعملات والألماس.", ephemeral=True)
 
         if raw_target:
             match_id = re.search(r'\d+', raw_target)
@@ -229,22 +230,19 @@ class DevAddCoinsModal(Modal, title="توليد عملات للمطور أو ا�
 
         users_col.update_one(
             {"user_id": target_id},
-            {"$inc": {"balance": amount}},
+            {"$inc": {"balance": coins, "diamonds": diamonds}},
             upsert=True
         )
 
         await interaction.response.send_message(
-            f"⚡ **[لوحة المطور]:** تم إضافة مبلغ `{amount:,}` عملة إلى رصيد <@{target_id}> بنجاح!",
+            f"⚡ **[لوحة المطور]:** تم إضافة `{coins:,}` عملة عادية و `💎 {diamonds:,}` ألماس نادر إلى حساب <@{target_id}> بنجاح!",
             ephemeral=True
         )
 
-# 3. قائمة اختيار العتاد (منيو ديناميكي لكل الفئات والأنواع المتاحة)
 class DevItemSelect(Select):
     def __init__(self, target_id: str):
         self.target_id = target_id
-        # نأخذ عينة ديناميكية متجددة أو أول 25 عنصر كنموذج، ويمكن جعلها شاملة عبر الفئات
         options = []
-        # عرض عينة ممثلة من الأنواع والدرجات المختلفة الموجودة تلقائياً
         sample_items = random.sample(ALL_ITEMS_FLAT, min(25, len(ALL_ITEMS_FLAT)))
         
         for item in sample_items:
@@ -281,7 +279,6 @@ class DevItemView(View):
         super().__init__(timeout=180)
         self.add_item(DevItemSelect(target_id))
 
-# 4. نافذة اختيار الشخص للعتاد
 class DevItemModal(Modal, title="منح عتاد لمستخدم"):
     target_input = TextInput(label="منشن الشخص أو الآيدي المستهدف", placeholder="مثال: @user أو ID", style=discord.TextStyle.short, required=True)
 
@@ -298,14 +295,13 @@ class DevItemModal(Modal, title="منح عتاد لمستخدم"):
             ephemeral=True
         )
 
-# واجهة لوحة المطور الرئيسية
 class DevPanelView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="توليد عملات لانهائية", style=discord.ButtonStyle.success, emoji="💰", custom_id="dev_coins_btn")
+    @discord.ui.button(label="توليد عملات وألماس نادر", style=discord.ButtonStyle.success, emoji="💎", custom_id="dev_coins_btn")
     async def dev_coins(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(DevAddCoinsModal())
+        await interaction.response.send_modal(DevAddCurrencyModal())
 
     @discord.ui.button(label="منح عتاد للمستخدِمين", style=discord.ButtonStyle.primary, emoji="⚔️", custom_id="dev_item_btn")
     async def dev_items(self, interaction: discord.Interaction, button: Button):
@@ -323,10 +319,7 @@ class DevPanelView(View):
             return await interaction.response.send_message("❌ هذا الزر مخصص للمطور الأساسي فقط!", ephemeral=True)
         await interaction.response.send_modal(DevManageModal("remove"))
 
-# ==========================================
-# أمر لوحة المطورين (Slash Command)
-# ==========================================
-@bot.tree.command(name="لوحة_المطور", description="اللوحة السرية الخاصة بالمطورين للتحكم الكامل باللعبة")
+@bot.tree.command(name="لوحة_المطور", description="اللوحة السرية الخاصة بالمطورين للتحكم بالعملات، الألماس، والعتاد")
 async def dev_panel(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     if not is_developer(user_id):
@@ -335,13 +328,12 @@ async def dev_panel(interaction: discord.Interaction):
     embed = discord.Embed(
         title="⚙️ | لوحة تحكم المطورين الملكية",
         description=(
-            "مرحباً بك في لوحة السيطرة الخاصة بالمطورين.\n"
-            "من هنا يمكنك إدارة الاقتصاد، منح الثروات، توزيع العتاد، وإدارة فريق المطورين الفرعيين.\n\n"
+            "مرحباً بك في لوحة السيطرة الخاصة بالمطورين.\n\n"
             "✨ **الخيارات المتاحة:**\n"
-            "• `💰` **توليد عملات:** ضخ أموال لا نهائية لك أو لأي لاعب.\n"
-            "• `⚔️` **منح عتاد:** تصفح كل أنواع العتاد وإرساله لمن تريد.\n"
-            "• `➕` **إضافة مطور:** تفويض صديقك ليكون مطوراً معك (للمالك الأساسي).\n"
-            "• `➖` **إزالة مطور:** سحب صلاحيات المطورين الفرعيين."
+            "• `💎` **توليد عملات وألماس:** ضخ أموال عادية وألماس نادر لك أو لأي لاعب.\n"
+            "• `⚔️` **منح عتاد:** تصفح وإرسال العتاد لمن تريد.\n"
+            "• `➕` **إضافة مطور:** تفويض صديقك ليكون مطوراً معك.\n"
+            "• `➖` **إزالة مطور:** سحب صلاحيات المطورين."
         ),
         color=0x2F3136
     )
@@ -351,15 +343,17 @@ async def dev_panel(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=DevPanelView(), ephemeral=True)
 
 # ==========================================
-# نافذة تحويل العملات وبقية الأوامر السابقة
+# نظام التحويلات والبنك
 # ==========================================
-class TransferModal(Modal, title="تحويل العملات الفوري"):
-    target_input = TextInput(label="منشن الشخص أو آيدي المستخدم (ID)", placeholder="مثال: @user أو 123456789012345678", style=discord.TextStyle.short, required=True)
+class TransferModal(Modal, title="تحويل العملات والألماس الفوري"):
+    target_input = TextInput(label="منشن الشخص أو آيدي المستخدم (ID)", placeholder="مثال: @user أو 123456789", style=discord.TextStyle.short, required=True)
+    type_input = TextInput(label="نوع العملة (عادية / الماس)", placeholder="اكتب 'عادية' أو 'الماس'", style=discord.TextStyle.short, required=True)
     amount_input = TextInput(label="المبلغ المراد تحويله", placeholder="أدخل الرقم فقط (مثال: 500)", style=discord.TextStyle.short, required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         sender_id = str(interaction.user.id)
         raw_target = self.target_input.value.strip()
+        currency_type = self.type_input.value.strip().lower()
         raw_amount = self.amount_input.value.strip()
 
         match_id = re.search(r'\d+', raw_target)
@@ -368,7 +362,7 @@ class TransferModal(Modal, title="تحويل العملات الفوري"):
         
         target_id = match_id.group()
         if target_id == sender_id:
-            return await interaction.response.send_message("❌ لا يمكنك تحويل الأموال لنفسك!", ephemeral=True)
+            return await interaction.response.send_message("❌ لا يمكنك التحويل لنفسك!", ephemeral=True)
 
         try:
             amount = int(raw_amount)
@@ -378,25 +372,34 @@ class TransferModal(Modal, title="تحويل العملات الفوري"):
             return await interaction.response.send_message("❌ يرجى إدخال مبلغ صحيح وموجب.", ephemeral=True)
 
         sender_data = users_col.find_one({"user_id": sender_id})
-        sender_balance = sender_data.get("balance", 0) if sender_data else 0
+
+        if "الماس" in currency_type or "diamond" in currency_type:
+            field = "diamonds"
+            name_curr = "💎 قطعة ألماس نادر"
+        else:
+            field = "balance"
+            name_curr = "عملة عادية"
+
+        sender_balance = sender_data.get(field, 0) if sender_data else 0
 
         if sender_balance < amount:
-            return await interaction.response.send_message(f"❌ رصيدك غير كافٍ! رصيدك الحالي هو: `{sender_balance}` عملة.", ephemeral=True)
+            return await interaction.response.send_message(f"❌ رصيدك غير كافٍ! رصيدك الحالي من هذا النوع هو: `{sender_balance}`.", ephemeral=True)
 
-        users_col.update_one({"user_id": sender_id}, {"$inc": {"balance": -amount}}, upsert=True)
-        users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount}}, upsert=True)
+        users_col.update_one({"user_id": sender_id}, {"$inc": {field: -amount}}, upsert=True)
+        users_col.update_one({"user_id": target_id}, {"$inc": {field: amount}}, upsert=True)
 
         await interaction.response.send_message(
-            f"✅ **تمت عملية التحويل بنجاح!**\n💸 تم إرسال مبلغ ` {amount} ` عملة إلى <@{target_id}>.",
+            f"✅ **تمت عملية التحويل بنجاح!**\n💸 تم إرسال مبلغ ` {amount} ` {name_curr} إلى <@{target_id}>.",
             ephemeral=True
         )
 
 class BankSelect(Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="الراتب اليومي", description="استلام مكافأتك المالية اليومية بانتظام.", value="bank_daily", emoji="💰"),
-            discord.SelectOption(label="نظام القروض والمعدات", description="طلب قرض ورهن/بيع المعدات تلقائياً عند انتهاء المهلة.", value="bank_loans", emoji="📜"),
-            discord.SelectOption(label="تحويل العملات", description="إرسال الأموال فورياً لأي عضو في السيرفر عبر المنشن.", value="bank_transfer", emoji="💸")
+            discord.SelectOption(label="رصيدي والعملات", description="عرض رصيدك الحالي من العملات والألماس النادر.", value="bank_balance", emoji="💳"),
+            discord.SelectOption(label="الراتب اليومي", description="استلام مكافأتك المالية اليومية (عملات + ألماس عشوائي).", value="bank_daily", emoji="💰"),
+            discord.SelectOption(label="نظام القروض والمعدات", description="طلب قرض وضمان المعدات.", value="bank_loans", emoji="📜"),
+            discord.SelectOption(label="تحويل العملات والألماس", description="إرسال الأموال أو الألماس لأي عضو.", value="bank_transfer", emoji="💸")
         ]
         super().__init__(placeholder="✨ اختر الخدمة المصرفية المطلوبة من هنا...", min_values=1, max_values=1, options=options)
 
@@ -406,38 +409,54 @@ class BankSelect(Select):
             return await interaction.response.send_message("❌ يجب عليك التسجيل أولاً باستخدام الأمر `/تسجيل` لتتمكن من استخدام الخدمات المصرفية.", ephemeral=True)
 
         choice = self.values[0]
-        if choice == "bank_daily":
-            user_data = users_col.find_one({"user_id": user_id})
+        user_data = users_col.find_one({"user_id": user_id}) or {}
+        
+        if choice == "bank_balance":
+            balance = user_data.get("balance", 0)
+            diamonds = user_data.get("diamonds", 0)
+            embed = discord.Embed(
+                title="💼 | رصيدك المصرفي الشخصي",
+                description=f"👤 **المستخدم:** {interaction.user.mention}\n\n💰 **العملات العادية:** `{balance:,}`\n💎 **الألماس النادر:** `{diamonds:,}`",
+                color=0xD4AF37
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        elif choice == "bank_daily":
             now = datetime.now(timezone.utc)
-            last_claim = user_data.get("last_daily") if user_data else None
+            last_claim = user_data.get("last_daily")
             
             if last_claim and now - last_claim < timedelta(hours=24):
                 remaining = timedelta(hours=24) - (now - last_claim)
                 hours, remainder = divmod(int(remaining.total_seconds()), 3600)
                 minutes = remainder // 60
                 return await interaction.response.send_message(
-                    f"⏳ لقد استلمت راتبك اليومي مسبقاً! يمكنك الاستلام مرة أخرى بعد `{hours} ساعة و {minutes} دقيقة`.",
+                    f"⏳ لقد استلمت راتب اليوم مسبقاً! يمكنك الاستلام بعد `{hours} ساعة و و {minutes} دقيقة`.",
                     ephemeral=True
                 )
 
             daily_amount = 5000
-            users_col.update_one({"user_id": user_id}, {"$set": {"last_daily": now}, "$inc": {"balance": daily_amount}}, upsert=True)
-            return await interaction.response.send_message(f"🎉 **مبروك!** تم إيداع الراتب اليومي بقيمة `{daily_amount}` عملة في حسابك بنجاح.", ephemeral=True)
+            daily_diamonds = random.randint(1, 3) # حظك بالألماس النادر اليومي
+            users_col.update_one(
+                {"user_id": user_id},
+                {"$set": {"last_daily": now}, "$inc": {"balance": daily_amount, "diamonds": daily_diamonds}},
+                upsert=True
+            )
+            return await interaction.response.send_message(f"🎉 **مبروك!** تم إيداع الراتب: `{daily_amount}` عملة عادية + `💎 {daily_diamonds}` ألماس نادر في حسابك بنجاح.", ephemeral=True)
         
         elif choice == "bank_loans":
             embed = discord.Embed(
                 title="📜 | قسم القروض وضمان المعدات",
-                description="نظام القروض لدينا صارم لضمان حقوق الجميع:\n\n⚠️ **شروط القرض:**\n1. مدة السداد 3 أيام.\n2. في حال انتهاء المهلة ولم تسدد، **سيقوم النظام تلقائياً ببيع معداتك** لسداد الدان!\n\nاضغط بالأسفل لتقديم طلب.",
+                description="نظام القروض لدينا صارم لضمان حقوق الجميع:\n\n⚠️ **شروط القرض:**\n1. مدة السداد 3 أيام.\n2. في حال انتهاء المهلة ولم تسدد، **سيقوم النظام تلقائياً ببيع معداتك**.\n\nاضغط بالأسفل لتقديم طلب.",
                 color=0x8B0000
             )
             class LoanView(View):
                 def __init__(self):
                     super().__init__(timeout=180)
-                @discord.ui.button(label="تقديم طلب قرض", style=discord.ButtonStyle.danger, emoji="⚖️", custom_id="req_loan")
+                @discord.ui.button(label="تقديم طلب قرض (20,000 عملة)", style=discord.ButtonStyle.danger, emoji="⚖️", custom_id="req_loan")
                 async def req_loan(self, interaction: discord.Interaction, button: Button):
                     loan_due = datetime.now(timezone.utc) + timedelta(days=3)
                     users_col.update_one({"user_id": str(interaction.user.id)}, {"$set": {"loan_due": loan_due}, "$inc": {"balance": 20000}}, upsert=True)
-                    await interaction.response.send_message("📝 **تم قبول طلب القرض!** تمت إضافة 20,000 عملة لحسابك.", ephemeral=True)
+                    await interaction.response.send_message("📝 **تم قبول طلب القرض!** تمت إضافة 20,000 عملة عادية لحسابك.", ephemeral=True)
             return await interaction.response.send_message(embed=embed, view=LoanView(), ephemeral=True)
         
         elif choice == "bank_transfer":
@@ -448,18 +467,18 @@ class BankView(View):
         super().__init__(timeout=None)
         self.add_item(BankSelect())
 
-@bot.tree.command(name="تسجيل", description="تسجيل بياناتك الشخصية (الاسم، العمر، الجنس)")
+@bot.tree.command(name="تسجيل", description="تسجيل بياناتك الشخصية والحصول على هدية العملات والألماس")
 async def register(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     if is_registered(user_id):
         user_data = users_col.find_one({"user_id": user_id})
         return await interaction.response.send_message(
-            f"ℹ️ أنت مسجل مسبقاً:\n👤 **الاسم:** {user_data.get('name')}\n🎂 **العمر:** {user_data.get('age')}\n⚧ **الجنس:** {user_data.get('gender')}",
+            f"ℹ️ أنت مسجل مسبقاً:\n👤 **الاسم:** {user_data.get('name')}\n💰 **العملات:** {user_data.get('balance', 0)}\n💎 **الألماس النادر:** {user_data.get('diamonds', 0)}",
             ephemeral=True
         )
     await interaction.response.send_modal(RegisterModal())
 
-@bot.tree.command(name="البنك", description="النظام المصرفي الفاخر لإدارة الأموال، القروض، والتحويلات")
+@bot.tree.command(name="البنك", description="النظام المصرفي لعرض رصيدك، الألماس النادر، القروض، والتحويلات")
 async def bank(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     if not is_registered(user_id):
@@ -467,7 +486,7 @@ async def bank(interaction: discord.Interaction):
 
     bank_embed = discord.Embed(
         title="🏛️ | البنك المركزي الملكي - Royal Bank",
-        description="مرحباً بك في النظام المصرفي الأكثر تطوراً.\n\n✨ **الخدمات المتاحة:**\n• `💰` **الراتب اليومي**\n• `📜` **نظام القروض**\n• `💸` **تحويل العملات الفوري**",
+        description="مرحباً بك في النظام المصرفي الأكثر تطوراً.\n\n✨ **الخدمات المتاحة:**\n• `💳` **رصيدي والعملات والألماس**\n• `💰` **الراتب اليومي (عملات + ألماس)**\n• `📜` **نظام القروض**\n• `💸` **تحويل العملات والألماس الفوري**",
         color=0xD4AF37
     )
     bank_embed.set_thumbnail(url="https://i.imgur.com/3Z66v7q.png")
