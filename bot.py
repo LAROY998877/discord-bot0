@@ -44,147 +44,6 @@ def extract_user_id(text):
     clean = text.strip().replace("<@", "").replace(">", "").replace("!", "")
     return str(int(clean))
 
-# ================== نظام الأبطال (3 ذكور، 3 إناث، السفاح سري) ==================
-
-class Character:
-    def __init__(self, name, gender, hp, damage, speed, defense, story, is_secret=False):
-        self.name = name
-        self.gender = gender
-        self.hp = hp
-        self.damage = damage
-        self.speed = speed
-        self.defense = defense
-        self.story = story
-        self.is_secret = is_secret
-
-# تعريف الأبطال الذكور
-saqr = Character("صَقر", "ذكر", 95, 65, 30, 95, "جندي سابق في وحدات الاقتحام الثقيلة، فقد وحدته بالكامل في معركة كبرى وأعيد بناؤه باستخدام أطراف ودروع معدنية متطورة ليصبح آلة حرب لا تُقهر.")
-hydra = Character("هَايْدْرَا", "ذكر", 45, 90, 85, 40, "قاتل مأجور سابق هرب من منظمة سرية، يمتلك عيوناً معدلة تقنياً تمنحه رؤية حرارية ودقة تصويب خارقة من مسافات بعيدة.")
-zeus = Character("زِيُوس", "ذكر", 55, 80, 60, 50, "عالم عبقري دمج بين التكنولوجيا الحديثة وطاقة البلورات القديمة، ليخترق أنظمة الأعداء ويطلق موجات طاقة مدمرة.")
-
-# تعريف الأبطال الإناث
-rayne = Character("رَايـن", "أنثى", 60, 85, 95, 45, "محاربة مرتزقة نشأت في الغابات المظلمة، تعتمد على خفة الحركة واستخدام شفرتين مزدوجتين لقطع الأعداء بثوانٍ معدودة.")
-atheer = Character("أَثـيـر", "أنثى", 70, 70, 70, 70, "عالمة فيزياء سابقة تعرضت لانفجار بوابة زمنية، مما منحها القدرة على التلاعب بالجاذبية وإبطاء الزمن حولها.")
-maya = Character("مَايـا", "أنثى", 65, 95, 65, 35, "قائدة تمرد سابقة نجت من حرق مدينتها، وسخّرت طاقة النيران الكيميائية لتنتقم من كل من ظلمها.")
-
-# الشخصية السرية الخاصة (السفاح) في لوحة المطورين
-al_saffah = Character(
-    name="السفاح (The Butcher)", 
-    gender="سري/خارق", 
-    hp=999, 
-    damage=999, 
-    speed=100, 
-    defense=999, 
-    story="كيان برمجتي غامض ناتج عن تراكم أخطاء شفرات الحسابات المحذوفة، يظهر فجأة في خوادم اللعبة ليقضي على المطورين والخصوم بضربة واحدة ودون إنذار.", 
-    is_secret=True
-)
-
-ALL_CHARACTERS = {
-    "صقر": saqr,
-    "هايدرا": hydra,
-    "زيوس": zeus,
-    "راين": rayne,
-    "أثير": atheer,
-    "مايا": maya,
-    "السفاح": al_saffah
-}
-
-# ================== نظام تبديل الشخصيات واختيار البطل ==================
-class CharacterSelect(discord.ui.Select):
-    def __init__(self, user_id):
-        self.author_id = user_id
-        options = [
-            discord.SelectOption(label="صقر", description="مدرع الحصون (دفاع عالي)", emoji="🛡️", value="صقر"),
-            discord.SelectOption(label="هايدرا", description="قناص الظلال (ضرر وسرعة)", emoji="🎯", value="هايدرا"),
-            discord.SelectOption(label="زيوس", description="ساحر التقنية (تحكم ومساحة)", emoji="⚡", value="زيوس"),
-            discord.SelectOption(label="راين", description="شفرة العاصفة (سرعة فائقة)", emoji="⚔️", value="راين"),
-            discord.SelectOption(label="أثير", description="حارسة الأبعاد (توازن وقدرات)", emoji="🌀", value="أثير"),
-            discord.SelectOption(label="مايا", description="ملكة اللهب (هجوم مدمر)", emoji="🔥", value="مايا"),
-        ]
-        
-        # إذا كان المستخدم مطوراً، نسمح له باختيار "السفاح" السري
-        if is_developer(int(user_id)):
-            options.append(discord.SelectOption(label="السفاح", description="[شخصية سرية خارقة للمطورين فقط]", emoji="🩸", value="السفاح"))
-            
-        super().__init__(placeholder="اختر بطلك الحالي (تكلفة التبديل: 400 عملة)...", min_values=1, max_values=1, options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != int(self.author_id):
-            return await interaction.response.send_message("❌ هذه القائمة ليست لك!", ephemeral=True)
-            
-        chosen_key = self.values[0]
-        selected_char = ALL_CHARACTERS[chosen_key]
-        user_id_str = str(interaction.user.id)
-        
-        user_data = users_col.find_one({"user_id": user_id_str})
-        if not user_data:
-            return await interaction.response.send_message("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=True)
-            
-        # التحقق من الشخصية السرية
-        if selected_char.is_secret and not is_developer(interaction.user.id):
-            return await interaction.response.send_message("❌ عذراً، شخصية 'السفاح' سرية ومتاحة حصرياً للمطورين في لوحة التحكم!", ephemeral=True)
-            
-        # إذا كانت شخصية عادية، يتم خصم 400 عملة
-        if not selected_char.is_secret:
-            balance = user_data.get("balance", 0)
-            switch_cost = 400
-            if balance < switch_cost:
-                return await interaction.response.send_message(f"❌ رصيد 🪙 غير كافٍ للتبديل! تحتاج إلى `{switch_cost}` عملة عادية (رصيدك الحالي: `{balance:,}`).", ephemeral=True)
-                
-            # خصم العملات وتحديث البطل الحالي
-            users_col.update_one(
-                {"user_id": user_id_str}, 
-                {"$inc": {"balance": -switch_cost}, "$set": {"current_character": selected_char.name}}
-            )
-            remaining_balance = balance - switch_cost
-            msg_extra = f"\n💰 تم خصم `{switch_cost}` عملة. رصيدك المتبقي: `{remaining_balance:,}` 🪙"
-        else:
-            # السفاح للمطورين بدون خصم عملات
-            users_col.update_one({"user_id": user_id_str}, {"$set": {"current_character": selected_char.name}})
-            msg_extra = "\n🩸 [لوحة المطور]: تم تفعيل الشخصية الخارقة بنجاح!"
-
-        embed = discord.Embed(
-            title=f"✨ تم تبديل البطل بنجاح إلى: {selected_char.name}",
-            description=(
-                f"📖 **القصة:** {selected_char.story}\n\n"
-                f"📊 **المعدلات (Stats):**\n"
-                f"• الصحة (HP): `{selected_char.hp}/100`\n"
-                f"• الضرر (Damage): `{selected_char.damage}/100`\n"
-                f"• السرعة (Speed): `{selected_char.speed}/100`\n"
-                f"• الدفاع (Defense): `{selected_char.defense}/100`"
-                f"{msg_extra}"
-            ),
-            color=discord.Color.dark_red() if selected_char.is_secret else discord.Color.blue()
-        )
-        await interaction.response.edit_message(embed=embed, view=None)
-
-class CharacterSelectView(discord.ui.View):
-    def __init__(self, user_id):
-        super().__init__(timeout=180)
-        self.add_item(CharacterSelect(user_id))
-
-@bot.tree.command(name="اختيار_البطل", description="استعراض واختيار بطلك المفضل (يكلف 400 عملة للتبديل)")
-async def choose_character_command(interaction: discord.Interaction):
-    user_id_str = str(interaction.user.id)
-    user_data = users_col.find_one({"user_id": user_id_str})
-    if not user_data:
-        return await interaction.response.send_message("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=True)
-        
-    current_char = user_data.get("current_character", "لم يتم الاختيار بعد")
-    
-    embed = discord.Embed(
-        title="👥 قاعة اختيار الأبطال الأسطوريين",
-        description=(
-            f"البطل الحالي المجهز في سجلك: **{current_char}**\n\n"
-            "• **الأبطال الذكور:** صقر، هايدرا، زيوس\n"
-            "• **الأبطال الإناث:** راين، أثير، مايا\n"
-            "*(ملاحظة: عملية تبديل البطل تستهلك 400 عملة عادية من خزنتك).* التبديل متاح من القائمة أدناه:"
-        ),
-        color=discord.Color.blurple()
-    )
-    view = CharacterSelectView(interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
 # ================== نظام فحص ومنح الألقاب تلقائياً ==================
 def check_and_update_titles(user_id):
     user_data = users_col.find_one({"user_id": user_id})
@@ -616,7 +475,6 @@ class DevGiveTitleSelect(discord.ui.Select):
             users_col.insert_one({
                 "user_id": user_id, "balance": 1000, "diamonds": 10, 
                 "max_floor": 0, "kills": 0, "battles_played": 0, "power": 100, 
-                "current_character": "صقر",
                 "custom_title": chosen_title, "unlocked_titles": ["المبتدئ", chosen_title], "inventory": []
             })
         else:
@@ -789,7 +647,7 @@ class DeveloperControlView(discord.ui.View):
                     
                     target_data = users_col.find_one({"user_id": raw_target})
                     if not target_data:
-                        users_col.insert_one({"user_id": raw_target, "balance": amt, "diamonds": 10, "max_floor": 0, "kills": 0, "battles_played": 0, "power": 100, "current_character": "صقر", "custom_title": "المبتدئ", "unlocked_titles": ["المبتدئ"], "inventory": []})
+                        users_col.insert_one({"user_id": raw_target, "balance": amt, "diamonds": 10, "max_floor": 0, "kills": 0, "battles_played": 0, "power": 100, "custom_title": "المبتدئ", "unlocked_titles": ["المبتدئ"], "inventory": []})
                     else:
                         users_col.update_one({"user_id": raw_target}, {"$inc": {"balance": amt}})
                         
@@ -854,7 +712,7 @@ async def developer_panel(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 # ================== بقية الأوامر الأساسية ==================
-@bot.tree.command(name="تسجيل", description="التسجيل في نظام اللعبة والحصول على لقب المبتدئ وبطل افتراضي")
+@bot.tree.command(name="تسجيل", description="التسجيل في نظام اللعبة والحصول على لقب المبتدئ")
 async def register_command(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     existing_user = users_col.find_one({"user_id": user_id})
@@ -870,13 +728,12 @@ async def register_command(interaction: discord.Interaction):
         "kills": 0,
         "battles_played": 0,
         "power": 100,
-        "current_character": "صقر",
         "custom_title": "المبتدئ",
         "unlocked_titles": ["المبتدئ"],
         "inventory": []
     }
     users_col.insert_one(new_user)
-    await interaction.response.send_message("🎉 **تم تسجيلك بنجاح!** حصلت على لقب `المبتدئ` وبطل افتراضي (`صقر`) مع رصيدك الأولي.", ephemeral=True)
+    await interaction.response.send_message("🎉 **تم تسجيلك بنجاح!** حصلت على لقب `المبتدئ` ورصيدك الأولي.", ephemeral=True)
 
 class TitleSelect(discord.ui.Select):
     def __init__(self, unlocked_titles, author_id):
@@ -917,7 +774,7 @@ class ProfileView(discord.ui.View):
             return False
         return True
 
-@bot.tree.command(name="الملف", description="عرض الملف الشخصي الأسطوري للعامة مع تفاصيل وإحصائيات وبطل العرض الحالي")
+@bot.tree.command(name="الملف", description="عرض الملف الشخصي الأسطوري للعامة مع تفاصيل وإحصائيات ضخمة")
 async def profile_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=False)
     user_id = str(interaction.user.id)
@@ -931,7 +788,6 @@ async def profile_command(interaction: discord.Interaction):
     balance = user_data.get("balance", 0)
     diamonds = user_data.get("diamonds", 0)
     custom_title = user_data.get("custom_title", "المبتدئ")
-    current_char = user_data.get("current_character", "صقر")
     max_floor = user_data.get("max_floor", 0)
     kills = user_data.get("kills", 0)
     battles = user_data.get("battles_played", 0)
@@ -942,4 +798,56 @@ async def profile_command(interaction: discord.Interaction):
         description="*«هنا تُدون إنجازات الأبطال، وتُقاس القوى في ساحات الشرف والأبراج المظلمة. هذا السجل يعكس مسيرة مقاتل عظيم سطر اسمه في تاريخ السيرفر بحروف من نور ونار.»*",
         color=discord.Color.from_rgb(212, 175, 55)
     )
-    embed.set_thumbnail(url
+    embed.set_thumbnail(url=interaction.user.display_avatar.url)
+    
+    # [تم الإصلاح هنا]: تم استخدام الطريقة الآمنة لتنسيق النص وتجنب مشاكل f-string الـ yaml
+    yaml_box = "```yaml\n" + custom_title + "\n```"
+    embed.add_field(
+        name="👑 الرتبة واللقب الحالي",
+        value=yaml_box,
+        inline=False
+    )
+    embed.add_field(
+        name="💰 الخزينة والثروة الإمبراطورية",
+        value=f"• **العملات النقدية:** `{balance:,}` 🪙\n• **الألماس النادر:** `{diamonds:,}` 💎\n• **الحالة الاقتصادية:** `مستقرة ومزدهرة`",
+        inline=True
+    )
+    embed.add_field(
+        name="⚡ مؤشرات القوة القتالية",
+        value=f"• **مستوى الطاقة:** `{power:,}` ⚡\n• **المعارك المحسومة:** `{battles:,}` ⚔️\n• **عدد الخصوم المقضي عليهم:** `{kills:,}` 💀",
+        inline=True
+    )
+    embed.add_field(
+        name="🗼 إنجازات برج المعارك الأسطوري",
+        value=f"• **أعلى طابق تم اجتيازه:** `{max_floor} / 500` طابق 🗼\n• **نسبة الإنجاز في الأبراج:** `{(max_floor / 500) * 100:.1f}%` 📊",
+        inline=False
+    )
+    
+    titles_display = ", ".join([f"`{t}`" for t in unlocked_titles])
+    embed.add_field(
+        name="✨ الألقاب الأسطورية المفتوحة في سجلك",
+        value=f"{titles_display}\n*استمر في خوض التحديات الكبرى وصعود الطوابق لفتح المزيد من الألقاب السرية الفخمة!*",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"طلب بواسطة البطل: {interaction.user.name} • نظام السجلات الموحد", icon_url=interaction.client.user.display_avatar.url)
+    
+    view = ProfileView(interaction.user.id, unlocked_titles)
+    await interaction.followup.send(embed=embed, view=view, ephemeral=False)
+
+@bot.tree.command(name="بنك", description="فتح الحساب البنكي")
+async def bank_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    user_id = str(interaction.user.id)
+    user_data = users_col.find_one({"user_id": user_id})
+    
+    if not user_data:
+        return await interaction.followup.send("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=True)
+        
+    bal = user_data.get("balance", 0)
+    diamonds = user_data.get("diamonds", 0)
+    
+    embed = discord.Embed(title="🏦 البنك المركزي", description=f"رصيدك الحالي: `{bal:,}` 🪙\nالألماس: `{diamonds:,}` 💎", color=discord.Color.gold())
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
+bot.run(DISCORD_TOKEN)
