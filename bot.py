@@ -206,7 +206,7 @@ async def games_command(interaction: discord.Interaction):
     view = GamesMenuView(interaction.user.id)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
-# ================== نظام معارك اللاعبين (قريب وخاص وتلقائي بالكامل) ==================
+# ================== نظام معارك اللاعبين ==================
 class PvPLobbyView(discord.ui.View):
     def __init__(self, mode, author_id):
         super().__init__(timeout=180)
@@ -247,13 +247,11 @@ class PvPLobbyView(discord.ui.View):
             )
             await interaction.response.edit_message(embed=embed, view=None)
             
-            # بدء المعركة تلقائياً بالدور
             msg = interaction.message
             t1_hp, t2_hp = 100, 100
             
             while t1_hp > 0 and t2_hp > 0:
                 await asyncio.sleep(3)
-                # ضربة الفريق الأول
                 dmg1 = random.randint(15, 30)
                 t2_hp = max(0, t2_hp - dmg1)
                 
@@ -264,7 +262,6 @@ class PvPLobbyView(discord.ui.View):
                     break
                     
                 await asyncio.sleep(3)
-                # ضربة الفريق الثاني
                 dmg2 = random.randint(15, 30)
                 t1_hp = max(0, t1_hp - dmg2)
                 
