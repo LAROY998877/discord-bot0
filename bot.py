@@ -1,14 +1,15 @@
+import os
 import discord
 from discord import app_commands
 from discord.ext import commands
 from datetime import datetime, timedelta
 from pymongo import MongoClient
 
-# ----------------- ضع بياناتك هنا مباشرة -----------------
-DISCORD_TOKEN = "ضع_توكن_البوت_هنا_بين_العلامتين"
-MONGO_URI = "ضع_رابط_قاعدة_بيانات_مونجو_هنا"
-# ---------------------------------------------------------
+# سحب البيئة بأمان من إعدادات Railway Variables
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+MONGO_URI = os.getenv("MONGO_URI")
 
+# الاتصال بقاعدة البيانات
 client = MongoClient(MONGO_URI)
 db = client["discord_bot_db"]
 users_col = db["users"]
@@ -21,15 +22,15 @@ class BotClient(commands.Bot):
 
     async def setup_hook(self):
         await self.tree.sync()
-        print("تم مزامنة الأوامر العربية بنجاح!")
+        print("تم مزامنة جميع الأوامر العربية بنجاح!")
 
 bot = BotClient()
 
 @bot.event
 async def on_ready():
-    print(f"البوت يعمل الآن باسم: {bot.user}")
+    print(f"البوت يعمل الآن بنجاح باسم: {bot.user}")
 
-# ----------------- عناصر المتجر العادي -----------------
+# ----------------- بيانات المتاجر -----------------
 NORMAL_SHOP_ITEMS = {
     "أسلحة": [
         {"id": "n_sword", "name": "سيف حديدي", "tier": "شائع", "power": 50, "price": 1000},
@@ -40,7 +41,6 @@ NORMAL_SHOP_ITEMS = {
     ]
 }
 
-# ----------------- عناصر المتجر المظلم -----------------
 DARK_SHOP_ITEMS = {
     "أسلحة مظلمة": [
         {"id": "d_blade", "name": "شفرة الظلام", "tier": "أسطوري", "power": 250, "price": 50},
@@ -50,7 +50,7 @@ DARK_SHOP_ITEMS = {
     ]
 }
 
-# قائمة اختيار القطع للشراء
+# ----------------- قائمة الشراء -----------------
 class SpecificItemSelect(discord.ui.Select):
     def __init__(self, items_pool, shop_type, category):
         self.items_pool = items_pool
@@ -105,7 +105,8 @@ class SpecificItemView(discord.ui.View):
         super().__init__()
         self.add_item(SpecificItemSelect(items_pool, shop_type, category))
 
-# ----------------- أمر المتجر العادي (منفصل) -----------------
+# ----------------- الأوامر المستقلة بالعربية -----------------
+
 @bot.tree.command(name="المتجر_العادي", description="تصفح المتجر العادي والشراء بالعملات العادية")
 @app_commands.choices(القسم=[
     app_commands.Choice(name="أسلحة", value="أسلحة"),
@@ -120,7 +121,6 @@ async def normal_shop(interaction: discord.Interaction, القسم: str):
     view = SpecificItemView(items_pool, "normal", القسم)
     await interaction.followup.send(f"🛒 إليك قطع قسم **{القسم}** في المتجر العادي:", view=view, ephemeral=True)
 
-# ----------------- أمر المتجر المظلم (منفصل) -----------------
 @bot.tree.command(name="المتجر_المظلم", description="تصفح المتجر المظلم والشراء بالألماس النادر")
 @app_commands.choices(القسم=[
     app_commands.Choice(name="أسلحة مظلمة", value="أسلحة مظلمة"),
@@ -135,7 +135,6 @@ async def dark_shop(interaction: discord.Interaction, القسم: str):
     view = SpecificItemView(items_pool, "dark", القسم)
     await interaction.followup.send(f"🌌 إليك قطع قسم **{القسم}** في المتجر المظلم:", view=view, ephemeral=True)
 
-# ----------------- أمر الراتب اليومي بالعربي -----------------
 @bot.tree.command(name="الراتب", description="الحصول على الراتب اليومي")
 async def daily(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
@@ -160,7 +159,6 @@ async def daily(interaction: discord.Interaction):
     
     await interaction.followup.send(f"🎁 مبروك! حصلت على راتبك اليومي بقيمة `{reward}` عملة عادية.", ephemeral=True)
 
-# ----------------- أمر الرصيد والحقيبة بالعربي -----------------
 @bot.tree.command(name="الرصيد", description="عرض رصيدك وألماسَك وحقيبتك")
 async def balance(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
@@ -180,5 +178,5 @@ async def balance(interaction: discord.Interaction):
     
     await interaction.followup.send(embed=embed, ephemeral=True)
 
-# تشغيل البوت مباشرة
+# تشغيل البوت باستخدام المتغير المسحوب من البيئة
 bot.run(DISCORD_TOKEN)
