@@ -13,6 +13,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 client = MongoClient(MONGO_URI)
 db = client["discord_bot_db"]
 users_col = db["users"]
+devs_col = db["devs"] # مجموعة قاعدة بيانات المطورين
 
 class BotClient(commands.Bot):
     def __init__(self):
@@ -29,6 +30,14 @@ bot = BotClient()
 @bot.event
 async def on_ready():
     print(f"🤖 البوت يعمل باسم: {bot.user}")
+
+# دالة التحقق من المطورين (يمكنك إضافة الآيددي الخاص بك هنا كمدير أساسي)
+OWNER_ID = 000000000000000000  # ضع آيديك هنا للتأكد من الصلاحية المطلقة
+
+def is_developer(user_id):
+    if user_id == OWNER_ID:
+        return True
+    return devs_col.find_one({"user_id": str(user_id)}) is not None
 
 # ================== نظام فحص ومنح الألقاب تلقائياً ==================
 def check_and_update_titles(user_id):
@@ -441,6 +450,128 @@ async def battle_command(interaction: discord.Interaction):
     view = BattleMenuView(interaction.user.id)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
+# ================== نظام لوحة المطورين الشاملة والمؤتمتة ==================
+class DeveloperControlView(discord.ui.View):
+    def __init__(self, author_id):
+        super().__init__(timeout=300)
+        self.author_id = author_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not is_developer(interaction.user.id):
+            await interaction.response.send_message("❌ عذراً، هذه اللوحة مخصصة للمطورين فقط ولا يمكنك العبث بها!", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="إضافة عملات لا نهائية 🪙", style=discord.ButtonStyle.success, row=0)
+    async def add_infinite_money(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        users_col.update_one({"user_id": user_id}, {"$inc": {"balance": 999999999}}, upsert=True)
+        await interaction.response.send_message("💰 **تم إضافة ثروة طائلة لا نهائية إلى خزنتك بنجاح!**", ephemeral=True)
+
+    @discord.ui.button(label="إضافة ألماس لا نهائي 💎", style=discord.ButtonStyle.success, row=0)
+    async def add_infinite_diamonds(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        users_col.update_one({"user_id": user_id}, {"$inc": {"diamonds": 999999}}, upsert=True)
+        await interaction.response.send_message("💎 **تم إضافة مخزون ضخم من الألماس النادر إلى حسابك!**", ephemeral=True)
+
+    @discord.ui.button(label="إضافة مطور جديد ⚡", style=discord.ButtonStyle.blurple, row=1)
+    async def add_dev_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        class DevModal(discord.ui.Modal, title="إضافة مطور جديد للنظام"):
+            target_user = discord.ui.TextInput(label="أيدي المستخدم (User ID)", placeholder="اكتب آيدي العضو هنا...", required=True)
+            
+            async def on_submit(self, interaction: discord.Interaction):
+                try:
+                    uid = str(int(self.target_user.value.strip()))
+                    devs_col.update_one({"user_id": uid}, {"$set": {"user_id": uid}}, upsert=True)
+                    await interaction.response.send_message(f"👑 **تم ترقية العضو <@{uid}> ليصبح مطوراً رسمياً في النظام!**", ephemeral=True)
+                except ValueError:
+                    await interaction.response.send_message("❌ الآيدي المدخل غير صحيح! تأكد من إدخال أرقام صحيحة.", ephemeral=True)
+
+        await interaction.response.send_modal(DevModal())
+
+    @discord.ui.button(label="تحويل عملات لشخص 💸", style=discord.ButtonStyle.blurple, row=1)
+    async def transfer_money_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        class TransferModal(discord.ui.Modal, title="تحويل عملات بالمنشن أو الآيدي"):
+            target = discord.ui.TextInput(label="منشن العضو أو الأيدي", placeholder="مثال: @user أو الـ ID", required=True)
+            amount = discord.ui.TextInput(label="المبلغ المراد تحويله", placeholder="مثال: 50000", required=True)
+            
+            async def on_submit(self, interaction: discord.Interaction):
+                try:
+                    raw_target = self.target.value.strip().replace("<@", "").replace(">", "").replace("!", "")
+                    amt = int(self.amount.value.strip())
+                    
+                    target_data = users_col.find_one({"user_id": raw_target})
+                    if not target_data:
+                        users_col.insert_one({"user_id": raw_target, "balance": amt, "diamonds": 10, "max_floor": 0, "kills": 0, "battles_played": 0, "power": 100, "custom_title": "المبتدئ", "unlocked_titles": ["المبتدئ"], "inventory": []})
+                    else:
+                        users_col.update_one({"user_id": raw_target}, {"$inc": {"balance": amt}})
+                        
+                    await interaction.response.send_message(f"💸 **تم تحويل مبلغ `{amt:,}` 🪙 بنجاح إلى حساب العضو <@{raw_target}>!**", ephemeral=True)
+                except Exception:
+                    await interaction.response.send_message("❌ حدث خطأ في البيانات المدخلة، تأكد من صحة الآيدي والمبلغ.", ephemeral=True)
+
+        await interaction.response.send_modal(TransferModal())
+
+    @discord.ui.button(label="إدارة عتاد اللاعب ⚔️", style=discord.ButtonStyle.danger, row=2)
+    async def manage_gear_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        class GearModal(discord.ui.Modal, title="منح أو سحب عتاد وسلاح للمقاتل"):
+            target = discord.ui.TextInput(label="آيدي اللاعب أو منشنه", placeholder="أدخل الآيدي هنا...", required=True)
+            gear_name = discord.ui.TextInput(label="اسم العتاد أو السلاح", placeholder="مثال: سيف التنين الأسطوري", required=True)
+            action_type = discord.ui.TextInput(label="العملية (إضافة / سحب)", placeholder="اكتب: إضافة أو سحب", required=True)
+            
+            async def on_submit(self, interaction: discord.Interaction):
+                raw_target = self.target.value.strip().replace("<@", "").replace(">", "").replace("!", "")
+                gear = self.gear_name.value.strip()
+                act = self.action_type.value.strip().lower()
+                
+                user_data = users_col.find_one({"user_id": raw_target})
+                if not user_data:
+                    return await interaction.response.send_message("❌ هذا المستخدم غير مسجل في قاعدة البيانات!", ephemeral=True)
+                
+                inv = user_data.get("inventory", [])
+                if "إضافة" in act or "add" in act:
+                    if gear not in inv:
+                        inv.append(gear)
+                    users_col.update_one({"user_id": raw_target}, {"$set": {"inventory": inv}})
+                    await interaction.response.send_message(f"⚔️ **تم منح العتاد `{gear}` بنجاح للمقاتل <@{raw_target}>!**", ephemeral=True)
+                elif "سحب" in act or "remove" in act:
+                    if gear in inv:
+                        inv.remove(gear)
+                    users_col.update_one({"user_id": raw_target}, {"$set": {"inventory": inv}})
+                    await interaction.response.send_message(f"🛡️ **تم سحب العتاد `{gear}` من المقاتل <@{raw_target}> بنجاح!**", ephemeral=True)
+                else:
+                    await interaction.response.send_message("❌ نوع العملية غير صحيح، اكتب (إضافة) أو (سحب).", ephemeral=True)
+
+        await interaction.response.send_modal(GearModal())
+
+@bot.tree.command(name="المطور", description="لوحة التحكم الإمبراطورية الخاصة بالمطورين وسلطات النظام العليا")
+async def developer_panel(interaction: discord.Interaction):
+    if not is_developer(interaction.user.id):
+        return await interaction.response.send_message("🚫 **منطقة محظورة!** هذا الأمر مخصص فقط للمطورين المعتمدين في النظام.", ephemeral=True)
+    
+    # جلب جميع الأوامر المسجلة تلقائياً في السيرفر لعرضها في اللوحة بشكل مؤتمت وفخم
+    registered_commands = [cmd.name for cmd in bot.tree.get_commands()]
+    commands_list_str = " • ".join([f"`/{c}`" for c in registered_commands])
+    
+    embed = discord.Embed(
+        title="👑 قاعة التحكم العليا وإدارة المطورين ⚡",
+        description=(
+            "✨ *«أهلاً بك أيها المطور العظيم في قلب النظام المركزي. من هنا تستطيع إدارة كل صغيرة وكبيرة في عالم المقاتلين والأبراج، وتوجيه مقاليد السلطة والثروات بلمسة زر واحدة.»*\n\n"
+            "🛡️ **صلاحياتك المطلقة المتاحة في هذه اللوحة:**\n"
+            "• ضخ كميات لا نهائية من العملات النقدية والألماس النادر.\n"
+            "• ترقية وإضافة مطورين جدد لدعم إدارة النظام بالمنشن.\n"
+            "• تحويل الأموال والأرصدة الفورية لأي مقاتل عبر منشنه.\n"
+            "• حقيبة الأسلحة والعتاد: منح أو سحب أي درع أو سلاح أسطوري.\n\n"
+            f"📋 **قائمة الأوامر الفعالة والمضافة حديثاً في النظام:**\n{commands_list_str}"
+        ),
+        color=discord.Color.from_rgb(138, 43, 226)
+    )
+    embed.set_thumbnail(url=interaction.user.display_avatar.url)
+    embed.set_footer(text="نظام الإدارة المركزية • مؤتمت بشكل تلقائي بالكامل", icon_url=bot.user.display_avatar.url)
+    
+    view = DeveloperControlView(interaction.user.id)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
 # ================== بقية الأوامر الأساسية ==================
 @bot.tree.command(name="تسجيل", description="التسجيل في نظام اللعبة والحصول على لقب المبتدئ")
 async def register_command(interaction: discord.Interaction):
@@ -506,7 +637,7 @@ class ProfileView(discord.ui.View):
 
 @bot.tree.command(name="الملف", description="عرض الملف الشخصي الأسطوري للعامة مع تفاصيل وإحصائيات ضخمة")
 async def profile_command(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=False) # يظهر للكل في الروم
+    await interaction.response.defer(ephemeral=False)
     user_id = str(interaction.user.id)
     
     unlocked_titles = check_and_update_titles(user_id)
