@@ -97,43 +97,44 @@ HEROES_DATA = {
     }
 }
 
-# ================== نظام البنك والتحويل (داخلي بالكامل) ==================
+# ================== نظام البنك والتحويل (مع منع انتهاء المهلة) ==================
 
 class BankDepositModal(discord.ui.Modal, title="إيداع أموال في خزينة البنك"):
     amount = discord.ui.TextInput(label="المبلغ المراد إيداعه", placeholder="مثال: 100000", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         try:
             val = int(self.amount.value)
             user_id = str(interaction.user.id)
             user_data = users_col.find_one({"user_id": user_id})
             wallet = user_data.get("balance", 0)
             if wallet < val or val <= 0:
-                return await interaction.response.send_message("❌ رصيدك النقدي لا يكفي أو المبلغ غير صالح!", ephemeral=True)
+                return await interaction.followup.send("❌ رصيدك النقدي لا يكفي أو المبلغ غير صالح!", ephemeral=True)
             
             users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -val, "bank": val}})
-            await interaction.response.send_message(f"✅ تم تأمين وتخزين `{val:,}` 🪙 في خزينة البنك السيادية بنجاح!", ephemeral=True)
+            await interaction.followup.send(f"✅ تم تأمين وتخزين `{val:,}` 🪙 في خزينة البنك السيادية بنجاح!", ephemeral=True)
         except:
-            await interaction.response.send_message("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
+            await interaction.followup.send("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
 
 class BankWithdrawModal(discord.ui.Modal, title="سحب أموال من خزينة البنك"):
     amount = discord.ui.TextInput(label="المبلغ المراد سحبه للمحفظة", placeholder="مثال: 50000", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         try:
             val = int(self.amount.value)
             user_id = str(interaction.user.id)
             user_data = users_col.find_one({"user_id": user_id})
             bank = user_data.get("bank", 0)
             if bank < val or val <= 0:
-                return await interaction.response.send_message("❌ لا يملك البنك هذا المبلغ في رصيدك أو القيمة غير صالحة!", ephemeral=True)
+                return await interaction.followup.send("❌ لا يملك البنك هذا المبلغ في رصيدك أو القيمة غير صالحة!", ephemeral=True)
             
             users_col.update_one({"user_id": user_id}, {"$inc": {"balance": val, "bank": -val}})
-            await interaction.response.send_message(f"✅ تم سحب `{val:,}` 🪙 وإضافتها إلى محفظتك الخاصة!", ephemeral=True)
+            await interaction.followup.send(f"✅ تم سحب `{val:,}` 🪙 وإضافتها إلى محفظتك الخاصة!", ephemeral=True)
         except:
-            await interaction.response.send_message("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
+            await interaction.followup.send("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
 
-# نافذة إدخال المبلغ للتحويل لشخص معين
 class TransferModal(discord.ui.Modal, title="تحويل أموال لشخص آخر"):
     amount = discord.ui.TextInput(label="المبلغ المراد تحويله", placeholder="مثال: 5000", required=True)
 
@@ -142,23 +143,24 @@ class TransferModal(discord.ui.Modal, title="تحويل أموال لشخص آخ
         self.receiver = receiver
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False)
         try:
             val = int(self.amount.value)
             sender_id = str(interaction.user.id)
             receiver_id = str(self.receiver.id)
 
             if sender_id == receiver_id:
-                return await interaction.response.send_message("❌ لا يمكنك تحويل الأموال لنفسك!", ephemeral=True)
+                return await interaction.followup.send("❌ لا يمكنك تحويل الأموال لنفسك!", ephemeral=True)
             if val <= 0:
-                return await interaction.response.send_message("❌ يرجى إدخال مبلغ صحيح أكبر من الصفر!", ephemeral=True)
+                return await interaction.followup.send("❌ يرجى إدخال مبلغ صحيح أكبر من الصفر!", ephemeral=True)
 
             sender_data = users_col.find_one({"user_id": sender_id})
             if not sender_data or sender_data.get("balance", 0) < val:
-                return await interaction.response.send_message("❌ رصيدك النقدي لا يكفي لإتمام هذا التحويل!", ephemeral=True)
+                return await interaction.followup.send("❌ رصيدك النقدي لا يكفي لإتمام هذا التحويل!", ephemeral=True)
 
             receiver_data = users_col.find_one({"user_id": receiver_id})
             if not receiver_data:
-                return await interaction.response.send_message("❌ عذراً، هذا الشخص غير مسجل في نظام اللعبة!", ephemeral=True)
+                return await interaction.followup.send("❌ عذراً، هذا الشخص غير مسجل في نظام اللعبة!", ephemeral=True)
 
             users_col.update_one({"user_id": sender_id}, {"$inc": {"balance": -val}})
             users_col.update_one({"user_id": receiver_id}, {"$inc": {"balance": val}})
@@ -168,11 +170,10 @@ class TransferModal(discord.ui.Modal, title="تحويل أموال لشخص آخ
                 description=f"تم تحويل مبلغ `{val:,}` 🪙 بنجاح إلى العضو {self.receiver.mention}!",
                 color=discord.Color.green()
             )
-            await interaction.response.send_message(embed=embed, ephemeral=False)
+            await interaction.followup.send(embed=embed)
         except:
-            await interaction.response.send_message("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
+            await interaction.followup.send("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
 
-# قائمة اختيار الشخص للتحويل داخل البنك
 class TransferUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
@@ -195,6 +196,7 @@ class BankSelect(discord.ui.Select):
         super().__init__(placeholder="🌟 اختر المعاملة المصرفية المطلوبة من القائمة...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
+        # الاستجابة الفورية لمنع رسالة "لم يستجب البوت"
         user_id = str(interaction.user.id)
         user_data = users_col.find_one({"user_id": user_id})
         if not user_data:
@@ -236,9 +238,8 @@ async def bank_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=BankView(), ephemeral=True)
 
 
-# ================== لوحة المطور الداخلية بالكامل (بدون أوامر منفصلة) ==================
+# ================== لوحة المطور (مع منع انتهاء المهلة) ==================
 
-# نافذة إهداء عتاد
 class DevGiftModal(discord.ui.Modal, title="إهداء عتاد لعضو"):
     gear_name = discord.ui.TextInput(label="اسم قطعة العتاد أو السلاح", placeholder="مثال: سيف التنين الاسطوري", required=True)
 
@@ -250,7 +251,6 @@ class DevGiftModal(discord.ui.Modal, title="إهداء عتاد لعضو"):
         users_col.update_one({"user_id": str(self.receiver.id)}, {"$push": {"inventory": self.gear_name.value}}, upsert=True)
         await interaction.response.send_message(f"🎁 **تم إرسال العتاد بنجاح!** حصل المستخدم {self.receiver.mention} على القطعة: `{self.gear_name.value}` ⚔️", ephemeral=False)
 
-# نافذة إضافة رصيد
 class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو"):
     amount = discord.ui.TextInput(label="المبلغ المراد إضافته", placeholder="مثال: 500000", required=True)
 
@@ -259,14 +259,14 @@ class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو")
         self.receiver = receiver
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         try:
             val = int(self.amount.value)
             users_col.update_one({"user_id": str(self.receiver.id)}, {"$inc": {"balance": val}}, upsert=True)
-            await interaction.response.send_message(f"✅ تم إضافة `{val:,}` 🪙 إلى محفظة المستخدم {self.receiver.mention} بنجاح!", ephemeral=True)
+            await interaction.followup.send(f"✅ تم إضافة `{val:,}` 🪙 إلى محفظة المستخدم {self.receiver.mention} بنجاح!", ephemeral=True)
         except:
-            await interaction.response.send_message("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
+            await interaction.followup.send("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
 
-# قائمة اختيار العضو لإهداء العتاد
 class DevGiftUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
@@ -278,7 +278,6 @@ class DevGiftUserSelectView(discord.ui.View):
 
         self.add_item(select_callback)
 
-# قائمة اختيار العضو لإضافة الرصيد
 class DevBalanceUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
@@ -290,7 +289,6 @@ class DevBalanceUserSelectView(discord.ui.View):
 
         self.add_item(select_callback)
 
-# قائمة اختيار العضو لمنحه صلاحية مطور
 class DevAddUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
