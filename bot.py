@@ -32,9 +32,11 @@ config_col = db["config"]
 OWNER_ID = "YOUR_DISCORD_USER_ID_HERE" # <--- استبدل هذا الرقم بآيدي حسابك
 
 # ==========================================
-# توليد 500 قطعة عتاد لكل فئة (8 فئات شاملة عصا سحرية)
+# توليد 500 قطعة عتاد مسبقاً عند التشغيل (سريع جداً)
 # ==========================================
 CATEGORIES = ["خوذة", "درع", "بنطال", "حذاء", "سيف", "مطرقة", "خنجر", "عصا سحرية"]
+
+print("🔄 جاري توليد عتاد المتاجر في الذاكرة...")
 
 def generate_shop_items(shop_type):
     items_dict = {}
@@ -51,14 +53,12 @@ def generate_shop_items(shop_type):
 
     for cat in CATEGORIES:
         cat_items = []
-
         for i in range(1, 501):
             p = random.choice(prefixes)
             s = random.choice(suffixes)
             name = f"{cat} {p} {s} #{i}"
 
             if shop_type == "dark":
-                # المتجر المظلم: رتب قوية وملعونة تشمل الشيطان، الجحيم، السفاح كأعلى رتب
                 if i > 480:
                     tier = "الشيطان"
                 elif i > 430:
@@ -75,9 +75,8 @@ def generate_shop_items(shop_type):
                     tier = "ضعيف مشؤوم"
 
                 power = i * 4 + random.randint(20, 80)
-                price = i * 5 + random.randint(15, 60) # سعر بالعملة النادرة
+                price = i * 5 + random.randint(15, 60)
             else:
-                # المتجر العادي: رتب عادية ومتدرجة
                 if i > 450:
                     tier = "مقدس فريد"
                 elif i > 350:
@@ -92,7 +91,7 @@ def generate_shop_items(shop_type):
                     tier = "شائع"
 
                 power = i * 2 + random.randint(5, 25)
-                price = i * 20 + random.randint(100, 500) # سعر بالعملة العادية
+                price = i * 20 + random.randint(100, 500)
 
             cat_items.append({
                 "id": f"{shop_type[0]}_{cat}_{i}",
@@ -102,9 +101,7 @@ def generate_shop_items(shop_type):
                 "price": price,
                 "type": shop_type
             })
-
         items_dict[cat] = cat_items
-
     return items_dict
 
 NORMAL_SHOP_ITEMS = generate_shop_items("normal")
@@ -116,6 +113,8 @@ for cat, items in NORMAL_SHOP_ITEMS.items():
 for cat, items in DARK_SHOP_ITEMS.items():
     ALL_ITEMS_FLAT.extend(items)
 
+print("✅ تم توليد وتجهيز كافة المعدات بنجاح!")
+
 # ==========================================
 # وظائف التحقق المساعدة
 # ==========================================
@@ -126,7 +125,6 @@ def is_registered(user_id: str) -> bool:
 def is_developer(user_id: str) -> bool:
     if str(user_id) == str(OWNER_ID):
         return True
-    
     config = config_col.find_one({"type": "developers"})
     if config and str(user_id) in config.get("devs", []):
         return True
@@ -168,18 +166,67 @@ class RegisterModal(Modal, title="تسجيل بيانات المستخدم ال�
         )
 
 # ==========================================
-# المتجر العادي والمتجر المظلم (قوائم الشراء)
+# المتجر العادي والمتجر المظلم (قوائم فورية بدون تعليق)
 # ==========================================
+class SpecificItemSelect(Select):
+    def __init__(self, items_pool, shop_type, cat):
+        self.items_pool = items_pool
+        self.shop_type = shop_type
+        # أخذ عينة عشوائية سريعة وجاهزة تماماً
+        self.sample_items = random.sample(items_pool, min(25, len(items_pool)))
+        
+        sub_options = []
+        for item in self.sample_items:
+            curr_name = "عملة" if shop_type == "normal" else "ألماس"
+            sub_options.append(
+                discord.SelectOption(
+                    label=item["name"][:99],
+                    description=f"الرتبة: {item['tier']} | القوة: {item['power']} | السعر: {item['price']} {curr_name}",
+                    value=item["id"],
+                    emoji="✨"
+                )
+            )
+        super().__init__(placeholder=f"🛒 اختر قطعة من فئة ({cat}) للشراء...", min_values=1, max_values=1, options=sub_options)
+
+    async def callback(self, interaction: discord.Interaction):
+        item_id = self.values[0]
+        item = next((it for it in self.items_pool if it["id"] == item_id), None)
+        if not item:
+            return await interaction.response.send_message("❌ القطعة غير متوفرة.", ephemeral=True)
+
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id}) or {}
+
+        if self.shop_type == "normal":
+            curr_balance = user_data.get("balance", 0)
+            if curr_balance < item["price"]:
+                return await interaction.response.send_message(f"❌ رصيدك العادي غير كافٍ! تحتاج إلى `{item['price']}` عملة عادية.", ephemeral=True)
+            users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -item["price"]}, "$push": {"inventory": item}})
+        else:
+            curr_diamonds = user_data.get("diamonds", 0)
+            if curr_diamonds < item["price"]:
+                return await interaction.response.send_message(f"❌ رصيدك من الألماس النادر غير كافٍ! تحتاج إلى `💎 {item['price']}`.", ephemeral=True)
+            users_col.update_one({"user_id": user_id}, {"$inc": {"diamonds": -item["price"]}, "$push": {"inventory": item}})
+
+        await interaction.response.send_message(
+            f"🎉 **مبروك!** اشتريت بنجاح:\n⚔️ **القطعة:** {item['name']}\n🏷️ **الرتبة:** {item['tier']}\n💪 **القوة:** {item['power']}\nتمت إضافتها إلى حقيبتك الخاصة!",
+            ephemeral=True
+        )
+
+class SpecificItemView(View):
+    def __init__(self, items_pool, shop_type, cat):
+        super().__init__(timeout=180)
+        self.add_item(SpecificItemSelect(items_pool, shop_type, cat))
+
 class ShopCategorySelect(Select):
     def __init__(self, shop_type: str):
         self.shop_type = shop_type
         options = []
         for cat in CATEGORIES:
-            emoji = "⚔️" if "سيف" in cat or "خنجر" in cat else ("🛡️" in cat or "درع" in cat or "خوذة" in cat or "بنطال" in cat or "حذاء" in cat or "مطرقة" in cat or "عصا" in cat)
             options.append(
                 discord.SelectOption(
                     label=f"فئة {cat}",
-                    description=f"تصفح 500 قطعة عتاد ضمن فئة {cat}",
+                    description=f"تصفح عتاد فئة {cat} المتاحة",
                     value=cat,
                     emoji="🛡️"
                 )
@@ -190,57 +237,10 @@ class ShopCategorySelect(Select):
         cat = self.values[0]
         items_pool = NORMAL_SHOP_ITEMS[cat] if self.shop_type == "normal" else DARK_SHOP_ITEMS[cat]
         
-        # نعرض أول 25 قطعة كعينة اختيار سريعة لتجنب تجاوز حدود ديسكورد للقوائم
-        sample_items = random.sample(items_pool, min(25, len(items_pool)))
-        
-        class SpecificItemSelect(Select):
-            def __init__(self):
-                sub_options = []
-                for item in sample_items:
-                    curr_name = "عملة" if self.shop_type == "normal" else "ألماس"
-                    sub_options.append(
-                        discord.SelectOption(
-                            label=item["name"][:99],
-                            description=f"الرتبة: {item['tier']} | القوة: {item['power']} | السعر: {item['price']} {curr_name}",
-                            value=item["id"],
-                            emoji="✨"
-                        )
-                    )
-                super().__init__(placeholder=f"🛒 اختر قطعة من فئة ({cat}) للشراء...", min_values=1, max_values=1, options=sub_options)
-
-            async def callback(self, sub_interaction: discord.Interaction):
-                item_id = self.values[0]
-                item = next((it for it in items_pool if it["id"] == item_id), None)
-                if not item:
-                    return await sub_interaction.response.send_message("❌ القطعة غير متوفرة.", ephemeral=True)
-
-                user_id = str(sub_interaction.user.id)
-                user_data = users_col.find_one({"user_id": user_id}) or {}
-
-                if self.shop_type == "normal":
-                    curr_balance = user_data.get("balance", 0)
-                    if curr_balance < item["price"]:
-                        return await sub_interaction.response.send_message(f"❌ رصيدك العادي غير كافٍ! تحتاج إلى `{item['price']}` عملة عادية.", ephemeral=True)
-                    users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -item["price"]}, "$push": {"inventory": item}})
-                else:
-                    curr_diamonds = user_data.get("diamonds", 0)
-                    if curr_diamonds < item["price"]:
-                        return await sub_interaction.response.send_message(f"❌ رصيدك من الألماس النادر غير كافٍ! تحتاج إلى `💎 {item['price']}`.", ephemeral=True)
-                    users_col.update_one({"user_id": user_id}, {"$inc": {"diamonds": -item["price"]}, "$push": {"inventory": item}})
-
-                await sub_interaction.response.send_message(
-                    f"🎉 **مبروك!** اشتريت بنجاح:\n⚔️ **القطعة:** {item['name']}\n🏷️ **الرتبة:** {item['tier']}\n💪 **القوة:** {item['power']}\nتمت إضافتها إلى حقيبتك الخاصة!",
-                    ephemeral=True
-                )
-
-        class SpecificItemView(View):
-            def __init__(self):
-                super().__init__(timeout=180)
-                self.add_item(SpecificItemSelect())
-
+        # استجابة فورية دون أي تأخير
         await interaction.response.send_message(
-            f"📦 إليك عينة من أروع قطع **{cat}** المتاحة في المتجر ({'العادي' if self.shop_type=='normal' else 'المظلم'}):",
-            view=SpecificItemView(),
+            f"📦 إليك مجموعة مختارة من أروع قطع **{cat}** في المتجر ({'العادي' if self.shop_type=='normal' else 'المظلم'}):",
+            view=SpecificItemView(items_pool, self.shop_type, cat),
             ephemeral=True
         )
 
@@ -258,10 +258,7 @@ class DevManageModal(Modal, title="إدارة المطورين"):
     def __init__(self, action_type: str):
         super().__init__()
         self.action_type = action_type
-        if action_type == "add":
-            self.title = "إضافة مطور جديد"
-        else:
-            self.title = "إزالة مطور"
+        self.title = "إضافة مطور جديد" if action_type == "add" else "إزالة مطور"
 
     async def on_submit(self, interaction: discord.Interaction):
         raw_target = self.target_input.value.strip()
@@ -270,7 +267,6 @@ class DevManageModal(Modal, title="إدارة المطورين"):
             return await interaction.response.send_message("❌ لم يتم التعرف على المستخدم بشكل صحيح.", ephemeral=True)
         
         target_id = match_id.group()
-
         if target_id == str(OWNER_ID) and self.action_type == "remove":
             return await interaction.response.send_message("❌ لا يمكنك إزالة المطور الأساسي للبوت!", ephemeral=True)
 
@@ -404,7 +400,7 @@ async def shop_normal(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed, view=ShopView("normal"), ephemeral=True)
 
-@bot.tree.command(name="المتجر_المظلم", description="فتح المتجر المظلم للعتاد الأسطوري والملعون (برتب الشيطان، الجحيم، السفاح)")
+@bot.tree.command(name="المتجر_المظلم", description="فتح المتجر المظلم للعتاد الأسطوري والملعون")
 async def shop_dark(interaction: discord.Interaction):
     if not is_registered(str(interaction.user.id)):
         return await interaction.response.send_message("❌ سجّل أولاً باستخدام `/تسجيل` لفتح المتجر المظلم.", ephemeral=True)
@@ -499,7 +495,7 @@ class BankSelect(Select):
         elif choice == "bank_daily":
             now = datetime.now(timezone.utc)
             last_claim = user_data.get("last_daily")
-            if last_claim and now - last_claim < timedelta(hours=24):
+            if last_claim and now - last_claim < timedelta(hours:24):
                 return await interaction.response.send_message("⏳ لقد استلمت راتبك اليومي مسبقاً، انتظر 24 ساعة.", ephemeral=True)
             
             users_col.update_one({"user_id": user_id}, {"$set": {"last_daily": now}, "$inc": {"balance": 10000, "diamonds": 5}}, upsert=True)
