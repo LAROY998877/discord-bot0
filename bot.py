@@ -21,7 +21,7 @@ cursor.execute(
         name TEXT,
         age INTEGER,
         gender TEXT,
-        is_registered INTEGER DEFAULT 0,
+        is_registered INTEGER DEFAULT 1,
         balance INTEGER DEFAULT 5000,
         equipment_score INTEGER DEFAULT 10,
         floors INTEGER DEFAULT 1,
@@ -76,70 +76,24 @@ def is_dev(user_id: int) -> bool:
     return cursor.fetchone() is not None
 
 
-def is_registered(user_id: int) -> bool:
+# نظام التحقق والتسجيل التلقائي الخفي (بدون نوافذ إجبار مزعجة)
+def ensure_user(user_id: int, username: str):
     cursor.execute(
-        "SELECT is_registered FROM user_data WHERE user_id = ?", (user_id,)
+        "SELECT user_id FROM user_data WHERE user_id = ?", (user_id,)
     )
-    result = cursor.fetchone()
-    if result and result[0] == 1:
-        return True
-    return False
-
-
-# ==========================================
-# 2. نظام التسجيل التلقائي الذكي (Modal)
-# ==========================================
-
-
-class RegisterModal(discord.ui.Modal, title="التسجيل الإجباري الأول"):
-
-    name_input = discord.ui.TextInput(
-        label="الاسم الكامل", placeholder="اكتب اسمك هنا...", required=True
-    )
-    age_input = discord.ui.TextInput(
-        label="العمر", placeholder="اكتب عمرك (أرقام فقط)...", required=True
-    )
-    gender_input = discord.ui.TextInput(
-        label="الجنس", placeholder="ذكر / أنثى", required=True
-    )
-
-    async def on_submit(self, interaction: discord.Interaction):
-        user_id = interaction.user.id
-        username = str(interaction.user)
-        name = self.name_input.value
-        age = self.age_input.value
-        gender = self.gender_input.value
-
-        if not age.isdigit():
-            await interaction.response.send_message(
-                "❌ العمر يجب أن يكون أرقاماً صحيحة!", ephemeral=True
-            )
-            return
-
+    if cursor.fetchone() is None:
         cursor.execute(
             """
             INSERT INTO user_data (user_id, username, name, age, gender, is_registered)
             VALUES (?, ?, ?, ?, ?, 1)
-            ON CONFLICT(user_id) DO UPDATE SET
-            name=excluded.name, age=excluded.age, gender=excluded.gender, is_registered=1
         """,
-            (user_id, username, name, int(age), gender),
+            (user_id, username, "مغامر جديد", 20, "غير محدد"),
         )
         db_connection.commit()
 
-        await interaction.response.send_message(
-            f"✅ **تم تسجيلك بنجاح يابطل!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك استخدام أمر `/الطوابق`!",
-            ephemeral=True,
-        )
-
-
-@bot.tree.command(name="تسجيل", description="التسجيل في النظام لفتح جميع الأوامر")
-async def register_command(interaction: discord.Interaction):
-    await interaction.response.send_modal(RegisterModal())
-
 
 # ==========================================
-# 3. الملف الشخصي
+# 2. الملف الشخصي
 # ==========================================
 
 
@@ -251,16 +205,7 @@ async def profile_command(
     interaction: discord.Interaction, member: discord.Member = None
 ):
     target = member if member else interaction.user
-
-    if not is_registered(target.id):
-        if target.id == interaction.user.id:
-            await interaction.response.send_modal(RegisterModal())
-        else:
-            await interaction.response.send_message(
-                f"❌ المستخدم {target.mention} غير مسجل في النظام بعد!",
-                ephemeral=True,
-            )
-        return
+    ensure_user(target.id, str(target))
 
     cursor.execute(
         "SELECT name, age, gender, balance, equipment_score, floors, max_unlocked_floor, hero_name, equipment_name, title, hide_stats, hide_titles FROM user_data WHERE user_id = ?",
@@ -319,15 +264,13 @@ async def profile_command(
 
 
 # ==========================================
-# 4. أمر الحقيبة المنفصل
+# 3. أمر الحقيبة المنفصل
 # ==========================================
 
 
 @bot.tree.command(name="الحقيبة", description="عرض حقيبتك والمعدات والعتاد الحالي")
 async def inventory_command(interaction: discord.Interaction):
-    if not is_registered(interaction.user.id):
-        await interaction.response.send_modal(RegisterModal())
-        return
+    ensure_user(interaction.user.id, str(interaction.user))
 
     cursor.execute(
         "SELECT equipment_name, equipment_score, balance, floors, max_unlocked_floor FROM user_data WHERE user_id = ?",
@@ -349,7 +292,7 @@ async def inventory_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 5. نظام الطوابق الشامل (أمر رئيسي يفتح منيو التفاعل)
+# 4. نظام الطوابق الشامل (أمر رئيسي يفتح منيو التفاعل)
 # ==========================================
 
 
@@ -467,9 +410,7 @@ class FloorBattleView(discord.ui.View):
 class SelectFloorDropdown(discord.ui.Select):
 
     def __init__(self, max_unlocked: int):
-        # توليد خيارات الطوابق المتاحة للاعب
         options = []
-        # عرض بعض الخيارات المتاحة بناءً على ما فتحه اللاعب
         start_f = max(1, max_unlocked - 20)
         end_f = max_unlocked
         for f in range(end_f, start_f - 1, -1):
@@ -583,7 +524,6 @@ class FloorMainMenuView(discord.ui.View):
     async def upgrade_eq_btn(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        # خصم مبلغ وتطوير العتاد
         cursor.execute(
             "SELECT balance, equipment_score FROM user_data WHERE user_id = ?",
             (self.user_id,),
@@ -636,9 +576,7 @@ class FloorMainMenuView(discord.ui.View):
     name="الطوابق", description="فتح منيو برج الطوابق الألف والخيارات الرئيسية"
 )
 async def floors_command(interaction: discord.Interaction):
-    if not is_registered(interaction.user.id):
-        await interaction.response.send_modal(RegisterModal())
-        return
+    ensure_user(interaction.user.id, str(interaction.user))
 
     cursor.execute(
         "SELECT max_unlocked_floor, equipment_score, floors FROM user_data WHERE user_id = ?",
@@ -666,7 +604,7 @@ async def floors_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 6. الأبطال الأسطوريين
+# 5. الأبطال الأسطوريين
 # ==========================================
 HEROES_DATA = {
     "arthur": {
@@ -747,9 +685,7 @@ class HeroMenuView(discord.ui.View):
 
 @bot.tree.command(name="الابطال", description="فتح قاعة الأبطال الفانتازيا")
 async def heroes_command(interaction: discord.Interaction):
-    if not is_registered(interaction.user.id):
-        await interaction.response.send_modal(RegisterModal())
-        return
+    ensure_user(interaction.user.id, str(interaction.user))
 
     embed = discord.Embed(
         title="🌟 قاعة الأبطال الأسطوريين",
@@ -761,7 +697,7 @@ async def heroes_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 7. المتاجر (المتجر العادي + متجر الظلام)
+# 6. المتاجر (المتجر العادي + متجر الظلام)
 # ==========================================
 
 NORMAL_SHOP_ITEMS = {
@@ -827,9 +763,7 @@ class NormalShopView(discord.ui.View):
 
 @bot.tree.command(name="المتجر", description="فتح المتجر العادي للأسلحة")
 async def shop_command(interaction: discord.Interaction):
-    if not is_registered(interaction.user.id):
-        await interaction.response.send_modal(RegisterModal())
-        return
+    ensure_user(interaction.user.id, str(interaction.user))
 
     embed = discord.Embed(
         title="🛍️ المتجر العادي الإمبراطوري",
@@ -892,9 +826,7 @@ class DarkShopView(discord.ui.View):
 
 @bot.tree.command(name="متجر_الظلام", description="فتح متجر الظلام السري")
 async def dark_shop_command(interaction: discord.Interaction):
-    if not is_registered(interaction.user.id):
-        await interaction.response.send_modal(RegisterModal())
-        return
+    ensure_user(interaction.user.id, str(interaction.user))
 
     embed = discord.Embed(
         title="🌑 متجر الظلام السري",
@@ -906,7 +838,7 @@ async def dark_shop_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 8. البنك ولوحة المطورين
+# 7. البنك ولوحة المطورين
 # ==========================================
 
 
@@ -942,9 +874,7 @@ class BankMenuView(discord.ui.View):
 
 @bot.tree.command(name="البنك", description="فتح منيو المصرف الإمبراطوري")
 async def bank_panel(interaction: discord.Interaction):
-    if not is_registered(interaction.user.id):
-        await interaction.response.send_modal(RegisterModal())
-        return
+    ensure_user(interaction.user.id, str(interaction.user))
 
     embed = discord.Embed(
         title="✨ منيو المصرف الإمبراطوري",
@@ -970,7 +900,7 @@ class DevPanelView(discord.ui.View):
     async def stats_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        cursor.execute("SELECT COUNT(*) FROM user_data WHERE is_registered=1")
+        cursor.execute("SELECT COUNT(*) FROM user_data")
         total_users = cursor.fetchone()[0]
 
         embed = discord.Embed(
@@ -1032,7 +962,7 @@ async def add_developer(interaction: discord.Interaction, member: discord.Member
 
 
 # ==========================================
-# 9. تشغيل البوت
+# 8. تشغيل البوت
 # ==========================================
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
