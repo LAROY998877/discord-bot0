@@ -97,7 +97,7 @@ HEROES_DATA = {
     }
 }
 
-# ================== نظام البنك والتحويل/التبرع (Menu & Modals) ==================
+# ================== نظام البنك والتحويل (داخلي بالكامل) ==================
 
 class BankDepositModal(discord.ui.Modal, title="إيداع أموال في خزينة البنك"):
     amount = discord.ui.TextInput(label="المبلغ المراد إيداعه", placeholder="مثال: 100000", required=True)
@@ -133,13 +133,64 @@ class BankWithdrawModal(discord.ui.Modal, title="سحب أموال من خزين
         except:
             await interaction.response.send_message("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
 
+# نافذة إدخال المبلغ للتحويل لشخص معين
+class TransferModal(discord.ui.Modal, title="تحويل أموال لشخص آخر"):
+    amount = discord.ui.TextInput(label="المبلغ المراد تحويله", placeholder="مثال: 5000", required=True)
+
+    def __init__(self, receiver: discord.Member):
+        super().__init__()
+        self.receiver = receiver
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            val = int(self.amount.value)
+            sender_id = str(interaction.user.id)
+            receiver_id = str(self.receiver.id)
+
+            if sender_id == receiver_id:
+                return await interaction.response.send_message("❌ لا يمكنك تحويل الأموال لنفسك!", ephemeral=True)
+            if val <= 0:
+                return await interaction.response.send_message("❌ يرجى إدخال مبلغ صحيح أكبر من الصفر!", ephemeral=True)
+
+            sender_data = users_col.find_one({"user_id": sender_id})
+            if not sender_data or sender_data.get("balance", 0) < val:
+                return await interaction.response.send_message("❌ رصيدك النقدي لا يكفي لإتمام هذا التحويل!", ephemeral=True)
+
+            receiver_data = users_col.find_one({"user_id": receiver_id})
+            if not receiver_data:
+                return await interaction.response.send_message("❌ عذراً، هذا الشخص غير مسجل في نظام اللعبة!", ephemeral=True)
+
+            users_col.update_one({"user_id": sender_id}, {"$inc": {"balance": -val}})
+            users_col.update_one({"user_id": receiver_id}, {"$inc": {"balance": val}})
+
+            embed = discord.Embed(
+                title="💸 عملية تحويل مالية ناجحة",
+                description=f"تم تحويل مبلغ `{val:,}` 🪙 بنجاح إلى العضو {self.receiver.mention}!",
+                color=discord.Color.green()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=False)
+        except:
+            await interaction.response.send_message("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
+
+# قائمة اختيار الشخص للتحويل داخل البنك
+class TransferUserSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        
+        @discord.ui.select(cls=discord.ui.UserSelect, placeholder="👥 اختر العضو المراد تحويل العملات له...", min_values=1, max_values=1)
+        async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
+            chosen_member = select.values[0]
+            await inter.response.send_modal(TransferModal(receiver=chosen_member))
+
+        self.add_item(select_callback)
+
 class BankSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="عرض الحساب المالي الشامل", description="الاطلاع على رصيد المحفظة والخزينة السيادية", emoji="💼", value="view"),
             discord.SelectOption(label="إيداع نقدي في البنك", description="نقل الأموال من المحفظة إلى الخزينة الآمنة", emoji="📥", value="deposit"),
             discord.SelectOption(label="سحب نقدي من البنك", description="استخراج السيولة المالية وإنفاقها بالمعارك", emoji="📤", value="withdraw"),
-            discord.SelectOption(label="تحويل أو تبرع بالعملات (بالمنشن)", description="استخدم أمر /تحويل لإرسال الأموال لأي شخص مباشرة", emoji="💸", value="transfer_info")
+            discord.SelectOption(label="تحويل عملات لعضو (تبرع)", description="اختر الشخص بالمنشن وحول له المبلغ مباشرة من البنك", emoji="💸", value="transfer")
         ]
         super().__init__(placeholder="🌟 اختر المعاملة المصرفية المطلوبة من القائمة...", min_values=1, max_values=1, options=options)
 
@@ -166,8 +217,9 @@ class BankSelect(discord.ui.Select):
             await interaction.response.send_modal(BankDepositModal())
         elif self.values[0] == "withdraw":
             await interaction.response.send_modal(BankWithdrawModal())
-        elif self.values[0] == "transfer_info":
-            await interaction.response.send_message("💡 للتحويل أو التبرع بالعملات لأي شخص بالمنشن المباشر، قم بكتابة الأمر التالي:\n`/تحويل @العضو المبلغ`", ephemeral=True)
+        elif self.values[0] == "transfer":
+            view = TransferUserSelectView()
+            await interaction.response.send_message("💸 يرجى اختيار العضو الذي ترغب بالتحويل له من القائمة أدناه:", view=view, ephemeral=True)
 
 class BankView(discord.ui.View):
     def __init__(self):
@@ -183,40 +235,73 @@ async def bank_command(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed, view=BankView(), ephemeral=True)
 
-# ================== أمر التحويل أو التبرع المباشر بالمنشن ==================
-@bot.tree.command(name="تحويل", description="تحويل أو التبرع بالعملات النقدية لأي شخص باستخدام المنشن (@) مباشرة")
-@app_commands.describe(member="اختر العضو المراد التبرع/التحويل له بالمنشن", amount="المبلغ المراد تحويله")
-async def transfer_command(interaction: discord.Interaction, member: discord.Member, amount: int):
-    sender_id = str(interaction.user.id)
-    receiver_id = str(member.id)
-    
-    if sender_id == receiver_id:
-        return await interaction.response.send_message("❌ لا يمكنك تحويل الأموال لنفسك!", ephemeral=True)
-    if amount <= 0:
-        return await interaction.response.send_message("❌ يرجى إدخال مبلغ صحيح أكبر من الصفر!", ephemeral=True)
-        
-    sender_data = users_col.find_one({"user_id": sender_id})
-    if not sender_data or sender_data.get("balance", 0) < amount:
-        return await interaction.response.send_message("❌ رصيدك النقدي في المحفظة لا يكفي لإتمام هذا التحويل!", ephemeral=True)
-        
-    # التأكد من تسجيل المستقبل أيضاً
-    receiver_data = users_col.find_one({"user_id": receiver_id})
-    if not receiver_data:
-        return await interaction.response.send_message("❌ عذراً، هذا الشخص غير مسجل في نظام اللعبة!", ephemeral=True)
-        
-    # تنفيذ عملية النقل المالي
-    users_col.update_one({"user_id": sender_id}, {"$inc": {"balance": -amount}})
-    users_col.update_one({"user_id": receiver_id}, {"$inc": {"balance": amount}})
-    
-    embed = discord.Embed(
-        title="💸 عملية تحويل مالية ناجحة",
-        description=f"لقد قام البطل {interaction.user.mention} بالتبرع وتحويل مبلغ `{amount:,}` 🪙 إلى المحفظة الخاصة بـ {member.mention}!",
-        color=discord.Color.green()
-    )
-    await interaction.response.send_message(embed=embed, ephemeral=False)
 
+# ================== لوحة المطور الداخلية بالكامل (بدون أوامر منفصلة) ==================
 
-# ================== لوحة المطور الفخمة والأوامر الخارقة ==================
+# نافذة إهداء عتاد
+class DevGiftModal(discord.ui.Modal, title="إهداء عتاد لعضو"):
+    gear_name = discord.ui.TextInput(label="اسم قطعة العتاد أو السلاح", placeholder="مثال: سيف التنين الاسطوري", required=True)
+
+    def __init__(self, receiver: discord.Member):
+        super().__init__()
+        self.receiver = receiver
+
+    async def on_submit(self, interaction: discord.Interaction):
+        users_col.update_one({"user_id": str(self.receiver.id)}, {"$push": {"inventory": self.gear_name.value}}, upsert=True)
+        await interaction.response.send_message(f"🎁 **تم إرسال العتاد بنجاح!** حصل المستخدم {self.receiver.mention} على القطعة: `{self.gear_name.value}` ⚔️", ephemeral=False)
+
+# نافذة إضافة رصيد
+class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو"):
+    amount = discord.ui.TextInput(label="المبلغ المراد إضافته", placeholder="مثال: 500000", required=True)
+
+    def __init__(self, receiver: discord.Member):
+        super().__init__()
+        self.receiver = receiver
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            val = int(self.amount.value)
+            users_col.update_one({"user_id": str(self.receiver.id)}, {"$inc": {"balance": val}}, upsert=True)
+            await interaction.response.send_message(f"✅ تم إضافة `{val:,}` 🪙 إلى محفظة المستخدم {self.receiver.mention} بنجاح!", ephemeral=True)
+        except:
+            await interaction.response.send_message("❌ يرجى إدخال رقم صحيح!", ephemeral=True)
+
+# قائمة اختيار العضو لإهداء العتاد
+class DevGiftUserSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        
+        @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🎁 اختر العضو لإهداء العتاد له...", min_values=1, max_values=1)
+        async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
+            chosen_member = select.values[0]
+            await inter.response.send_modal(DevGiftModal(receiver=chosen_member))
+
+        self.add_item(select_callback)
+
+# قائمة اختيار العضو لإضافة الرصيد
+class DevBalanceUserSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        
+        @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🪙 اختر العضو لإضافة الرصيد له...", min_values=1, max_values=1)
+        async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
+            chosen_member = select.values[0]
+            await inter.response.send_modal(DevAddBalanceModal(receiver=chosen_member))
+
+        self.add_item(select_callback)
+
+# قائمة اختيار العضو لمنحه صلاحية مطور
+class DevAddUserSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        
+        @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🛠️ اختر العضو لترقيته لمطور...", min_values=1, max_values=1)
+        async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
+            chosen_member = select.values[0]
+            devs_col.update_one({"user_id": str(chosen_member.id)}, {"$set": {"user_id": str(chosen_member.id)}}, upsert=True)
+            await inter.response.send_message(f"🛠️ **تمت الترقية بنجاح!** أصبح العضو {chosen_member.mention} مطوراً معتمداً في النظام الإمبراطوري.", ephemeral=True)
+
+        self.add_item(select_callback)
 
 class DevSelect(discord.ui.Select):
     def __init__(self):
@@ -224,9 +309,9 @@ class DevSelect(discord.ui.Select):
             discord.SelectOption(label="تفعيل شخصية 'السفاح' المطلقة", description="رفع إحصائياتك وقوتك للحد الأقصى المدمر", emoji="🩸", value="assassin"),
             discord.SelectOption(label="الحصول على الثروات اللاانهائية", description="ضخ بلاهايد من العملات العادية والنادرة لمحفظتك", emoji="💎", value="wealth"),
             discord.SelectOption(label="تطوير العتاد والمعدلات لأقصى حد", description="رفع كافة معدلاتك القتالية والعتاد للقمة بلا حدود", emoji="⚡", value="max_gear"),
-            discord.SelectOption(label="إهداء عتاد لعضو (بالمنشن)", description="استخدم أمر /إهداء_عتاد لاختيار العضو بالمنشن مباشرة", emoji="🎁", value="info_gift"),
-            discord.SelectOption(label="إضافة رصيد عملات لعضو (بالمنشن)", description="استخدم أمر /إضافة_رصيد لاختيار العضو بالمنشن مباشرة", emoji="🪙", value="info_bal"),
-            discord.SelectOption(label="إضافة مطور جديد (بالمنشن)", description="استخدم أمر /إضافة_مطور لمنح الصلاحية بالمنشن", emoji="🛠️", value="info_dev")
+            discord.SelectOption(label="إهداء عتاد لعضو", description="اختر العضو من القائمة واكتب اسم العتاد لإرساله له", emoji="🎁", value="dev_gift"),
+            discord.SelectOption(label="إضافة رصيد عملات لعضو", description="اختر العضو من القائمة وحدد المبلغ المالي لإضافته", emoji="🪙", value="dev_bal"),
+            discord.SelectOption(label="إضافة مطور جديد", description="اختر العضو من القائمة لمنحه صلاحية المطورين", emoji="🛠️", value="dev_add")
         ]
         super().__init__(placeholder="⚡ اختر صلاحية المطور المطلقة للتنفيذ...", min_values=1, max_values=1, options=options)
 
@@ -274,12 +359,12 @@ class DevSelect(discord.ui.Select):
             )
             await interaction.response.send_message("⚡ **تمت ترقية كافة المعدلات والعتاد للأقصى المطلق (مليارات القيم)!**", ephemeral=True)
             
-        elif choice == "info_gift":
-            await interaction.response.send_message("💡 لإهداء عتاد باستخدام المنشن مباشرة، يرجى استخدام الأمر المباشر:\n`/إهداء_عتاد @العضو اسم_العتاد`", ephemeral=True)
-        elif choice == "info_bal":
-            await interaction.response.send_message("💡 لإضافة رصيد باستخدام المنشن مباشرة، يرجى استخدام الأمر المباشر:\n`/إضافة_رصيد @العضو المبلغ`", ephemeral=True)
-        elif choice == "info_dev":
-            await interaction.response.send_message("💡 لإضافة مطور باستخدام المنشن مباشرة، يرجى استخدام الأمر المباشر:\n`/إضافة_مطور @العضو`", ephemeral=True)
+        elif choice == "dev_gift":
+            await interaction.response.send_message("🎁 يرجى اختيار العضو المراد إهداء العتاد له من القائمة:", view=DevGiftUserSelectView(), ephemeral=True)
+        elif choice == "dev_bal":
+            await interaction.response.send_message("🪙 يرجى اختيار العضو المراد إضافة الرصيد له من القائمة:", view=DevBalanceUserSelectView(), ephemeral=True)
+        elif choice == "dev_add":
+            await interaction.response.send_message("🛠️ يرجى اختيار العضو لترقيته لمطور من القائمة:", view=DevAddUserSelectView(), ephemeral=True)
 
 class DevControlView(discord.ui.View):
     def __init__(self):
@@ -299,37 +384,7 @@ async def developer_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=DevControlView(), ephemeral=True)
 
 
-# ================== أوامر المنشن المباشر للمطورين (@) ==================
-
-@bot.tree.command(name="إهداء_عتاد", description="إهداء عتاد لأي شخص باستخدام المنشن (@) مباشرة")
-@app_commands.describe(member="اختر العضو بالمنشن", gear_name="اسم قطعة العتاد أو السلاح")
-async def gift_gear_command(interaction: discord.Interaction, member: discord.Member, gear_name: str):
-    if not is_developer(interaction.user.id):
-        return await interaction.response.send_message("❌ هذا الأمر مخصص للمطورين فقط!", ephemeral=True)
-    
-    users_col.update_one({"user_id": str(member.id)}, {"$push": {"inventory": gear_name}}, upsert=True)
-    await interaction.response.send_message(f"🎁 **تم إرسال العتاد بنجاح!** حصل المستخدم {member.mention} على القطعة: `{gear_name}` ⚔️", ephemeral=False)
-
-@bot.tree.command(name="إضافة_رصيد", description="إضافة رصيد عملات لأي شخص باستخدام المنشن (@) مباشرة")
-@app_commands.describe(member="اختر العضو بالمنشن", amount="المبلغ المراد إضافته")
-async def add_balance_command(interaction: discord.Interaction, member: discord.Member, amount: int):
-    if not is_developer(interaction.user.id):
-        return await interaction.response.send_message("❌ هذا الأمر مخصص للمطورين فقط!", ephemeral=True)
-    
-    users_col.update_one({"user_id": str(member.id)}, {"$inc": {"balance": amount}}, upsert=True)
-    await interaction.response.send_message(f"✅ تم إضافة `{amount:,}` 🪙 إلى محفظة المستخدم {member.mention} بنجاح!", ephemeral=True)
-
-@bot.tree.command(name="إضافة_مطور", description="منح صلاحيات المطور لعضو جديد باستخدام المنشن (@) مباشرة")
-@app_commands.describe(member="اختر العضو المراد ترقيته بالمنشن")
-async def add_dev_command(interaction: discord.Interaction, member: discord.Member):
-    if not is_developer(interaction.user.id):
-        return await interaction.response.send_message("❌ هذا الأمر مخصص لمالك البوت والمطورين فقط!", ephemeral=True)
-    
-    devs_col.update_one({"user_id": str(member.id)}, {"$set": {"user_id": str(member.id)}}, upsert=True)
-    await interaction.response.send_message(f"🛠️ **تمت الترقية بنجاح!** أصبح العضو {member.mention} مطوراً معتمداً في النظام الإمبراطوري.", ephemeral=True)
-
-
-# ================== أمر الملف الشخصي الشامل ==================
+# ================== أمر الملف والتسجيل ==================
 @bot.tree.command(name="الملف", description="عرض السجل الأسطوري والمعدلات القتالية الشاملة")
 async def profile_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=False)
