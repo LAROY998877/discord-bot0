@@ -41,41 +41,13 @@ def is_developer(user_id):
 
 # ================== قاعدة بيانات الأبطال والطوابق ==================
 HEROES_DATA = {
-    "zeal": {
-        "name": "زيل - كاسر الظلال (Zeal)",
-        "emoji": "⚡",
-        "power_boost": 500
-    },
-    "draven": {
-        "name": "دريفان - سيد الجحيم (Draven)",
-        "emoji": "🔥",
-        "power_boost": 600
-    },
-    "kaelen": {
-        "name": "كايلين - حارس الأبعاد (Kaelen)",
-        "emoji": "🌌",
-        "power_boost": 750
-    },
-    "lyra": {
-        "name": "ليرا - ملكة الصقيع (Lyra)",
-        "emoji": "❄️",
-        "power_boost": 550
-    },
-    "vortexa": {
-        "name": "فورتيكسا - ساحرة الثقوب السوداء (Vortexa)",
-        "emoji": "🌀",
-        "power_boost": 800
-    },
-    "valeria": {
-        "name": "فاليريا - فارسة الفجر الذهبي (Valeria)",
-        "emoji": "☀️",
-        "power_boost": 650
-    },
-    "assassin_dev": {
-        "name": "💀 السفاح الأبدي - حاصد الأرواح (The Executioner)",
-        "emoji": "🩸",
-        "power_boost": 999999
-    }
+    "zeal": {"name": "زيل - كاسر الظلال (Zeal)", "emoji": "⚡", "power_boost": 500},
+    "draven": {"name": "دريفان - سيد الجحيم (Draven)", "emoji": "🔥", "power_boost": 600},
+    "kaelen": {"name": "كايلين - حارس الأبعاد (Kaelen)", "emoji": "🌌", "power_boost": 750},
+    "lyra": {"name": "ليرا - ملكة الصقيع (Lyra)", "emoji": "❄️", "power_boost": 550},
+    "vortexa": {"name": "فورتيكسا - ساحرة الثقوب السوداء (Vortexa)", "emoji": "🌀", "power_boost": 800},
+    "valeria": {"name": "فاليريا - فارسة الفجر الذهبي (Valeria)", "emoji": "☀️", "power_boost": 650},
+    "assassin_dev": {"name": "💀 السفاح الأبدي - حاصد الأرواح (The Executioner)", "emoji": "🩸", "power_boost": 999999}
 }
 
 # ================== نظام البنك والتحويل ==================
@@ -175,10 +147,11 @@ class BankSelect(discord.ui.Select):
         super().__init__(placeholder="🌟 اختر المعاملة المصرفية المطلوبة من القائمة...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         user_id = str(interaction.user.id)
         user_data = users_col.find_one({"user_id": user_id})
         if not user_data:
-            return await interaction.response.send_message("❌ أنت غير مسجل! استخدم `/تسجيل` أولاً.", ephemeral=True)
+            return await interaction.followup.send("❌ أنت غير مسجل! استخدم `/تسجيل` أولاً.", ephemeral=True)
         
         wallet = user_data.get("balance", 0)
         bank = user_data.get("bank", 0)
@@ -191,14 +164,14 @@ class BankSelect(discord.ui.Select):
                             f"👑 **إجمالي الثروة الكلية:** `{wallet + bank:,}` 🪙",
                 color=discord.Color.dark_gold()
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=True)
         elif self.values[0] == "deposit":
             await interaction.response.send_modal(BankDepositModal())
         elif self.values[0] == "withdraw":
             await interaction.response.send_modal(BankWithdrawModal())
         elif self.values[0] == "transfer":
             view = TransferUserSelectView()
-            await interaction.response.send_message("💸 يرجى اختيار العضو الذي ترغب بالتحويل له من القائمة أدناه:", view=view, ephemeral=True)
+            await interaction.followup.send("💸 يرجى اختيار العضو الذي ترغب بالتحويل له من القائمة أدناه:", view=view, ephemeral=True)
 
 class BankView(discord.ui.View):
     def __init__(self):
@@ -215,7 +188,7 @@ async def bank_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=BankView(), ephemeral=True)
 
 
-# ================== نظام الطوابق (الأبراج القتالية) الكامل ==================
+# ================== نظام الطوابق الكامل ==================
 
 class TowerSelect(discord.ui.Select):
     def __init__(self):
@@ -240,36 +213,28 @@ class TowerSelect(discord.ui.Select):
         if choice == "normal_tower":
             embed = discord.Embed(
                 title="🏢 برج الطوابق العادية (المستويات 1 إلى 50)",
-                description=f"أنت الآن في رحلة الصعود الكبرى.\n📈 **أعلى طابق وصلته:** `{max_floor}`\n\n"
-                            "اختر الطابق الذي تريد اقتحامه ومقاتلة وحوشه للحصول على خبرة وأموال!",
+                description=f"أنت الآن في رحلة الصعود الكبرى.\n📈 **أعلى طابق وصلته:** `{max_floor}`\n\nاختر الطابق الذي تريد اقتحامه ومقاتلة وحوشه!",
                 color=discord.Color.blue()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
-
         elif choice == "boss_tower":
             embed = discord.Embed(
                 title="👹 برج زعماء الأبعاد الكبرى",
-                description="«هنا تقف وجهاً لوجه أمام عمالقة الشر المطلق.»\n\n"
-                            "كل زعيم تحطمه يمنحك ألقاباً نادرة، طاقة هائلة، ومكافآت مالية ضخمة تتجاوز ملايين العملات!",
+                description="«هنا تقف وجهاً لوجه أمام عمالقة الشر المطلق.»\n\nكل زعيم تحطمه يمنحك ألقاباً نادرة ومكافآت ضخمة!",
                 color=discord.Color.dark_red()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
-
         elif choice == "endless_tower":
             embed = discord.Embed(
                 title="🌌 هاوية الطوابق اللانهائية (Endless Abyss)",
-                description="طابق بلا نهاية ولا رحم... كلما صعدت خطوة زادت قوة الخصوم بشكل جنوني.\n"
-                            "هل تمتلك الشجاعة الكافية لتسجيل اسمك في قمة قادة الأبعاد؟",
+                description="طابق بلا نهاية ولا رحم... كلما صعدت خطوة زادت قوة الخصوم بشكل جنوني.",
                 color=discord.Color.purple()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
-
         elif choice == "tower_rewards":
             embed = discord.Embed(
                 title="🎁 صندوق غنائم الطوابق والأبراج",
-                description=f"إنجازاتك الحالية في الأبراج:\n"
-                            f"🏆 **الطابق الأقصى:** `{max_floor}`\n"
-                            f"💎 **مكافآت جاهزة للاستلام:** متوفرة بناءً على تقدمك القتالي!",
+                description=f"إنجازاتك الحالية:\n🏆 **الطابق الأقصى:** `{max_floor}`\n💎 **مكافآت جاهزة للاستلام!**",
                 color=discord.Color.gold()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -299,8 +264,9 @@ class DevGiftModal(discord.ui.Modal, title="إهداء عتاد لعضو"):
         self.receiver = receiver
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False)
         users_col.update_one({"user_id": str(self.receiver.id)}, {"$push": {"inventory": self.gear_name.value}}, upsert=True)
-        await interaction.response.send_message(f"🎁 **تم إرسال العتاد بنجاح!** حصل المستخدم {self.receiver.mention} على القطعة: `{self.gear_name.value}` ⚔️", ephemeral=False)
+        await interaction.followup.send(f"🎁 **تم إرسال العتاد بنجاح!** حصل المستخدم {self.receiver.mention} على القطعة: `{self.gear_name.value}` ⚔️")
 
 class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو"):
     amount = discord.ui.TextInput(label="المبلغ المراد إضافته", placeholder="مثال: 500000", required=True)
@@ -359,6 +325,7 @@ class DevSelect(discord.ui.Select):
         super().__init__(placeholder="⚡ اختر صلاحية المطور المطلقة للتنفيذ...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         user_id = str(interaction.user.id)
         choice = self.values[0]
         
@@ -377,7 +344,7 @@ class DevSelect(discord.ui.Select):
                 },
                 upsert=True
             )
-            await interaction.response.send_message("🩸 **تم تفعيل طاقة السفاح المطلقة وإحصائياتك المرعبة بنجاح!**", ephemeral=True)
+            await interaction.followup.send("🩸 **تم تفعيل طاقة السفاح المطلقة وإحصائياتك المرعبة بنجاح!**", ephemeral=True)
             
         elif choice == "wealth":
             users_col.update_one(
@@ -385,7 +352,7 @@ class DevSelect(discord.ui.Select):
                 {"$inc": {"balance": 999999999, "diamonds": 999999999}},
                 upsert=True
             )
-            await interaction.response.send_message("💎 **تم ضخ الثروات اللانهائية!** حصلت على عملات عادية والنادرة بلا حدود في خزنتك.", ephemeral=True)
+            await interaction.followup.send("💎 **تم ضخ الثروات اللانهائية!** حصلت على عملات عادية والنادرة بلا حدود في خزنتك.", ephemeral=True)
             
         elif choice == "max_gear":
             users_col.update_one(
@@ -400,14 +367,17 @@ class DevSelect(discord.ui.Select):
                 },
                 upsert=True
             )
-            await interaction.response.send_message("⚡ **تمت ترقية كافة المعدلات والعتاد للأقصى المطلق!**", ephemeral=True)
+            await interaction.followup.send("⚡ **تمت ترقية كافة المعدلات والعتاد للأقصى المطلق!**", ephemeral=True)
             
         elif choice == "dev_gift":
-            await interaction.response.send_message("🎁 يرجى اختيار العضو المراد إهداء العتاد له من القائمة:", view=DevGiftUserSelectView(), ephemeral=True)
+            view = DevGiftUserSelectView()
+            await interaction.followup.send("🎁 يرجى اختيار العضو المراد إهداء العتاد له من القائمة:", view=view, ephemeral=True)
         elif choice == "dev_bal":
-            await interaction.response.send_message("🪙 يرجى اختيار العضو المراد إضافة الرصيد له من القائمة:", view=DevBalanceUserSelectView(), ephemeral=True)
+            view = DevBalanceUserSelectView()
+            await interaction.followup.send("🪙 يرجى اختيار العضو المراد إضافة الرصيد له من القائمة:", view=view, ephemeral=True)
         elif choice == "dev_add":
-            await interaction.response.send_message("🛠️ يرجى اختيار العضو لترقيته لمطور من القائمة:", view=DevAddUserSelectView(), ephemeral=True)
+            view = DevAddUserSelectView()
+            await interaction.followup.send("🛠️ يرجى اختيار العضو لترقيته لمطور من القائمة:", view=view, ephemeral=True)
 
 class DevControlView(discord.ui.View):
     def __init__(self):
