@@ -15,7 +15,7 @@ db = client["discord_bot_db"]
 users_col = db["users"]
 
 # ==========================================
-# قائمة الأسئلة الموسعة (مستوى عادي - 40 سؤال)
+# قوائم الأسئلة الموسعة (مستوى عادي - 40 سؤال)
 # ==========================================
 NORMAL_QUESTIONS = [
     "ما هي أكلتك المفضلة التي لا يمكنك الاستغناء عنها؟", "ما هو لونك المفضل ولماذا؟",
@@ -91,6 +91,144 @@ BOLD_QUESTIONS = [
     "هل سبق أن استغلت طيبة شخص لغرض شخصي؟", "من هو أكثر شخص تسبب في تحطيم مشاعرك يوماً ما؟",
     "ما هو الشيء الذي لو عرفه الناس عنك لتغيرت نظرتهم لك تماماً؟", "هل أنت راضٍ عن الشخص الذي أصبحت عليه اليوم؟"
 ]
+
+# ==========================================
+# بيانات متجر الظلام (العتاد والمعدات والرتب)
+# الرتب: شائع -> نادر -> ملحمي -> أسطوري -> السفاح -> الجحيم -> الشيطان (الأعلى)
+# ==========================================
+DARK_SHOP_ITEMS = {
+    "خناجر": [
+        {"id": "d1", "name": "خنجر الظل الصامت", "tier": "نادر", "power": 25, "price": 80},
+        {"id": "d2", "name": "خنجر الدم الخفي", "tier": "أسطوري", "power": 85, "price": 300},
+        {"id": "d3", "name": "خنجر دم الملوك", "tier": "السفاح", "power": 150, "price": 600}
+    ],
+    "سيوف": [
+        {"id": "s1", "name": "سيف الفولاذ المظلم", "tier": "نادر", "power": 35, "price": 100},
+        {"id": "s2", "name": "سيف الموت الأسود", "tier": "ملحمي", "power": 70, "price": 250},
+        {"id": "s3", "name": "سيف إبليس العاصف", "tier": "الشيطان", "power": 300, "price": 1200}
+    ],
+    "مطرقات": [
+        {"id": "h1", "name": "مطرقة الحطاب الملعونة", "tier": "نادر", "power": 40, "price": 120},
+        {"id": "h2", "name": "مطرقة الأرض المحروقة", "tier": "أسطوري", "power": 100, "price": 400},
+        {"id": "h3", "name": "مطرقة جحيم التردي", "tier": "الجحيم", "power": 250, "price": 950}
+    ],
+    "خوذ": [
+        {"id": "hl1", "name": "خوذة الحارس المظلم", "tier": "نادر", "power": 20, "price": 70},
+        {"id": "hl2", "name": "خوذة الأطياف", "tier": "ملحمي", "power": 65, "price": 220},
+        {"id": "hl3", "name": "خوذة الرعب المطلق", "tier": "الجحيم", "power": 200, "price": 800}
+    ],
+    "دروع": [
+        {"id": "a1", "name": "درع الجلد المتسخ", "tier": "شائع", "power": 15, "price": 50},
+        {"id": "a2", "name": "درع الفولاذ الأسود", "tier": "ملحمي", "power": 80, "price": 300},
+        {"id": "a3", "name": "درع الهالك الأبدي", "tier": "الشيطان", "power": 350, "price": 1500}
+    ],
+    "ساق": [
+        {"id": "l1", "name": "واقي الساق الملعون", "tier": "نادر", "power": 18, "price": 60},
+        {"id": "l2", "name": "دروع الأرجل الفولاذية", "tier": "أسطوري", "power": 70, "price": 250},
+        {"id": "l3", "name": "واقي ساق السفاح", "tier": "السفاح", "power": 130, "price": 550}
+    ],
+    "حذاء": [
+        {"id": "b1", "name": "حذاء اللصوص الخفيف", "tier": "شائع", "power": 10, "price": 40},
+        {"id": "b2", "name": "حذاء الرياح المظلمة", "tier": "أسطوري", "power": 50, "price": 180},
+        {"id": "b3", "name": "حذاء الجحيم السريع", "tier": "الجحيم", "power": 180, "price": 700}
+    ]
+}
+
+# ==========================================
+# كلاسات متجر الظلام (منيو تفاعلي)
+# ==========================================
+class DarkShopItemsView(discord.ui.View):
+    def __init__(self, category_name):
+        super().__init__(timeout=None)
+        self.category_name = category_name
+        self.add_item(DarkShopItemSelect(category_name))
+
+class DarkShopItemSelect(discord.ui.Select):
+    def __init__(self, category_name):
+        self.category_name = category_name
+        items = DARK_SHOP_ITEMS.get(category_name, [])
+        options = []
+        for item in items:
+            emoji_map = {"شائع": "⚪", "نادر": "🟢", "ملحمي": "🔵", "أسطوري": "🟣", "السفاح": "🗡️", "الجحيم": "🔥", "الشيطان": "👑"}
+            emo = emoji_map.get(item['tier'], "⚔️")
+            options.append(
+                discord.SelectOption(
+                    label=item['name'],
+                    description=f"الرتبة: {item['tier']} | القوة: +{item['power']} | السعر: {item['price']} عملة",
+                    emoji=emo,
+                    value=item['id']
+                )
+            )
+        super().__init__(placeholder=f"اختر قطعة من قسم {category_name} للشراء...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_id = self.values[0]
+        chosen_item = None
+        for cat, items in DARK_SHOP_ITEMS.items():
+            for it in items:
+                if it['id'] == selected_id:
+                    chosen_item = it
+                    break
+        
+        if not chosen_item:
+            await interaction.response.send_message("❌ القطعة غير موجودة!", ephemeral=True)
+            return
+
+        user_id = str(interaction.user.id)
+        user = users_col.find_one({"user_id": user_id})
+        if not user:
+            await interaction.response.send_message("❌ يجب عليك التسجيل أولاً باستخدام أمر `/تسجيل`", ephemeral=True)
+            return
+
+        balance = user.get("balance", 0)
+        price = chosen_item["price"]
+
+        if balance < price:
+            await interaction.response.send_message(f"❌ رصيدك غير كافي! تحتاج إلى {price} عملة بينما رصيدك هو {balance} عملة.", ephemeral=True)
+            return
+
+        # الخصم وإضافة القطعة للمقتنيات
+        new_balance = balance - price
+        inventory = user.get("inventory", [])
+        inventory.append(f"{chosen_item['name']} (قوة: +{chosen_item['power']})")
+
+        users_col.update_one(
+            {"user_id": user_id},
+            {"$set": {"balance": new_balance, "inventory": inventory}}
+        )
+
+        embed = discord.Embed(
+            title="🛒 تم الشراء بنجاح من متجر الظلام!",
+            description=f"لقد قمت بشراء **{chosen_item['name']}**!\n\n🛡️ **الرتبة:** {chosen_item['tier']}\n⚡ **القوة المضافة:** +{chosen_item['power']}\n💰 **السعر المدفوع:** {price} عملة\n💰 **رصيدك المتبقي:** {new_balance} عملة",
+            color=0x2c2f33
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class DarkShopCategoryView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.select(
+        placeholder="اختر قسماً من أقسام متجر الظلام...",
+        options=[
+            discord.SelectOption(label="الخناجر", description="خناجر سريعة وقاتلة في الظل", emoji="🗡️"),
+            discord.SelectOption(label="السيوف", description="سيوف ثقيلة ومدمرة للخصوم", emoji="⚔️"),
+            discord.SelectOption(label="المطرقات", description="مطرقات تحطم الدروع بقسوة", emoji="🔨"),
+            discord.SelectOption(label="الخوذ", description="حماية للرأس من الضربات القاتلة", emoji="🪖"),
+            discord.SelectOption(label="الدروع", description="دروع صلبة لامتصاص الهجمات", emoji="🛡️"),
+            discord.SelectOption(label="الساق", description="واقيات الأرجل والسيقان", emoji="🦵"),
+            discord.SelectOption(label="الحذاء", description="أحذية خفيفة للسرعة والمناورة", emoji="👢")
+        ]
+    )
+    async def select_category(self, interaction: discord.Interaction, select: discord.ui.Select):
+        cat = select.values[0]
+        embed = discord.Embed(
+            title=f"🌑 متجر الظلام - قسم ({cat})",
+            description=f"استعرض العتاد المتاح في قسم **{cat}**:\n*(أعلى ثلاث رتب في المتجر هي: السفاح، الجحيم، الشيطان)*",
+            color=0x7289da
+        )
+        view = DarkShopItemsView(cat)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 # ==========================================
 # كلاسات اللعبة التفاعلية (أسئلة عامة مع الأدوار وأزرار التحكم)
@@ -307,7 +445,7 @@ async def profile(interaction: discord.Interaction):
     embed.add_field(name="💰 الرصيد", value=f"{user.get('balance', 0)} عملة", inline=False)
     inventory = user.get('inventory', [])
     items_text = ", ".join(inventory) if inventory else "لا توجد مقتنيات حالياً"
-    embed.add_field(name="🎒 المقتنيات", value=items_text, inline=False)
+    embed.add_field(name="🎒 المقتنيات والعتاد", value=items_text, inline=False)
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="الابطال", description="عرض قاعة الأبطال الأسطوريين")
@@ -319,7 +457,7 @@ async def heroes(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="متجر", description="عرض المتجر لشراء الأسلحة والأدوات")
+@bot.tree.command(name="متجر", description="عرض المتجر العادي لشراء الأدوات")
 async def shop(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🛒 المتجر العجيب",
@@ -327,6 +465,15 @@ async def shop(interaction: discord.Interaction):
         color=0xf1c40f
     )
     await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="متجر_الظلام", description="دخول متجر الظلام لشراء العتاد الأسطوري القوي")
+async def dark_shop(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🌑 متجر الظلام المحرم",
+        description="مرحباً بك أيها المتابع في أعماق متجر الظلام.\nهنا حيث تصنع الأسلحة الفتاكة والعتاد المظلم!\n\n👑 **أعلى ثلاث رتب في المتجر:**\n1️⃣ **الشيطان** (القوة المطلقة)\n2️⃣ **الجحيم** (مدمر الحصون)\n3️⃣ **السفاح** (سيد الخفاء والفتك)\n\nاختر القسم المطلوب من القائمة بالأسفل لاستعراض العتاد:",
+        color=0x111111
+    )
+    await interaction.response.send_message(embed=embed, view=DarkShopCategoryView(), ephemeral=True)
 
 @bot.tree.command(name="العاب", description="فتح قائمة الألعاب التفاعلية المتاحة للسيرفر")
 async def games(interaction: discord.Interaction):
