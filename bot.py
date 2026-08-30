@@ -489,7 +489,30 @@ class DeveloperControlView(discord.ui.View):
 
         await interaction.response.send_modal(DevModal())
 
-    @discord.ui.button(label="تحويل عملات لشخص 💸", style=discord.ButtonStyle.blurple, row=1)
+    @discord.ui.button(label="إزالة مطور 🗑️", style=discord.ButtonStyle.danger, row=1)
+    async def remove_dev_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        class RemoveDevModal(discord.ui.Modal, title="إزالة مطور من النظام"):
+            target_user = discord.ui.TextInput(label="أيدي المستخدم أو منشنه", placeholder="اكتب آيدي العضو المراد إزالته...", required=True)
+            
+            async def on_submit(self, interaction: discord.Interaction):
+                try:
+                    raw_target = self.target_user.value.strip().replace("<@", "").replace(">", "").replace("!", "")
+                    uid = str(int(raw_target))
+                    
+                    if int(uid) == OWNER_ID:
+                        return await interaction.response.send_message("❌ لا يمكنك إزالة المالك الأساسي (أنت) من قائمة المطورين!", ephemeral=True)
+                    
+                    result = devs_col.delete_one({"user_id": uid})
+                    if result.deleted_count > 0:
+                        await interaction.response.send_message(f"🗑️ **تمت إزالة العضو <@{uid}> من قائمة المطورين بنجاح!**", ephemeral=True)
+                    else:
+                        await interaction.response.send_message("❌ هذا المستخدم ليس مدرجاً في قائمة المطورين الإضافيين.", ephemeral=True)
+                except ValueError:
+                    await interaction.response.send_message("❌ الآيدي المدخل غير صحيح! تأكد من إدخال أرقام صحيحة.", ephemeral=True)
+
+        await interaction.response.send_modal(RemoveDevModal())
+
+    @discord.ui.button(label="تحويل عملات لشخص 💸", style=discord.ButtonStyle.blurple, row=2)
     async def transfer_money_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         class TransferModal(discord.ui.Modal, title="تحويل عملات بالمنشن أو الآيدي"):
             target = discord.ui.TextInput(label="منشن العضو أو الأيدي", placeholder="مثال: @user أو الـ ID", required=True)
@@ -562,6 +585,7 @@ async def developer_panel(interaction: discord.Interaction):
             "🛡️ **صلاحياتك المطلقة المتاحة في هذه اللوحة:**\n"
             "• ضخ كميات لا نهائية من العملات النقدية والألماس النادر.\n"
             "• ترقية وإضافة مطورين جدد لدعم إدارة النظام بالمنشن.\n"
+            "• إزالة المطورين غير المرغوب بهم من لوحة التحكم بضغطة زر.\n"
             "• تحويل الأموال والأرصدة الفورية لأي مقاتل عبر منشنه.\n"
             "• حقيبة الأسلحة والعتاد: منح أو سحب أي درع أو سلاح أسطوري.\n\n"
             f"📋 **قائمة الأوامر الفعالة والمضافة حديثاً في النظام:**\n{commands_list_str}"
