@@ -45,7 +45,6 @@ class QuestionsLobbyView(discord.ui.View):
         self.players = [host]
         self.mode = "🟢 عادي"
 
-        # منيو تحديد المود بنفس ستايل الصورة
         mode_select = discord.ui.Select(
             placeholder="اختر المود / المستوى...",
             min_values=1,
@@ -69,7 +68,7 @@ class QuestionsLobbyView(discord.ui.View):
             self.mode = "🔴 جريء جداً 🔥"
         await self.update_lobby(interaction)
 
-    def generate_embed() -> discord.Embed:
+    def generate_embed(self) -> discord.Embed:
         players_list = "\n".join([f"• {p.display_name}" for p in self.players])
         embed = discord.Embed(
             title="🎯 لعبة الأسئلة والصراحة",
@@ -128,7 +127,7 @@ class MainGameSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="لعبة الأسئلة والصراحة", description="3 مستويات: عادي، متوسط، جريء جداً", emoji="🎯"),
-            discord.SelectOption(label="قريباً... (لعبة جديدة)", description="مكان مخصص للعبتك القادمة", emoji="⏳")
+            discord.SelectOption(label="قريباً...", description="مكان مخصص للعبتك القادمة", emoji="⏳")
         ]
         super().__init__(placeholder="اختر لعبة من المنيو لتشغيلها...", min_values=1, max_values=1, options=options)
 
@@ -184,7 +183,7 @@ async def games_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ البوت {bot.user} جاهز وشغال بالتصميم المطابق 100%!")
+    print(f"✅ البوت {bot.user} جاهز وشغال تماماً بدون أخطاء!")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 bot.run(TOKEN)
