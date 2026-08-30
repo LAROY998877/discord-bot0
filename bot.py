@@ -117,7 +117,7 @@ class TriviaQuestionView(discord.ui.View):
         if interaction.user.id != self.author_id and interaction.user.id not in self.players:
             return await interaction.response.send_message("❌ ليس لديك صلاحية لإيقاف هذه اللعبة!", ephemeral=True)
         self.stop()
-        embed = discord.Embed(title="🛑 تم إيقاف اللعبة", description=ف:=f"تم إنهاء جلسة اللعبة بواسطة <@{interaction.user.id}>.", color=discord.Color.red())
+        embed = discord.Embed(title="🛑 تم إيقاف اللعبة", description=f"تم إنهاء جلسة اللعبة بواسطة <@{interaction.user.id}>.", color=discord.Color.red())
         await interaction.response.edit_message(embed=embed, view=None)
 
 class TriviaLobbyView(discord.ui.View):
@@ -132,14 +132,21 @@ class TriviaLobbyView(discord.ui.View):
         if interaction.user.id in self.players:
             return await interaction.response.send_message("❌ أنت منضم بالفعل في هذه اللعبة!", ephemeral=True)
         self.players.append(interaction.user.id)
-        await self.update_lobby(interaction)
+        
+        players_mention = ", ".join([f"<@{p}>" for p in self.players])
+        embed = discord.Embed(
+            title=f"🎮 غرفة انتظار لعبة الأسئلة (مستوى: {self.difficulty})",
+            description=f"اضغط على زر **انضمام للعبة** للمشاركة! (يتطلب شخصين على الأقل لبدء اللعبة).\n\n**اللاعبون المسجلون ({len(self.players)}):**\n{players_mention}",
+            color=discord.Color.blue()
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="بدء اللعبة ▶️", style=discord.ButtonStyle.primary)
     async def start_game(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.author_id:
             return await interaction.response.send_message("❌ فقط منشئ اللعبة يمكنه بدءها!", ephemeral=True)
         if len(self.players) < 2:
-            return await interaction.response.send_message("❌ لا يمكن بدء اللعبة إلا إذا سجل وانضم أكثر من شخص (شخصين على الأقل)!", ephemeral=True)
+            return await interaction.response.send_message("❌ لا يمكن بدء اللعبة إلا إذا انضم أكثر من شخص (شخصين على الأقل)!", ephemeral=True)
         
         q_list = TRIVIA_QUESTIONS.get(self.difficulty, TRIVIA_QUESTIONS["عادي"])
         view = TriviaQuestionView(self.difficulty, q_list, self.author_id, self.players)
@@ -161,15 +168,6 @@ class TriviaLobbyView(discord.ui.View):
         embed = discord.Embed(title="🛑 تم إيقاف اللعبة", description="تم إلغاء غرفة الانتظار بواسطة المنشئ.", color=discord.Color.red())
         await interaction.response.edit_message(embed=embed, view=None)
 
-    async def update_lobby(self, interaction):
-        players_mention = ", ".join([f"<@{p}>" for p in self.players])
-        embed = discord.Embed(
-            title=f"🎮 غرفة انتظار لعبة الأسئلة (مستوى: {self.difficulty})",
-            description=f"اضغط على زر **انضمام للعبة** للمشاركة! (يتطلب شخصين على الأقل لبدء اللعبة).\n\n**اللاعبون المسجلون ({len(self.players)}):**\n{players_mention}",
-            color=discord.Color.blue()
-        )
-        await interaction.response.edit_message(embed=embed, view=self)
-
 class TriviaDifficultySelect(discord.ui.Select):
     def __init__(self, author_id):
         self.author_id = author_id
@@ -188,7 +186,6 @@ class TriviaDifficultySelect(discord.ui.Select):
             color=discord.Color.blue()
         )
         view = TriviaLobbyView(level, self.author_id)
-        # مرئي للكل (ظاهر للجميع في القناة)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
 class GamesMenuView(discord.ui.View):
@@ -200,11 +197,10 @@ class GamesMenuView(discord.ui.View):
 async def games_command(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🎮 قاعة الألعاب الترفيهية",
-        description="اختر نوع اللعبة أو مستوى الصعوبة لبدء غرفة الانتظار:",
+        description="اختر مستوى الصعوبة لبدء غرفة الانتظار:",
         color=discord.Color.dark_magenta()
     )
     view = GamesMenuView(interaction.user.id)
-    # مرئي للكل
     await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
 # ================== نظام التسجيل وبقية الأوامر ==================
