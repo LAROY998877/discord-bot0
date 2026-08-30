@@ -1,2 +1,6 @@
 discord.py
 pymongo[srv]
+pymongo
+Pillow
+arabic-reshaper
+python-bidi
