@@ -496,7 +496,6 @@ class GearSelect(discord.ui.Select):
         self.target_id = target_user_id
         self.action_type = action_type
         
-        # أسلحة المتجر المظلم (الأسطورية)
         if shop_type == "dark":
             options = [
                 discord.SelectOption(label="سيف التنين الأسطوري", emoji="🔥", value="سيف التنين الأسطوري"),
@@ -504,7 +503,6 @@ class GearSelect(discord.ui.Select):
                 discord.SelectOption(label="خنجر السموم", emoji="🐍", value="خنجر السموم"),
                 discord.SelectOption(label="فأس الجحيم", emoji="🪓", value="فأس الجحيم")
             ]
-        # أسلحة المتجر العادي
         else:
             options = [
                 discord.SelectOption(label="سيف حديدي", emoji="⚔️", value="سيف حديدي"),
@@ -681,7 +679,6 @@ class DeveloperControlView(discord.ui.View):
 
         await interaction.response.send_modal(TargetUserModal())
 
-# أمر المطور المخفي (لا يظهر في اقتراحات الأوامر العامة نهائياً إلا لك أو للمطورين المضافين)
 @bot.tree.command(name="المطور", description="لوحة التحكم الإمبراطورية الخاصة بالمطورين وسلطات النظام العليا")
 async def developer_panel(interaction: discord.Interaction):
     if not is_developer(interaction.user.id):
@@ -834,7 +831,8 @@ async def profile_command(interaction: discord.Interaction):
     view = ProfileView(interaction.user.id, unlocked_titles)
     await interaction.followup.send(embed=embed, view=view, ephemeral=False)
 
-@bot.tree.command(name="بنك", description="فتح الحساب البنكي")
+# أمر البنك المطلوب
+@bot.tree.command(name="بنك", description="فتح الحساب البنكي واستعراض الأرصدة")
 async def bank_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     user_id = str(interaction.user.id)
@@ -846,7 +844,11 @@ async def bank_command(interaction: discord.Interaction):
     bal = user_data.get("balance", 0)
     diamonds = user_data.get("diamonds", 0)
     
-    embed = discord.Embed(title="🏦 البنك المركزي", description=f"رصيدك الحالي: `{bal:,}` 🪙\nالألماس: `{diamonds:,}` 💎", color=discord.Color.gold())
+    embed = discord.Embed(
+        title="🏦 البنك المركزي الإمبراطوري",
+        description=f"أهلاً بك في حسابك البنكي المعتمد.\n\n• **رصيد العملات:** `{bal:,}` 🪙\n• **رصيد الألماس:** `{diamonds:,}` 💎",
+        color=discord.Color.gold()
+    )
     await interaction.followup.send(embed=embed, ephemeral=True)
 
 bot.run(DISCORD_TOKEN)
