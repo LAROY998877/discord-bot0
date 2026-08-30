@@ -6,7 +6,7 @@ from discord.ext import commands
 from datetime import datetime, timedelta
 from pymongo import MongoClient
 
-# --- الاتصال بقاعدة البيانات والبيئة ---
+# --- الاتصال بقاعدة البيانات ---
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 
@@ -22,7 +22,7 @@ class BotClient(commands.Bot):
 
     async def setup_hook(self):
         await self.tree.sync()
-        print("✅ تم مزامنة جميع الأوامر والأنظمة بنجاح!")
+        print("✅ تم مزامنة البنك والمتاجر الأسطورية بنجاح!")
 
 bot = BotClient()
 
@@ -30,39 +30,92 @@ bot = BotClient()
 async def on_ready():
     print(f"🤖 البوت يعمل الآن باسم: {bot.user}")
 
-# ================== بيانات المتاجر ==================
+# ================== عتاد المتجر العادي (عملات عادية) ==================
 NORMAL_SHOP_ITEMS = {
-    "أسلحة": [
-        {"id": "n_sword", "name": "سيف حديدي", "tier": "شائع", "power": 50, "price": 1000},
-        {"id": "n_bow", "name": "قوس خشبي", "tier": "شائع", "power": 40, "price": 800}
+    "خوذة": [
+        {"id": "n_helm_1", "name": "خوذة الجندي البسيطة", "tier": "شائع", "stats": "الدرع: +15 | الصحة: +20", "price": 300, "stock": 1000},
+        {"id": "n_helm_2", "name": "خوذة الفارس الفولاذية", "tier": "نادر", "stats": "الدرع: +40 | الصحة: +50", "price": 800, "stock": 1000}
     ],
-    "دروع": [
-        {"id": "n_shield", "name": "درع خشبي", "tier": "شائع", "defense": 30, "price": 500}
+    "درع": [
+        {"id": "n_chest_1", "name": "درع قماشي مقوى", "tier": "غير مألوف", "stats": "الدرع: +25 | خفة الحركة: +5", "price": 400, "stock": 1000},
+        {"id": "n_chest_2", "name": "درع الحرس الملكي", "tier": "نادر", "stats": "الدرع: +60 | الصحة: +100", "price": 1200, "stock": 1000}
+    ],
+    "بنطال": [
+        {"id": "n_pant_1", "name": "بنطال جلدي خفيف", "tier": "شائع", "stats": "الدرع: +10 | السرعة: +5", "price": 250, "stock": 1000},
+        {"id": "n_pant_2", "name": "واقي الساقين الحديدي", "tier": "نادر", "stats": "الدرع: +35", "price": 750, "stock": 1000}
+    ],
+    "حذاء": [
+        {"id": "n_boot_1", "name": "حذاء المستكشف", "tier": "غير مألوف", "stats": "السرعة: +20 | الدرع: +5", "price": 300, "stock": 1000},
+        {"id": "n_boot_2", "name": "حذاء المعارك الثقيل", "tier": "نادر", "stats": "الدرع: +20 | السرعة: -5", "price": 600, "stock": 1000}
+    ],
+    "سيف": [
+        {"id": "n_swd_1", "name": "سيف التدريب الخشبي", "tier": "شائع", "stats": "الهجوم: +15", "price": 200, "stock": 1000},
+        {"id": "n_swd_2", "name": "سيف الفولاذ المصقول", "tier": "نادر", "stats": "الهجوم: +55 | نسبة الكريتيكال: 5%", "price": 1500, "stock": 1000}
+    ],
+    "مطرقة": [
+        {"id": "n_ham_1", "name": "مطرقة الحداد", "tier": "شائع", "stats": "الهجوم: +25 | السرعة: -10", "price": 400, "stock": 1000},
+        {"id": "n_ham_2", "name": "مطرقة تحطيم الدروع", "tier": "نادر", "stats": "الهجوم: +70 | كسر الدرع: 15%", "price": 1800, "stock": 1000}
+    ],
+    "خنجر": [
+        {"id": "n_dag_1", "name": "خنجر اللص", "tier": "غير مألوف", "stats": "الهجوم: +20 | السرعة: +15", "price": 350, "stock": 1000},
+        {"id": "n_dag_2", "name": "خنجر الاغتيال المسموم", "tier": "نادر", "stats": "الهجوم: +40 | ضرر السم: +10", "price": 1100, "stock": 1000}
+    ],
+    "عصا سحرية": [
+        {"id": "n_wand_1", "name": "غصن شجرة البلوط", "tier": "شائع", "stats": "قوة السحر: +20", "price": 300, "stock": 1000},
+        {"id": "n_wand_2", "name": "عصا بلورة المانا", "tier": "نادر", "stats": "قوة السحر: +65 | المانا: +50", "price": 1600, "stock": 1000}
     ]
 }
 
+# ================== عتاد المتجر المظلم (ألماس نادر) ==================
 DARK_SHOP_ITEMS = {
-    "أسلحة مظلمة": [
-        {"id": "d_blade", "name": "شفرة الظلام", "tier": "أسطوري", "power": 250, "price": 50},
+    "خوذة": [
+        {"id": "d_helm_1", "name": "خوذة عذاب الأرواح", "tier": "ملعون", "stats": "الدرع: +150 | امتصاص الصحة: 5%", "price": 30, "stock": 1000},
+        {"id": "d_helm_2", "name": "تاج أمير الشياطين", "tier": "الشيطان", "stats": "الدرع: +350 | هيبة مرعبة تقلل هجوم العدو 20%", "price": 150, "stock": 1000}
     ],
-    "دروع مظلمة": [
-        {"id": "d_plate", "name": "درع التنين الأسود", "tier": "أسطوري", "defense": 200, "price": 40}
+    "درع": [
+        {"id": "d_chest_1", "name": "درع صرخات الموتى", "tier": "الجحيم", "stats": "الدرع: +400 | مناعة ضد النار 50%", "price": 120, "stock": 1000},
+        {"id": "d_chest_2", "name": "عباءة الظل المطلق", "tier": "السفاح", "stats": "الدرع: +250 | التخفي التلقائي بالظلام 30%", "price": 100, "stock": 1000}
+    ],
+    "بنطال": [
+        {"id": "d_pant_1", "name": "دروع الساقين الدموية", "tier": "الجحيم", "stats": "الدرع: +280 | عكس الضرر: 10%", "price": 90, "stock": 1000},
+        {"id": "d_pant_2", "name": "بنطال ملك الهاوية", "tier": "الشيطان", "stats": "الدرع: +320 | الصحة القصوى: +500", "price": 130, "stock": 1000}
+    ],
+    "حذاء": [
+        {"id": "d_boot_1", "name": "خطوات السفاح الصامتة", "tier": "السفاح", "stats": "السرعة: +300 | الدرع: +90 | لا يُصدر صوتاً", "price": 85, "stock": 1000},
+        {"id": "d_boot_2", "name": "حذاء نيزك الجحيم", "tier": "الجحيم", "stats": "السرعة: +150 | يترك أثراً نارياً يحرق الأعداء", "price": 110, "stock": 1000}
+    ],
+    "سيف": [
+        {"id": "d_swd_1", "name": "نصل دمار العوالم", "tier": "الشيطان", "stats": "الهجوم: +750 | تدمير شامل للدروع", "price": 250, "stock": 1000},
+        {"id": "d_swd_2", "name": "سيف قاطع الأرواح", "tier": "السفاح", "stats": "الهجوم: +500 | ضربة قاتلة 25% (كريتيكال 3x)", "price": 180, "stock": 1000}
+    ],
+    "مطرقة": [
+        {"id": "d_ham_1", "name": "كسارة عظام الجحيم", "tier": "الجحيم", "stats": "الهجوم: +650 | إحداث زلزال عند الضرب", "price": 190, "stock": 1000},
+        {"id": "d_ham_2", "name": "مطرقة اللعنة الأبدية", "tier": "ملعون", "stats": "الهجوم: +450 | تصيب العدو بالعمى", "price": 80, "stock": 1000}
+    ],
+    "خنجر": [
+        {"id": "d_dag_1", "name": "ناب مصاص الدماء الأكبر", "tier": "السفاح", "stats": "الهجوم: +480 | يسرق 30% من صحة العدو لك", "price": 200, "stock": 1000},
+        {"id": "d_dag_2", "name": "خنجر طقوس الشياطين", "tier": "الشيطان", "stats": "الهجوم: +600 | يخترق كل الدروع السحرية", "price": 220, "stock": 1000}
+    ],
+    "عصا سحرية": [
+        {"id": "d_wand_1", "name": "صولجان بوابة الجحيم", "tier": "الجحيم", "stats": "السحر: +800 | استدعاء نيازك مصغرة", "price": 240, "stock": 1000},
+        {"id": "d_wand_2", "name": "عصا سيد الشياطين", "tier": "الشيطان", "stats": "السحر: +999 | تحكم كامل بعقول الأعداء الضعفاء", "price": 300, "stock": 1000}
     ]
 }
 
-# ================== نظام المتاجر (بالقوائم المنسدلة) ==================
+# ================== القوائم المنسدلة للمتاجر ==================
 class ShopSpecificSelect(discord.ui.Select):
     def __init__(self, items_pool, shop_type, category):
         self.items_pool = items_pool
         self.shop_type = shop_type
+        
         options = [
             discord.SelectOption(
-                label=item["name"], 
+                label=f"{item['name']} [{item['tier']}]", 
                 value=item["id"], 
-                description=f"السعر: {item['price']} | القوة/الدرع: {item.get('power', item.get('defense', 0))}"
+                description=f"السعر: {item['price']} | {item['stats']} | المخزون: {item['stock']}"
             ) for item in items_pool
         ]
-        super().__init__(placeholder=f"اختر قطعة لشرائها...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder=f"اختر قطعة من قسم {category}...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -73,23 +126,33 @@ class ShopSpecificSelect(discord.ui.Select):
 
         if self.shop_type == "normal":
             if user_data.get("balance", 0) < item["price"]:
-                return await interaction.followup.send(f"❌ رصيدك العادي غير كافٍ! تحتاج `{item['price']}`.", ephemeral=True)
+                return await interaction.followup.send(f"❌ رصيدك العادي غير كافٍ! تحتاج `{item['price']}` 🪙.", ephemeral=True)
             users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -item["price"]}, "$push": {"inventory": item}}, upsert=True)
         else:
             if user_data.get("diamonds", 0) < item["price"]:
                 return await interaction.followup.send(f"❌ رصيدك من الألماس غير كافٍ! تحتاج `💎 {item['price']}`.", ephemeral=True)
             users_col.update_one({"user_id": user_id}, {"$inc": {"diamonds": -item["price"]}, "$push": {"inventory": item}}, upsert=True)
 
-        await interaction.followup.send(f"🎉 **مبروك!** تم شراء **{item['name']}** وإضافته لحقيبتك.", ephemeral=True)
+        await interaction.followup.send(
+            f"🎉 **عملية شراء ناجحة!**\n⚔️ القطعة: **{item['name']}**\n🔰 الرتبة: **{item['tier']}**\n📊 المميزات: `{item['stats']}`\n*تمت إضافتها لحقيبتك!*", 
+            ephemeral=True
+        )
 
 class ShopCategorySelect(discord.ui.Select):
     def __init__(self, shop_type):
         self.shop_type = shop_type
+        # تم إضافة الأقسام الـ 8 التي طلبتها
         options = [
-            discord.SelectOption(label="قسم الأسلحة", value="أسلحة" if shop_type == "normal" else "أسلحة مظلمة", emoji="⚔️"),
-            discord.SelectOption(label="قسم الدروع", value="دروع" if shop_type == "normal" else "دروع مظلمة", emoji="🛡️")
+            discord.SelectOption(label="خوذة", value="خوذة", emoji="🪖"),
+            discord.SelectOption(label="درع", value="درع", emoji="🛡️"),
+            discord.SelectOption(label="بنطال", value="بنطال", emoji="👖"),
+            discord.SelectOption(label="حذاء", value="حذاء", emoji="🥾"),
+            discord.SelectOption(label="سيف", value="سيف", emoji="⚔️"),
+            discord.SelectOption(label="مطرقة", value="مطرقة", emoji="🔨"),
+            discord.SelectOption(label="خنجر", value="خنجر", emoji="🗡️"),
+            discord.SelectOption(label="عصا سحرية", value="عصا سحرية", emoji="🪄")
         ]
-        super().__init__(placeholder="اختر القسم الذي تريد تصفحه...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="اختر فئة العتاد التي تريد تصفحها...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         category = self.values[0]
@@ -97,7 +160,7 @@ class ShopCategorySelect(discord.ui.Select):
         
         view = discord.ui.View()
         view.add_item(ShopSpecificSelect(items_pool, self.shop_type, category))
-        await interaction.response.edit_message(content=f"🛒 تتصفح الآن: **{category}**\nاختر القطعة التي تريد شراءها:", view=view)
+        await interaction.response.edit_message(content=f"🛒 تتصفح الآن قسم: **{category}**\nاختر القطعة التي تناسبك:", view=view)
 
 class ShopView(discord.ui.View):
     def __init__(self, author_id, shop_type):
@@ -107,28 +170,26 @@ class ShopView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ هذه القائمة ليست لك! يمكنك كتابة الأمر بنفسك.", ephemeral=True)
+            await interaction.response.send_message("❌ هذه القائمة ليست لك!", ephemeral=True)
             return False
         return True
 
-@bot.tree.command(name="المتجر_العادي", description="تصفح المتجر العادي عبر القوائم")
+@bot.tree.command(name="المتجر_العادي", description="تصفح وشراء العتاد العادي المتوفر (بالعملة العادية)")
 async def normal_shop(interaction: discord.Interaction):
     view = ShopView(interaction.user.id, "normal")
-    await interaction.response.send_message("🏬 **مرحباً بك في المتجر العادي**\nاختر القسم من القائمة بالأسفل:", view=view)
+    await interaction.response.send_message("🏬 **متجر العتاد العادي**\nيحتوي على 1000 قطعة من كل فئة. اختر القسم من القائمة بالأسفل:", view=view)
 
-@bot.tree.command(name="المتجر_المظلم", description="تصفح المتجر المظلم عبر القوائم")
+@bot.tree.command(name="المتجر_المظلم", description="تصفح العتاد الأسطوري والملعون (بالألماس)")
 async def dark_shop(interaction: discord.Interaction):
     view = ShopView(interaction.user.id, "dark")
-    await interaction.response.send_message("🌌 **مرحباً بك في المتجر المظلم السري**\nاختر القسم من القائمة بالأسفل:", view=view)
+    await interaction.response.send_message("🌌 **المتجر المظلم (سوق الأساطير)**\nمكان العتاد المحرم ورتب (الشيطان، الجحيم، السفاح). اختر القسم بحذر:", view=view)
 
-# ================== نظام البنك الفخم (دمج الرصيد، الراتب، الحوالات، القروض) ==================
-
+# ================== نظام البنك المركزي ==================
 class TransferModal(discord.ui.Modal, title='تحويل الأموال 💸'):
     target = discord.ui.TextInput(label='منشن الشخص', placeholder='مثال: @Ahmed', required=True)
     amount = discord.ui.TextInput(label='المبلغ المراد تحويله', placeholder='مثال: 5000', required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # استخراج الآيدي من المنشن
         target_id = re.sub(r'\D', '', self.target.value)
         if not target_id or not self.amount.value.isdigit():
             return await interaction.response.send_message("❌ تأكد من المنشن وكتابة المبلغ بالأرقام فقط!", ephemeral=True)
@@ -145,11 +206,9 @@ class TransferModal(discord.ui.Modal, title='تحويل الأموال 💸'):
         if sender_data.get("balance", 0) < amount_val:
             return await interaction.response.send_message("❌ رصيدك غير كافٍ لإتمام التحويل!", ephemeral=True)
 
-        # خصم وإضافة
         users_col.update_one({"user_id": sender_id}, {"$inc": {"balance": -amount_val}})
         users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount_val}}, upsert=True)
-        
-        await interaction.response.send_message(f"✅ **تم التحويل بنجاح!**\nتم تحويل `{amount_val}` عملة إلى <@{target_id}>.", ephemeral=False)
+        await interaction.response.send_message(f"✅ **تم التحويل بنجاح!**\nتم تحويل `{amount_val}` 🪙 إلى <@{target_id}>.", ephemeral=False)
 
 class BankSelect(discord.ui.Select):
     def __init__(self):
@@ -166,30 +225,26 @@ class BankSelect(discord.ui.Select):
         user_id = str(interaction.user.id)
         user_data = users_col.find_one({"user_id": user_id}) or {}
 
-        # 1. التحويل (يفتح Modal مباشرة)
         if choice == "transfer":
             return await interaction.response.send_modal(TransferModal())
 
         await interaction.response.defer()
 
-        # 2. عرض الرصيد
         if choice == "balance":
             bal = user_data.get("balance", 0)
             diamonds = user_data.get("diamonds", 0)
             inventory = user_data.get("inventory", [])
-            inv_list = "\n".join([f"• {item['name']} ({item['tier']})" for item in inventory]) if inventory else "الحقيبة فارغة"
+            inv_list = "\n".join([f"• {item['name']} `[{item['tier']}]`" for item in inventory]) if inventory else "الحقيبة فارغة"
             
             embed = discord.Embed(title="💳 كشف الحساب البنكي", color=discord.Color.gold())
             embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
             embed.add_field(name="الرصيد العادي", value=f"`{bal}` 🪙", inline=True)
-            embed.add_field(name="الألماس", value=f"`{diamonds}` 💎", inline=True)
+            embed.add_field(name="الألماس النادر", value=f"`{diamonds}` 💎", inline=True)
             embed.add_field(name="🎒 مقتنيات الحقيبة", value=inv_list, inline=False)
             
-            # مسح أي أزرار إضافية متعلقة بالقروض
             view = BankView(interaction.user.id)
             await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=view)
 
-        # 3. الراتب اليومي
         elif choice == "daily":
             last_claim = user_data.get("last_daily")
             now = datetime.utcnow()
@@ -201,23 +256,20 @@ class BankSelect(discord.ui.Select):
             else:
                 reward = 5000
                 users_col.update_one({"user_id": user_id}, {"$inc": {"balance": reward}, "$set": {"last_daily": now}}, upsert=True)
-                msg = f"🎁 **تم استلام الراتب!**\nأُضيفت `{reward}` عملة إلى حسابك بنجاح."
+                msg = f"🎁 **تم استلام الراتب!**\nأُضيفت `{reward}` 🪙 عملة إلى حسابك بنجاح."
             
             embed = discord.Embed(description=msg, color=discord.Color.green())
             view = BankView(interaction.user.id)
             await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=view)
 
-        # 4. قسم القروض (مع نظام الغرامات)
         elif choice == "loan":
             loan_amount = user_data.get("loan_amount", 0)
             loan_due = user_data.get("loan_due_date")
             now = datetime.utcnow()
             
-            # التحقق من التأخير وتطبيق الغرامة
             if loan_amount > 0 and loan_due and now > loan_due:
-                penalty = 2000 # غرامة التأخير
+                penalty = 2000 
                 loan_amount += penalty
-                # تمديد المهلة يوم إضافي بعد الغرامة
                 new_due = now + timedelta(hours=24)
                 users_col.update_one({"user_id": user_id}, {"$set": {"loan_amount": loan_amount, "loan_due_date": new_due}})
                 loan_due = new_due
@@ -227,7 +279,7 @@ class BankSelect(discord.ui.Select):
                 due_format = f"<t:{int(loan_due.timestamp())}:R>"
                 embed.description = f"⚠️ **عليك قرض حالي!**\nالمبلغ المطلوب سداده: `{loan_amount}` 🪙\nموعد السداد النهائي: {due_format}\n*(تحذير: سيتم إضافة غرامة 2000 عملة عند التأخير)*"
             else:
-                embed.description = "✅ **سجلك نظيف!**\nلا توجد عليك أي ديون. يمكنك سحب قرض بقيمة `20,000` عملة (تُسدد `25,000` مع الفوائد خلال 48 ساعة)."
+                embed.description = "✅ **سجلك نظيف!**\nلا توجد عليك أي ديون. يمكنك سحب قرض بقيمة `20,000` 🪙 (تُسدد `25,000` مع الفوائد خلال 48 ساعة)."
             
             view = BankView(interaction.user.id)
             if loan_amount > 0:
@@ -237,7 +289,6 @@ class BankSelect(discord.ui.Select):
             
             await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=view)
 
-# --- أزرار القروض ---
 class TakeLoanButton(discord.ui.Button):
     def __init__(self):
         super().__init__(style=discord.ButtonStyle.success, label="استلام قرض (20,000)", emoji="💵")
@@ -268,30 +319,25 @@ class PayLoanButton(discord.ui.Button):
         )
         await interaction.response.send_message("✅ **ممتاز!** تم سداد قرضك بالكامل وتصفية ديونك.", ephemeral=True)
 
-# --- واجهة البنك الرئيسية ---
 class BankView(discord.ui.View):
     def __init__(self, author_id):
         super().__init__(timeout=None)
         self.author_id = author_id
         self.add_item(BankSelect())
 
-    # هذه الدالة تمنع أي شخص غير صاحب الأمر من استخدام المنيو والأزرار
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ عذراً، هذه اللوحة خاصة بصاحب الأمر فقط! يمكنك كتابة `/بنك` لفتح لوحتك.", ephemeral=True)
+            await interaction.response.send_message("❌ عذراً، هذه اللوحة خاصة بصاحب الأمر فقط!", ephemeral=True)
             return False
         return True
 
 @bot.tree.command(name="بنك", description="فتح حسابك البنكي (رصيد، راتب، تحويل، قروض)")
 async def bank_command(interaction: discord.Interaction):
-    embed = discord.Embed(title="🏦 البنك المركزي", description="أهلاً بك في نظام البنك الشامل. الرجاء اختيار الخدمة المطلوبة من القائمة أدناه.", color=discord.Color.gold())
-    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/2830/2830284.png") # أيقونة بنك فخمة
-    embed.set_footer(text="جميع المعاملات مسجلة ومؤمنة في النظام")
+    embed = discord.Embed(title="🏦 البنك المركزي للعبة", description="أهلاً بك في نظام البنك الشامل. الرجاء اختيار الخدمة المطلوبة من القائمة أدناه.", color=discord.Color.gold())
+    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/2830/2830284.png")
+    embed.set_footer(text="جميع المعاملات مسجلة ومؤمنة في قاعدة البيانات")
     
     view = BankView(interaction.user.id)
-    # الرسالة ظاهرة للكل (بدون ephemeral) لكن الأزرار محمية بـ interaction_check
     await interaction.response.send_message(embed=embed, view=view)
 
-
-# تشغيل البوت
 bot.run(DISCORD_TOKEN)
