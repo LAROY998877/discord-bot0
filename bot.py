@@ -380,7 +380,6 @@ async def transfer_equipment(
         )
         return
 
-    # نقل العتاد وإعطاء المتلقي القوة المرافقة، وإعادة مرسل العتاد للوضع الابتدائي
     cursor.execute(
         "UPDATE user_data SET equipment_name = ?, equipment_score = equipment_score + ? WHERE user_id = ?",
         (eq_name, eq_score, member.id),
@@ -394,6 +393,53 @@ async def transfer_equipment(
     await interaction.response.send_message(
         f"✅ تم إرسال عتادك (`{eq_name}`) بقوة `{eq_score}` بنجاح إلى العضو {member.mention}!"
     )
+
+
+@bot.tree.command(
+    name="إهداء_عتاد_الظلام",
+    description="[مطور] إعطاء مجموعة متجر الظلام الكاملة لشخص عبر المنشن",
+)
+@app_commands.describe(member="الشخص المراد إعطاؤه عتاد متجر الظلام")
+async def give_dark_gear_to_member(
+    interaction: discord.Interaction, member: discord.Member
+):
+    if (
+        not is_dev(interaction.user.id)
+        and interaction.user.id != interaction.guild.owner_id
+    ):
+        await interaction.response.send_message(
+            "❌ هذا الأمر مخصص للمطور حصرياً!", ephemeral=True
+        )
+        return
+
+    ensure_user(member.id, str(member))
+    dark_bundle = "مجموعة متجر الظلام الكاملة (درع، خوذة، ساق، حذاء، سيف، مطرقة، خنجر)"
+
+    cursor.execute(
+        "UPDATE user_data SET equipment_name = ?, equipment_score = equipment_score + 7000 WHERE user_id = ?",
+        (dark_bundle, member.id),
+    )
+    db_connection.commit()
+
+    embed = discord.Embed(
+        title="🌑 تم منح عتاد متجر الظلام بنجاح!",
+        description=(
+            f"قام المطور بمنح العضو {member.mention} ترسانة متجر الظلام الأسطورية الكاملة:\n\n"
+            "• 🛡️ **درع الظلام الملكي**\n"
+            "• ⛑️ **خوذة الهلاك المظلم**\n"
+            "• 🦾 **درع الساق الشيطاني**\n"
+            "• 🥾 **حذاء الظلال السريع**\n"
+            "• ⚔️ **سيف الموت المحرم**\n"
+            "• 🔨 **مطرقة الدمار الكوني**\n"
+            "• 🗡️ **خنجر الاغتيال المظلم**\n\n"
+            "⚡ **تمت إضافة قوة خارقة (`+7000`) إلى رصيد عتاده!**"
+        ),
+        color=discord.Color.dark_red(),
+    )
+    embed.set_image(
+        url="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800"
+    )
+    await interaction.response.send_message(embed=embed)
 
 
 # ==========================================
@@ -709,7 +755,7 @@ async def floors_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 6. الأبطال الأسطوريين الجدد (صور فانتازي انمي دقيقة)
+# 6. الأبطال الأسطوريين الجدد
 # ==========================================
 HEROES_DATA = {
     "vanguard": {
@@ -858,7 +904,7 @@ async def heroes_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 7. المتاجر (بصور أسلحة فانتازيا دقيقة)
+# 7. المتاجر
 # ==========================================
 
 NORMAL_SHOP_ITEMS = {
@@ -1265,7 +1311,7 @@ async def bank_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 9. لوحة المطورين (السفاح، العملات اللانهائية، التطوير الشامل)
+# 9. لوحة المطورين
 # ==========================================
 
 BUTCHER_HERO = {
@@ -1338,9 +1384,55 @@ class DevPanelView(discord.ui.View):
         )
 
     @discord.ui.button(
+        label="عتاد", style=discord.ButtonStyle.secondary, emoji="🌑", row=1
+    )
+    async def gear_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        if (
+            not is_dev(interaction.user.id)
+            and interaction.user.id != interaction.guild.owner_id
+        ):
+            await interaction.response.send_message(
+                "❌ هذا الزر مخصص للمطور حصرياً!", ephemeral=True
+            )
+            return
+
+        user_id = interaction.user.id
+        dark_bundle = (
+            "ترسانة متجر الظلام الكاملة: (درع، خوذة، ساق، حذاء، سيف، مطرقة، خنجر)"
+        )
+
+        cursor.execute(
+            "UPDATE user_data SET equipment_name = ?, equipment_score = equipment_score + 7000 WHERE user_id = ?",
+            (dark_bundle, user_id),
+        )
+        db_connection.commit()
+
+        embed = discord.Embed(
+            title="🌑 تم استلام عتاد متجر الظلام الكامل بنجاح!",
+            description=(
+                "لقد أضفت إلى حقيبتك من لوحة المطورين جميع القطع المطلوبة من **متجر الظلام**:\n\n"
+                "• 🛡️ **درع الظلام الملكي**\n"
+                "• ⛑️ **خوذة الهلاك المظلم**\n"
+                "• 🦾 **درع الساق الشيطاني**\n"
+                "• 🥾 **حذاء الظلال السريع**\n"
+                "• ⚔️ **سيف الموت المحرم**\n"
+                "• 🔨 **مطرقة الدمار الكوني**\n"
+                "• 🗡️ **خنجر الاغتيال المظلم**\n\n"
+                "⚡ **تمت إضافة قوة عتاد بقيمة `+7000` إلى ملفك الشخصي!**"
+            ),
+            color=discord.Color.dark_red(),
+        )
+        embed.set_image(
+            url="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800"
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(
         label="🗡️ استدعاء شخصية 'السفاح' السرية",
         style=discord.ButtonStyle.danger,
-        row=1,
+        row=2,
     )
     async def unlock_butcher_btn(
         self, interaction: discord.Interaction, button: discord.ui.Button
@@ -1374,9 +1466,7 @@ class DevPanelView(discord.ui.View):
             color=discord.Color.dark_red(),
         )
         embed.set_image(url=BUTCHER_HERO["image"])
-        await interaction.response.send_message(
-            embed=embed, ephemeral=True
-        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 @bot.tree.command(name="مطور", description="فتح منيو لوحة تحكم المطورين السرية")
@@ -1402,38 +1492,5 @@ async def dev_panel(interaction: discord.Interaction):
         title="✨ منيو الإدارة المركزية للمطورين",
         description=(
             "مرحباً بك في لوحة تحكم المطور السرية.\n"
-            "يمكنك تفعيل العملات اللانهائية، تطوير العتاد بالكامل، أو استدعاء السفاح من الأزرار بالأسفل:"
-        ),
-        color=discord.Color.from_rgb(40, 40, 45),
-    )
-    view = DevPanelView(interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-
-@bot.tree.command(name="اضافة_مطور", description="إضافة مطور جديد للنظام")
-@app_commands.describe(member="العضو المراد ترقيته")
-async def add_developer(interaction: discord.Interaction, member: discord.Member):
-    cursor.execute("SELECT COUNT(*) FROM developers")
-    if cursor.fetchone()[0] > 0 and not is_dev(interaction.user.id):
-        await interaction.response.send_message(
-            "❌ هذا الأمر للمطورين فقط!", ephemeral=True
-        )
-        return
-
-    cursor.execute(
-        "INSERT OR IGNORE INTO developers (user_id) VALUES (?)", (member.id,)
-    )
-    db_connection.commit()
-    await interaction.response.send_message(
-        f"✅ تم تعيين {member.mention} مطوراً بنجاح!", ephemeral=True
-    )
-
-
-# ==========================================
-# 10. تشغيل البوت
-# ==========================================
-TOKEN = os.getenv("DISCORD_TOKEN")
-if TOKEN:
-    bot.run(TOKEN)
-else:
-    print("خطأ: لم يتم العثور على توكن البوت (DISCORD_TOKEN).")
+            "يمكنك تفعيل العملات، زر **عتاد** للحصول على عتاد الظلام الشامل، أو استدعاء السفاح:"
+  
