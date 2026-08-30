@@ -19,7 +19,7 @@ class BotClient(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
-        intents.members = True
+        intents.members = True # مفعل لجلب الأعضاء بالمنشن
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
@@ -80,43 +80,51 @@ class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو")
             await interaction.followup.send("❌ يرجى إدخال رقم صحيح للمبلغ!", ephemeral=True)
 
 
-# ================== قوائم اختيار الأعضاء (User Select Views) ==================
+# ================== قوائم اختيار الأعضاء المستقلة (User Select Views) ==================
+
+class DevAddUserSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(placeholder="🛠️ اختر العضو لترقيته لمطور بالمنشن...", min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        chosen_member = self.values[0]
+        target_id = str(chosen_member.id)
+        devs_col.update_one({"user_id": target_id}, {"$set": {"user_id": target_id}}, upsert=True)
+        await interaction.followup.send(f"🛠️ **تمت الترقية بنجاح!** أصبح العضو {chosen_member.mention} مطوراً معتمداً في النظام الإمبراطوري.", ephemeral=True)
 
 class DevAddUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
-        
-        @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🛠️ اختر العضو لترقيته لمطور بالمنشن...", min_values=1, max_values=1)
-        async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
-            await inter.response.defer(ephemeral=True)
-            chosen_member = select.values[0]
-            target_id = str(chosen_member.id)
-            devs_col.update_one({"user_id": target_id}, {"$set": {"user_id": target_id}}, upsert=True)
-            await inter.followup.send(f"🛠️ **تمت الترقية بنجاح!** أصبح العضو {chosen_member.mention} مطوراً معتمداً في النظام الإمبراطوري.", ephemeral=True)
-            
-        self.add_item(select_callback)
+        self.add_item(DevAddUserSelect())
+
+
+class DevGiftUserSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(placeholder="🎁 اختر العضو لإهداء العتاد له بالمنشن...", min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        chosen_member = self.values[0]
+        await interaction.response.send_modal(DevGiftModal(target_member=chosen_member))
 
 class DevGiftUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
-        
-        @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🎁 اختر العضو لإهداء العتاد له بالمنشن...", min_values=1, max_values=1)
-        async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
-            chosen_member = select.values[0]
-            await inter.response.send_modal(DevGiftModal(target_member=chosen_member))
-            
-        self.add_item(select_callback)
+        self.add_item(DevGiftUserSelect())
+
+
+class DevBalanceUserSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(placeholder="🪙 اختر العضو لإضافة الرصيد له بالمنشن...", min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        chosen_member = self.values[0]
+        await interaction.response.send_modal(DevAddBalanceModal(target_member=chosen_member))
 
 class DevBalanceUserSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
-        
-        @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🪙 اختر العضو لإضافة الرصيد له بالمنشن...", min_values=1, max_values=1)
-        async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
-            chosen_member = select.values[0]
-            await inter.response.send_modal(DevAddBalanceModal(target_member=chosen_member))
-            
-        self.add_item(select_callback)
+        self.add_item(DevBalanceUserSelect())
 
 
 # ================== لوحة أزرار المطور الرئيسية ==================
