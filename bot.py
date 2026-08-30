@@ -44,46 +44,7 @@ def extract_user_id(text):
     clean = text.strip().replace("<@", "").replace(">", "").replace("!", "")
     return str(int(clean))
 
-# ================== نظام فحص ومنح الألقاب تلقائياً ==================
-def check_and_update_titles(user_id):
-    user_data = users_col.find_one({"user_id": user_id})
-    if not user_data:
-        return ["المبتدئ"]
-    
-    unlocked = user_data.get("unlocked_titles", [])
-    if "المبتدئ" not in unlocked:
-        unlocked.append("المبتدئ")
-        
-    max_floor = user_data.get("max_floor", 0)
-    if max_floor >= 100 and "الامبراطور" not in unlocked:
-        unlocked.append("الامبراطور")
-    if max_floor >= 500 and "الملك" not in unlocked:
-        unlocked.append("الملك")
-        
-    kills = user_data.get("kills", 0)
-    if kills >= 20 and "القاتل" not in unlocked:
-        unlocked.append("القاتل")
-    if kills >= 50 and "السفاح" not in unlocked:
-        unlocked.append("السفاح")
-        
-    battles_played = user_data.get("battles_played", 0)
-    if battles_played >= 20 and "اسطورة القتال" not in unlocked:
-        unlocked.append("اسطورة القتال")
-        
-    top_rich = list(users_col.find().sort("balance", -1).limit(1))
-    if top_rich and top_rich[0]["user_id"] == user_id:
-        if "الغني" not in unlocked:
-            unlocked.append("الغني")
-    
-    top_power = list(users_col.find().sort("power", -1).limit(1))
-    if top_power and top_power[0]["user_id"] == user_id:
-        if "اقوى الاقوياء" not in unlocked:
-            unlocked.append("اقوى الاقوياء")
-            
-    users_col.update_one({"user_id": user_id}, {"$set": {"unlocked_titles": unlocked}})
-    return unlocked
-
-# ================== قاعدة بيانات الأبطال الأسطوريين ==================
+# ================== قاعدة بيانات الأبطال (العاديين والمطور) ==================
 HEROES_DATA = {
     "zeal": {
         "name": "زيل - كاسر الظلال (Zeal)",
@@ -126,14 +87,28 @@ HEROES_DATA = {
         "emoji": "☀️",
         "power": "الشفاء السريع، القوة البدنية المطلقة، وهالة النور المقدس",
         "story": "قائدة حرس الفجر الأسطوريون. تحمل درعاً مقدساً لا ينكسر وسيفاً يضيء بنور الشمس الأولى، تطهر الأراضي من الوحوش والظلام."
+    },
+    # 💀 شخصية السفاح الحصرية للمطور فقط
+    "assassin_dev": {
+        "name": "💀 السفاح الأبدي - حاصد الأرواح (The Executioner)",
+        "gender": "مطور مطلق",
+        "emoji": "🩸",
+        "power": "طمس الوجود، التحكم المطلق في الأكوان، ومحو أي كائن بنظرة واحدة (قوة لا تقهر)",
+        "story": "كيان مرعب هبط من الفراغ المطلق، وُجد ليكون اليد القاضية التي لا ترتجف. يغذى طاقته من أرواح العوالم المنهارة، ولا يمكن لأي بطل عادي الوقوف في حضرته دون أن يتلاشى.",
+        "stats": {
+            "power": 9999999,
+            "max_floor": 999,
+            "kills": 99999
+        }
     }
 }
 
+# قائمة الأبطال العامة (للاعبين العاديين)
 class HeroSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label=data["name"], description=f"الجنس: {data['gender']} | القوة: {data['power'][:35]}...", emoji=data["emoji"], value=key)
-            for key, data in HEROES_DATA.items()
+            for key, data in HEROES_DATA.items() if key != "assassin_dev" # استثناء شخصية السفاح للعامة
         ]
         super().__init__(placeholder="اختر بطلك الأسطوري لتستعرض قصته وقوته...", min_values=1, max_values=1, options=options)
 
@@ -149,7 +124,6 @@ class HeroSelect(discord.ui.Select):
         embed.set_footer(text=f"تم اختيار البطل بواسطة: {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
         
         users_col.update_one({"user_id": str(interaction.user.id)}, {"$set": {"selected_hero": hero['name']}}, upsert=True)
-        
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 class HeroSelectView(discord.ui.View):
@@ -157,17 +131,109 @@ class HeroSelectView(discord.ui.View):
         super().__init__(timeout=180)
         self.add_item(HeroSelect())
 
-@bot.tree.command(name="أبطال", description="استعراض قائمة الأبطال الأسطوريين واختيار بطلك المفضل لرحلة القتال")
+@bot.tree.command(name="أبطال", description="استعراض قائمة الأبطال الأسطوريين واختيار بطلك المفضل")
 async def heroes_command(interaction: discord.Interaction):
     embed = discord.Embed(
         title="⚔️ قاعة اختيار الأبطال الأسطوريين 🛡️",
-        description="«اختر بطلك بحكمة، فالقصة والقوة التي ستختارها سترافقك في جميع المعارك والأبراج القتالية القادمة.»\n\nاختر من القائمة المنسدلة أدناه لاستعراض تفاصيل أي بطل:",
+        description="«اختر بطلك بحكمة، فالقصة والقوة التي ستختارها سترافقك في جميع المعارك.»\n\nاختر من القائمة المنسدلة أدناه:",
         color=discord.Color.gold()
     )
     view = HeroSelectView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
-# ================== بقية الأوامر والتشغيل ==================
+
+# ================== لوحة المطور وتحكم شخصية السفاح ==================
+class DevControlView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(label="💀 تفعيل شخصية 'السفاح' المطلقة", style=discord.ButtonStyle.danger, emoji="🩸")
+    async def activate_assassin(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_developer(interaction.user.id):
+            return await interaction.response.send_message("❌ هذا الزر مخصص للمطورين فقط!", ephemeral=True)
+        
+        assassin = HEROES_DATA["assassin_dev"]
+        user_id = str(interaction.user.id)
+        
+        # منح المطور إحصائيات وقوة السفاح الخارقة في قاعدة البيانات مباشرة
+        users_col.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "selected_hero": assassin['name'],
+                    "power": assassin['stats']['power'],
+                    "max_floor": assassin['stats']['max_floor'],
+                    "kills": assassin['stats']['kills'],
+                    "custom_title": "💀 حاكم الأبعاد ومالك السفاح"
+                }
+            },
+            upsert=True
+        )
+        
+        embed = discord.Embed(
+            title="🩸 تم تفعيل طاقة 'السفاح الأبدي' بنجاح!",
+            description=f"**القدرة:** {assassin['power']}\n\n**القصة:**\n*{assassin['story']}*\n\n⚡ **تم رفع إحصائياتك إلى الحد الأقصى المطلق في قاعدة البيانات!**",
+            color=discord.Color.dark_red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="المطور", description="لوحة التحكم الخاصة بالمطورين وصلاحياتهم المطلقة")
+async def developer_command(interaction: discord.Interaction):
+    if not is_developer(interaction.user.id):
+        return await interaction.response.send_message("❌ عذراً، هذا الأمر مخصص للمطورين المعتمدين فقط!", ephemeral=True)
+    
+    embed = discord.Embed(
+        title="🛠️ لوحة التحكم العليا للمطورين",
+        description="أهلاً بك أيها المطور. يمكنك من هنا تفعيل شخصية **السفاح** المرعبة لترسانتك القتالية والسيطرة المطلقة:",
+        color=discord.Color.dark_embed()
+    )
+    view = DevControlView()
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+# ================== أمر الملف الشخصي الأسطوري ==================
+@bot.tree.command(name="الملف", description="عرض الملف الشخصي الأسطوري للعامة")
+async def profile_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=False)
+    user_id = str(interaction.user.id)
+    
+    user_data = users_col.find_one({"user_id": user_id})
+    if not user_data:
+        return await interaction.followup.send("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=False)
+    
+    balance = user_data.get("balance", 0)
+    diamonds = user_data.get("diamonds", 0)
+    custom_title = user_data.get("custom_title", "المبتدئ")
+    max_floor = user_data.get("max_floor", 0)
+    selected_hero = user_data.get("selected_hero", "لم يتم اختيار بطل بعد")
+    power = user_data.get("power", 100)
+    kills = user_data.get("kills", 0)
+    
+    # تحديد لون الإطار (إذا كان السفاح فهو أحمر داكن دموي، وللآخرين ذهبي)
+    embed_color = discord.Color.dark_red() if "السفاح" in selected_hero else discord.Color.gold()
+    
+    embed = discord.Embed(
+        title=f"⚔️ السجل الأسطوري للمقاتل: {interaction.user.display_name} 🛡️",
+        color=embed_color
+    )
+    embed.add_field(name="👑 اللقب الحالي", value=custom_title, inline=True)
+    embed.add_field(name="🦸‍♂️ البطل المختار", value=selected_hero, inline=True)
+    embed.add_field(name="⚡ مستوى الطاقة", value=f"{power:,}", inline=True)
+    embed.add_field(name="🏢 أعلى طابق", value=str(max_floor), inline=True)
+    embed.add_field(name="💀 الخصوم المقضي عليهم", value=str(kills), inline=True)
+    embed.add_field(name="💰 الرصيد والجوهرة", value=f"{balance:,} 🪙 | {diamonds:,} 💎", inline=True)
+    
+    # إذا كان البطل هو السفاح، نضع نبذة عن قصته وقوته المرعبة في الملف مباشرة!
+    if "السفاح" in selected_hero:
+        embed.add_field(
+            name="🩸 حالة الكيان المرعب",
+            value="*«كيان مدمر يطمس الأبعاد ولا يرحم أحداً... طاقته تفوق مقاييس الكون.»*",
+            inline=False
+        )
+
+    embed.set_footer(text=f"معرف المستخدم: {user_id}", icon_url=interaction.user.display_avatar.url)
+    await interaction.followup.send(embed=embed, ephemeral=False)
+
 @bot.tree.command(name="تسجيل", description="التسجيل في نظام اللعبة والحصول على لقب المبتدئ")
 async def register_command(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -186,36 +252,10 @@ async def register_command(interaction: discord.Interaction):
         "power": 100,
         "custom_title": "المبتدئ",
         "unlocked_titles": ["المبتدئ"],
+        "selected_hero": "لم يتم اختيار بطل بعد",
         "inventory": []
     }
     users_col.insert_one(new_user)
     await interaction.response.send_message("🎉 **تم تسجيلك بنجاح!** حصلت على لقب `المبتدئ` ورصيدك الأولي.", ephemeral=True)
-
-@bot.tree.command(name="الملف", description="عرض الملف الشخصي الأسطوري للعامة")
-async def profile_command(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=False)
-    user_id = str(interaction.user.id)
-    
-    unlocked_titles = check_and_update_titles(user_id)
-    user_data = users_col.find_one({"user_id": user_id})
-    
-    if not user_data:
-        return await interaction.followup.send("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=False)
-    
-    balance = user_data.get("balance", 0)
-    diamonds = user_data.get("diamonds", 0)
-    custom_title = user_data.get("custom_title", "المبتدئ")
-    max_floor = user_data.get("max_floor", 0)
-    selected_hero = user_data.get("selected_hero", "لم يتم اختيار بطل بعد")
-    
-    embed = discord.Embed(
-        title=f"⚔️ السجل الأسطوري للمقاتل: {interaction.user.display_name} 🛡️",
-        color=discord.Color.gold()
-    )
-    embed.add_field(name="👑 اللقب الحالي", value=custom_title, inline=True)
-    embed.add_field(name="🦸‍♂️ البطل المختار", value=selected_hero, inline=True)
-    embed.add_field(name="💰 الرصيد", value=f"{balance:,} 🪙", inline=True)
-    
-    await interaction.followup.send(embed=embed, ephemeral=False)
 
 bot.run(DISCORD_TOKEN)
