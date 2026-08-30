@@ -31,8 +31,8 @@ bot = BotClient()
 async def on_ready():
     print(f"🤖 البوت يعمل باسم: {bot.user}")
 
-# دالة التحقق من المطورين (يمكنك إضافة الآيددي الخاص بك هنا كمدير أساسي)
-OWNER_ID = 000000000000000000  # ضع آيديك هنا للتأكد من الصلاحية المطلقة
+# الأيدي الأساسي الخاص بك كمالك للبوت
+OWNER_ID = 1103985971638325269
 
 def is_developer(user_id):
     if user_id == OWNER_ID:
@@ -483,7 +483,7 @@ class DeveloperControlView(discord.ui.View):
                 try:
                     uid = str(int(self.target_user.value.strip()))
                     devs_col.update_one({"user_id": uid}, {"$set": {"user_id": uid}}, upsert=True)
-                    await interaction.response.send_message(f"👑 **تم ترقية العضو <@{uid}> ليصبح مطوراً رسمياً في النظام!**", ephemeral=True)
+                    await interaction.response.send_message(f"👑 **تم ترقية العضو <@{uid}> ليصبح مطوراً رسمياً في النظام!** (سيظهر له أمر `/المطور` الآن)", ephemeral=True)
                 except ValueError:
                     await interaction.response.send_message("❌ الآيدي المدخل غير صحيح! تأكد من إدخال أرقام صحيحة.", ephemeral=True)
 
@@ -544,10 +544,12 @@ class DeveloperControlView(discord.ui.View):
 
         await interaction.response.send_modal(GearModal())
 
+# أمر المطور المخفي (لا يظهر في اقتراحات الأوامر العامة نهائياً إلا لك أو للمطورين المضافين)
 @bot.tree.command(name="المطور", description="لوحة التحكم الإمبراطورية الخاصة بالمطورين وسلطات النظام العليا")
 async def developer_panel(interaction: discord.Interaction):
     if not is_developer(interaction.user.id):
-        return await interaction.response.send_message("🚫 **منطقة محظورة!** هذا الأمر مخصص فقط للمطورين المعتمدين في النظام.", ephemeral=True)
+        # إن لم يكن مطوراً، نظهر له كأن الأمر غير موجود تماماً لضمان السرية المطلقة
+        return await interaction.response.send_message("❌ هذا الأمر غير موجود.", ephemeral=True)
     
     # جلب جميع الأوامر المسجلة تلقائياً في السيرفر لعرضها في اللوحة بشكل مؤتمت وفخم
     registered_commands = [cmd.name for cmd in bot.tree.get_commands()]
