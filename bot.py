@@ -2,7 +2,6 @@ import os
 import random
 import discord
 from discord.ext import commands
-from discord import app_commands
 from pymongo import MongoClient
 
 # ==================== الاتصال بـ MongoDB ====================
@@ -71,7 +70,7 @@ class QuestionsLevelView(discord.ui.View):
         embed.set_footer(text=f"اللاعب: {interaction.user.display_name}")
         await interaction.response.edit_message(embed=embed, view=None)
 
-    @discord.ui.button(label="🟡 مستوى متوسط", style=discord.ButtonStyle.warning)
+    @discord.ui.button(label="🟡 مستوى متوسط", style=discord.ButtonStyle.secondary)
     async def medium_level(self, interaction: discord.Interaction, button: discord.ui.Button):
         q = random.choice(QUESTIONS["medium"])
         embed = discord.Embed(
