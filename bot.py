@@ -386,11 +386,8 @@ def get_leaderboard_embed(category: str):
     embed = discord.Embed(color=discord.Color.gold())
     
     if category == "rich":
-        # ترتيب أغنى شخص (المحفظة + البنك)
         users = list(users_col.find({}))
-        # حساب إجمالي الثروة للترتيب
         sorted_users = sorted(users, key=lambda x: x.get("balance", 0) + x.get("bank", 0), reverse=True)[:10]
-        
         embed.title = "👑 لوحة شرف الأثرياء - أغنى شخصيات الإمبراطورية"
         embed.description = "أعظم أباطرة المال والأعمال الذين يمتلكون الثروات الطائلة والذهب الخالص."
         
@@ -403,7 +400,6 @@ def get_leaderboard_embed(category: str):
         embed.add_field(name="💰 قائمة العشرة الأوائل (المحفظة + البنك)", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
 
     elif category == "power":
-        # ترتيب أقوى شخص
         sorted_users = list(users_col.find({}).sort("power", -1).limit(10))
         embed.title = "⚡ لوحة شرف الأقوياء - أسياد القتال المطلق"
         embed.description = "المقاتلون الذين وصلت طاقاتهم القتالية إلى مستويات مرعبة لا تُقهر."
@@ -417,7 +413,6 @@ def get_leaderboard_embed(category: str):
         embed.add_field(name="⚔️ قائمة أقوى المقاتلين", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
 
     elif category == "killers":
-        # ترتيب قاهر اللاعبين (حسب عدد الخصوم/القتلى أو الكيلز)
         sorted_users = list(users_col.find({}).sort("kills", -1).limit(10))
         embed.title = "💀 لوحة شرف قاهري اللاعبين والوحوش"
         embed.description = "السفاحون والجلادون الذين أبادوا أكبر عدد من الخصوم في البرج."
@@ -431,7 +426,6 @@ def get_leaderboard_embed(category: str):
         embed.add_field(name="🗡️ أبطال الإبادة والفتك", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
 
     elif category == "imperial_weapons":
-        # ترتيب الأسلحة الإمبراطورية (حسب عدد الأسلحة العادية التي تحتوي كلمة "إمبراطوري" في الحقيبة)
         users = list(users_col.find({}))
         user_counts = []
         for u in users:
@@ -440,7 +434,6 @@ def get_leaderboard_embed(category: str):
             user_counts.append((u.get("user_id"), count))
         
         sorted_users = sorted(user_counts, key=lambda x: x[1], reverse=True)[:10]
-        
         embed.title = "🛡️ لوحة شرف أسياد الأسلحة الإمبراطورية"
         embed.description = "المقاتلون الذين جمعوا أرقى وأقوى قطع العتاد الإمبراطوري النظامي."
         
@@ -451,7 +444,6 @@ def get_leaderboard_embed(category: str):
         embed.add_field(name="🏛️ امتلاك العتاد الإمبراطوري", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
 
     elif category == "dark_weapons":
-        # ترتيب الأسلحة المحرمة / الظلال (حسب القطع في الحقيبة التي تحتوي على كلمات ظلال/محرم/رتب الظلال)
         users = list(users_col.find({}))
         user_counts = []
         dark_keywords = ["ظلال", "محرم", "الشيطان", "الجحيم", "السفاح القرمزي"]
@@ -461,7 +453,6 @@ def get_leaderboard_embed(category: str):
             user_counts.append((u.get("user_id"), count))
         
         sorted_users = sorted(user_counts, key=lambda x: x[1], reverse=True)[:10]
-        
         embed.title = "🕳️ لوحة شرف حائزي الأسلحة المحرمة (الظلال)"
         embed.description = "الأسياد المظلمون الذين تجرؤوا واقتنوا أسلحة السوق المظلم الملعونة."
         
@@ -472,7 +463,6 @@ def get_leaderboard_embed(category: str):
         embed.add_field(name="🔥 مرعبة الظلال والأسلحة المحرمة", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
 
     elif category == "titles":
-        # ترتيب الألقاب (حسب عدد الألقاب المفتوحة unlocked_titles)
         users = list(users_col.find({}))
         user_counts = []
         for u in users:
@@ -481,7 +471,6 @@ def get_leaderboard_embed(category: str):
             user_counts.append((u.get("user_id"), count))
         
         sorted_users = sorted(user_counts, key=lambda x: x[1], reverse=True)[:10]
-        
         embed.title = "👑 لوحة شرف هواة الألقاب الأسطورية"
         embed.description = "الشخصيات الأكثر شرفاً وهيبة الحاصلة على ألقاب قيصرية متعددة."
         
@@ -492,7 +481,6 @@ def get_leaderboard_embed(category: str):
         embed.add_field(name="🏆 هيبة الألقاب الإمبراطورية", value=desc if desc else "لا توجد بيانات بعد.", inline=False)
 
     elif category == "floors":
-        # ترتيب الطوابق (حسب max_floor)
         sorted_users = list(users_col.find({}).sort("max_floor", -1).limit(10))
         embed.title = "🏢 لوحة شرف قاهري البرج (الطوابق)"
         embed.description = "المغامرون الذين صعدوا أعمق وأعلى طوابق البرج القتالي."
@@ -532,7 +520,7 @@ class LeaderboardView(discord.ui.View):
         self.add_item(LeaderboardSelect())
 
 
-# ================== واجهات الطوابق الشاملة بالأزرار المطلوبة ==================
+# ================== نظام الطوابق الشامل والجديد (500 طابق وصعوبة أسطورية مع جوائز عشوائية) ==================
 
 class FloorsView(discord.ui.View):
     def __init__(self):
@@ -545,32 +533,72 @@ class FloorsView(discord.ui.View):
         if not user_data:
             return await interaction.response.send_message("❌ يرجى التسجيل أولاً باستخدام `/تسجيل`.", ephemeral=True)
         
-        current_floor = user_data.get("max_floor", 0) + 1
+        current_floor = user_data.get("max_floor", 0)
+        
+        # فحص الحد الأقصى للطوابق (500 طابق)
+        if current_floor >= 500:
+            return await interaction.response.send_message("🏆 **لقد وصلت إلى القمة المطلقة!** لقد أتممت جميع طوابق البرج الـ 500 وأصبحت سيد الأبعاد.", ephemeral=True)
+        
+        target_floor = current_floor + 1
         power = user_data.get("power", 100)
-        required_power = current_floor * 80
+        
+        # معادلة صعوبة تصاعدية قاسية وصعبة جداً (تعتمد على أسس تصاعدية للطوابق)
+        required_power = int(1000 * (target_floor ** 1.65))
 
         if power >= required_power:
-            reward = current_floor * 500
-            users_col.update_one(
-                {"user_id": user_id},
-                {
-                    "$inc": {"balance": reward, "kills": 1},
-                    "$set": {"max_floor": current_floor}
-                }
-            )
+            # صعد بنجاح! نختار مكافأة عشوائية من الأنواع المطلوبة
+            reward_type = random.choice(["normal_gear", "dark_gear", "rare_currency", "normal_currency"])
+            reward_desc = ""
+            
+            update_data = {
+                "$set": {"max_floor": target_floor},
+                "$inc": {"kills": 1}
+            }
+
+            if reward_type == "normal_gear":
+                # عتاد عادي عشوائي
+                cat = random.choice(CATEGORIES)
+                gear_level = random.randint(1, 25)
+                item = NORMAL_SHOP[cat][gear_level - 1]
+                update_data.setdefault("$push", {})["inventory"] = item["name"]
+                reward_desc = f"🛡️ عتاد عادي: **{item['name']}**"
+
+            elif reward_type == "dark_gear":
+                # عتاد محرم/ظلال عشوائي
+                cat = random.choice(CATEGORIES)
+                gear_level = random.randint(1, 25)
+                item = DARK_SHOP[cat][gear_level - 1]
+                update_data.setdefault("$push", {})["inventory"] = item["name"]
+                reward_desc = f"🩸 سلاح محرم من الظلال: **{item['name']}**"
+
+            elif reward_type == "rare_currency":
+                # عملات نادرة (ألماس أسود / ألماس عادي)
+                diamonds_won = target_floor * random.randint(5, 20)
+                update_data.setdefault("$inc", {})["diamonds"] = diamonds_won
+                reward_desc = f"💎 عملات نادرة: **+{diamonds_won:,}** ألماسة"
+
+            else:
+                # عملات عادية (ذهب)
+                gold_won = target_floor * random.randint(1500, 5000)
+                update_data.setdefault("$inc", {})["balance"] = gold_won
+                reward_desc = f"🪙 عملات عادية: **+{gold_won:,}** ذهبة"
+
+            users_col.update_one({"user_id": user_id}, update_data)
+
             embed = discord.Embed(
-                title=f"🏢 الطابق #{current_floor} - انتصار باهر!",
-                description=f"تم سحق وحوش الطابق `{current_floor}` بنجاح بفضل قوتك (`{power:,}`)!",
+                title=f"🏢 الطابق #{target_floor} / 500 - انتصار باهر وسحق للوحوش!",
+                description=f"استطاع بطلك بقوته (`{power:,}`) اختراق دفاعات الطابق `{target_floor}` الصعب وهزيمة الزعيم بقوة!",
                 color=discord.Color.green()
             )
-            embed.add_field(name="🎁 مكافأة الصعود", value=f"+{reward:,} 🪙", inline=False)
+            embed.add_field(name="🎁 المكافأة العشوائية المكتسبة", value=reward_desc, inline=False)
+            embed.set_footer(text=f"التقدم الحالي: {target_floor} من 500 طابق.")
         else:
             embed = discord.Embed(
-                title=f"🏢 الطابق #{current_floor} - هزيمة قاسية!",
-                description=f"طاقتك (`{power:,}`) غير كافية لصد وحوش هذا الطابق! المطلوب `{required_power:,}` طاقة كحد أدنى.",
+                title=f"🏢 الطابق #{target_floor} / 500 - هزيمة ساحقة وقاسية!",
+                description=f"طاقتك الحالية (`{power:,}`) ضعيفة جداً أمام وحوش هذا الطابق الصعب!\n🔒 القوة المطلوبة لاجتياز هذا الطابق: `{required_power:,}` طاقة.",
                 color=discord.Color.red()
             )
-            embed.set_footer(text="قم بترقية معداتك لتجاوز هذا الطابق.")
+            embed.set_footer(text="قم بشراء عتاد أقوى، طور معدلاتك، أو تسلق المتاجر لرفع طاقتك!")
 
         await interaction.response.edit_message(embed=embed, view=self)
 
@@ -673,7 +701,7 @@ class DevControlView(discord.ui.View):
                 "$set": {
                     "selected_hero": assassin['name'],
                     "power": assassin['power_boost'],
-                    "max_floor": 999,
+                    "max_floor": 500,
                     "kills": 99999,
                     "custom_title": "💀 حاكم الأبعاد ومالك السفاح"
                 }
@@ -755,17 +783,19 @@ async def bank_command(interaction: discord.Interaction):
     embed.set_footer(text="استخدم الأزرار أدناه للإيداع أو السحب.")
     await interaction.response.send_message(embed=embed, view=BankView(), ephemeral=True)
 
-@bot.tree.command(name="الطوابق", description="صعود طوابق البرج القتالي وتحدي الأعداء")
+@bot.tree.command(name="الطوابق", description="صعود طوابق البرج القتالي وتحدي الأعداء (حتى 500 طابق)")
 async def floors_command(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     user_data = users_col.find_one({"user_id": user_id})
     if not user_data:
         return await interaction.response.send_message("❌ يرجى التسجيل أولاً باستخدام `/تسجيل`.", ephemeral=True)
     
-    current_floor = user_data.get("max_floor", 0) + 1
+    current_floor = user_data.get("max_floor", 0)
+    next_f = current_floor + 1
+    
     embed = discord.Embed(
-        title=f"🏢 بوابة الطوابق الإمبراطورية - الطابق التالي: #{current_floor}",
-        description="اضغط على زر **الطابق التالي** للبدء بالمعركة وصعود البرج، أو استخدم الأزرار الأخرى للإدارة.",
+        title=f"🏢 برج الإمبراطورية الأسطوري (الحد الأقصى: 500 طابق)",
+        description=f"أنت في الطابق الحالي: **{current_floor}**\nالطابق التالي للتحدي: **#{next_f}**\n\nاضغط على زر **الطابق التالي** لخوض المعركة الصعبة والحصول على مكافآت عشوائية (عتاد عادي، عتاد محرم، عملات ذهبية، أو ألماسات نادرة)!",
         color=discord.Color.gold()
     )
     await interaction.response.send_message(embed=embed, view=FloorsView(), ephemeral=False)
@@ -871,7 +901,7 @@ async def profile_command(interaction: discord.Interaction):
     )
     embed.add_field(name="📊 ترسانة المعدلات القتالية المطلقة", value=stats_text, inline=False)
     
-    embed.add_field(name="🏢 أعلى طابق متجاوز", value=str(max_floor), inline=True)
+    embed.add_field(name="🏢 أعلى طابق متجاوز", value=f"{max_floor} / 500", inline=True)
     embed.add_field(name="💀 الخصوم المقضي عليهم", value=str(kills), inline=True)
     embed.add_field(name="💰 المحفظة والبنك", value=f"{balance:,} 🪙 | 💳 {bank:,} 🪙", inline=False)
     embed.add_field(name="💎 الألماس والعملات", value=f"{diamonds:,} 💎", inline=True)
