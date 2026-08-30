@@ -205,6 +205,89 @@ async def games_command(interaction: discord.Interaction):
     view = GamesMenuView(interaction.user.id)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
+# ================== نظام معارك اللاعبين (1v1, 2v2, 3v3 مع زر الانضمام) ==================
+class PvPActiveBattleView(discord.ui.View):
+    def __init__(self, team1, team2):
+        super().__init__(timeout=120)
+        self.team1 = team1 # قائمة الأيدي للاعبين
+        self.team2 = team2
+        self.t1_hp = 100
+        self.t2_hp = 100
+
+    @discord.ui.button(label="⚔️ هجوم الفريق الأول", style=discord.ButtonStyle.danger)
+    async def attack_team1(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id not in self.team1 and interaction.user.id not in self.team2:
+            return await interaction.response.send_message("❌ أنت لست مشاركاً في هذه المعركة!", ephemeral=True)
+        
+        dmg = random.randint(15, 30)
+        if interaction.user.id in self.team1:
+            self.t2_hp = max(0, self.t2_hp - dmg)
+            attacker_team = "الفريق الأول"
+        else:
+            self.t1_hp = max(0, self.t1_hp - dmg)
+            attacker_team = "الفريق الثاني"
+
+        if self.t1_hp <= 0 or self.t2_hp <= 0:
+            winner = "الفريق الأول 🏆" if self.t2_hp <= 0 else "الفريق الثاني 🏆"
+            embed = discord.Embed(title="⚔️ نهاية المعركة الحماسية!", description=f"انتهت المعركة بفوز **{winner}** بجدارة واستحقاق!", color=discord.Color.gold())
+            return await interaction.response.edit_message(embed=embed, view=None)
+
+        embed = discord.Embed(
+            title="⚔️ معركة اللاعبين المشتعلة",
+            description=f"💥 قام لاعب من **{attacker_team}** بتوجيه ضربة بقيمة `{dmg}`!\n\n🛡️ **دم الفريق الأول:** `{self.t1_hp}/100`\n🛡️ **دم الفريق الثاني:** `{self.t2_hp}/100`",
+            color=discord.Color.red()
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+class PvPLobbyView(discord.ui.View):
+    def __init__(self, mode, author_id):
+        super().__init__(timeout=180)
+        self.mode = mode
+        self.author_id = author_id
+        self.players = [author_id]
+        
+        # تحديد العدد المطلوب حسب النمط
+        if mode == "1v1":
+            self.required_players = 2
+        elif mode == "2v2":
+            self.required_players = 4
+        elif mode == "3v3":
+            self.required_players = 6
+        else:
+            self.required_players = 2
+
+    @discord.ui.button(label="انضمام للمعركة ⚔️", style=discord.ButtonStyle.green)
+    async def join_pvp(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id in self.players:
+            return await interaction.response.send_message("❌ أنت منضم بالفعل في هذه المعركة!", ephemeral=True)
+        
+        self.players.append(interaction.user.id)
+        players_mention = ", ".join([f"<@{p}>" for p in self.players])
+        
+        if len(self.players) >= self.required_players:
+            self.stop()
+            half = len(self.players) // 2
+            team1 = self.players[:half]
+            team2 = self.players[half:]
+            
+            t1_str = ", ".join([f"<@{p}>" for p in team1])
+            t2_str = ", ".join([f"<@{p}>" for p in team2])
+            
+            embed = discord.Embed(
+                title=f"🔥 اكتمل العدد! انطلاق معركة {self.mode}",
+                description=f"**الفريق الأول:** {t1_str}\nVS\n**الفريق الثاني:** {t2_str}\n\nاضغط على زر الهجوم أدناه لبدء القتال!",
+                color=discord.Color.dark_red()
+            )
+            view = PvPActiveBattleView(team1, team2)
+            return await interaction.response.edit_message(embed=embed, view=view)
+
+        embed = discord.Embed(
+            title=f"🛡️ غرفة انتظار معركة {self.mode}",
+            description=f"بانتظار اكتمال اللاعبين ({len(self.players)}/{self.required_players})...\n\n**المشاركون حتى الآن:**\n{players_mention}",
+            color=discord.Color.blue()
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
 # ================== نظام معارك الطوابق والقتال التفاعلي ==================
 class FloorFightView(discord.ui.View):
     def __init__(self, user_id, target_floor, player_hp, monster_hp, monster_name):
@@ -294,7 +377,8 @@ class FloorLobbyView(discord.ui.View):
         await interaction.response.send_message("🎒 **حقيبتك:** تحتوي على الألماس والمكتسبات الحالية.", ephemeral=True)
 
 class BattleModeSelect(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, author_id):
+        self.author_id = author_id
         options = [
             discord.SelectOption(label="مبارزة 1v1", description="معركة فردية وجهاً لوجه", emoji="⚔️", value="1v1"),
             discord.SelectOption(label="مبارزة 2v2", description="معركة جماعية ثنائية", emoji="🛡️", value="2v2"),
@@ -308,11 +392,12 @@ class BattleModeSelect(discord.ui.Select):
         
         if choice in ["1v1", "2v2", "3v3"]:
             embed = discord.Embed(
-                title=f"⚔️ انطلاق معركة {choice}",
-                description=f"🔥 بدأت المواجهة بنجاح داخل الروم بين المشاركين!",
-                color=discord.Color.red()
+                title=f"🛡️ غرفة انتظار معركة {choice}",
+                description=f"فتح المنشئ <@{self.author_id}> غرفة التحدي!\nاضغط على زر **انضمام للمعركة** للمشاركة.\n\n**المشاركون (1):**\n<@{self.author_id}>",
+                color=discord.Color.blue()
             )
-            await interaction.response.send_message(embed=embed, ephemeral=False)
+            view = PvPLobbyView(choice, self.author_id)
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
             
         elif choice == "floors":
             user_id = str(interaction.user.id)
@@ -328,9 +413,9 @@ class BattleModeSelect(discord.ui.Select):
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 class BattleMenuView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, author_id):
         super().__init__(timeout=180)
-        self.add_item(BattleModeSelect())
+        self.add_item(BattleModeSelect(author_id))
 
 @bot.tree.command(name="معارك", description="فتح ساحة المعارك الكبرى وأنماط التحدي والطوابق")
 async def battle_command(interaction: discord.Interaction):
@@ -343,7 +428,7 @@ async def battle_command(interaction: discord.Interaction):
         description="اختر نمط القتال أو الطوابق المفضلة لديك من القائمة أدناه لتشتعل المنافسة مباشرة في الروم:",
         color=discord.Color.dark_gold()
     )
-    view = BattleMenuView()
+    view = BattleMenuView(interaction.user.id)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
 # ================== بقية الأوامر الأساسية ==================
