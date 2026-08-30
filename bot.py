@@ -260,7 +260,7 @@ async def register_command(interaction: discord.Interaction):
     if existing_user:
         return await interaction.response.send_message("❌ أنت مسجل بالفعل في قاعدة البيانات!", ephemeral=True)
     
-    , new_user = {
+    new_user = {
         "user_id": user_id,
         "balance": 1000,
         "bank": 0,
