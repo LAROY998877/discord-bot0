@@ -44,50 +44,82 @@ HEROES_DATA = {
     "assassin_dev": {"name": "💀 السفاح الأبدي - حاصد الأرواح (The Executioner)", "emoji": "🩸", "power_boost": 999999}
 }
 
-# ================== موديل إهداء عتاد ==================
+# ================== موديلات الإدخال (Modals) ==================
+
 class DevGiftModal(discord.ui.Modal, title="إهداء عتاد لعضو"):
-    user_id_input = discord.ui.TextInput(label="معرف المستخدم (ID)", placeholder="مثال: 123456789012345678", required=True)
     gear_name = discord.ui.TextInput(label="اسم قطعة العتاد أو السلاح", placeholder="مثال: سيف التنين الاسطوري", required=True)
 
+    def __init__(self, target_member: discord.Member):
+        super().__init__()
+        self.target_member = target_member
+
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
-            target_id = self.user_id_input.value.strip()
+            target_id = str(self.target_member.id)
             users_col.update_one({"user_id": target_id}, {"$push": {"inventory": self.gear_name.value}}, upsert=True)
-            await interaction.followup.send(f"🎁 **تم إرسال العتاد بنجاح!** حصل المستخدم `<@{target_id}>` على القطعة: `{self.gear_name.value}` ⚔️", ephemeral=True)
+            await interaction.followup.send(f"🎁 **تم إرسال العتاد بنجاح!** حصل المستخدم {self.target_member.mention} على القطعة: `{self.gear_name.value}` ⚔️", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ حدث خطأ: تأكد من صحة معرف المستخدم.", ephemeral=True)
+            await interaction.followup.send(f"❌ حدث خطأ أثناء إرسال العتاد.", ephemeral=True)
 
-# ================== موديل إضافة رصيد ==================
 class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو"):
-    user_id_input = discord.ui.TextInput(label="معرف المستخدم (ID)", placeholder="مثال: 123456789012345678", required=True)
     amount = discord.ui.TextInput(label="المبلغ المراد إضافته", placeholder="مثال: 500000", required=True)
 
+    def __init__(self, target_member: discord.Member):
+        super().__init__()
+        self.target_member = target_member
+
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
-            target_id = self.user_id_input.value.strip()
+            target_id = str(self.target_member.id)
             val = int(self.amount.value)
             users_col.update_one({"user_id": target_id}, {"$inc": {"balance": val}}, upsert=True)
-            await interaction.followup.send(f"✅ تم إضافة `{val:,}` 🪙 إلى محفظة المستخدم `<@{target_id}>` بنجاح!", ephemeral=True)
+            await interaction.followup.send(f"✅ تم إضافة `{val:,}` 🪙 إلى محفظة المستخدم {self.target_member.mention} بنجاح!", ephemeral=True)
         except:
-            await interaction.followup.send("❌ يرجى إدخال رقم صحيح ومتاكد من المعرف!", ephemeral=True)
+            await interaction.followup.send("❌ يرجى إدخال رقم صحيح للمبلغ!", ephemeral=True)
 
-# ================== موديل إضافة مطور جديد ==================
-class DevAddModal(discord.ui.Modal, title="إضافة مطور جديد"):
-    user_id_input = discord.ui.TextInput(label="معرف المستخدم (ID) للعضو المراد ترقيته", placeholder="مثال: 123456789012345678", required=True)
 
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        try:
-            target_id = self.user_id_input.value.strip()
+# ================== قوائم اختيار الأعضاء (User Select Views) ==================
+
+class DevAddUserSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        
+        @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🛠️ اختر العضو لترقيته لمطور بالمنشن...", min_values=1, max_values=1)
+        async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
+            await inter.response.defer(ephemeral=True)
+            chosen_member = select.values[0]
+            target_id = str(chosen_member.id)
             devs_col.update_one({"user_id": target_id}, {"$set": {"user_id": target_id}}, upsert=True)
-            await interaction.followup.send(f"🛠️ **تمت الترقية بنجاح!** أصبح المستخدم `<@{target_id}>` مطوراً معتمداً في النظام الإمبراطوري.", ephemeral=True)
-        except:
-            await interaction.followup.send("❌ حدث خطأ أثناء إضافة المطور.", ephemeral=True)
+            await inter.followup.send(f"🛠️ **تمت الترقية بنجاح!** أصبح العضو {chosen_member.mention} مطوراً معتمداً في النظام الإمبراطوري.", ephemeral=True)
+            
+        self.add_item(select_callback)
+
+class DevGiftUserSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        
+        @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🎁 اختر العضو لإهداء العتاد له بالمنشن...", min_values=1, max_values=1)
+        async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
+            chosen_member = select.values[0]
+            await inter.response.send_modal(DevGiftModal(target_member=chosen_member))
+            
+        self.add_item(select_callback)
+
+class DevBalanceUserSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        
+        @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🪙 اختر العضو لإضافة الرصيد له بالمنشن...", min_values=1, max_values=1)
+        async def select_callback(inter: discord.Interaction, select: discord.ui.UserSelect):
+            chosen_member = select.values[0]
+            await inter.response.send_modal(DevAddBalanceModal(target_member=chosen_member))
+            
+        self.add_item(select_callback)
 
 
-# ================== لوحة أزرار المطور الفورية ==================
+# ================== لوحة أزرار المطور الرئيسية ==================
 class DevControlView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=300)
@@ -143,15 +175,15 @@ class DevControlView(discord.ui.View):
 
     @discord.ui.button(label="إهداء عتاد", style=discord.ButtonStyle.secondary, emoji="🎁", row=1)
     async def gift_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(DevGiftModal())
+        await interaction.response.send_message("🎁 اختر العضو الذي تريد إهداء العتاد له بالمنشن من القائمة أدناه:", view=DevGiftUserSelectView(), ephemeral=True)
 
     @discord.ui.button(label="إضافة رصيد", style=discord.ButtonStyle.secondary, emoji="🪙", row=1)
     async def balance_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(DevAddBalanceModal())
+        await interaction.response.send_message("🪙 اختر العضو الذي تريد إضافة الرصيد له بالمنشن من القائمة أدناه:", view=DevBalanceUserSelectView(), ephemeral=True)
 
     @discord.ui.button(label="إضافة مطور", style=discord.ButtonStyle.secondary, emoji="🛠️", row=1)
     async def add_dev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(DevAddModal())
+        await interaction.response.send_message("🛠️ اختر العضو الذي تريد ترقيته لمطور بالمنشن من القائمة أدناه:", view=DevAddUserSelectView(), ephemeral=True)
 
 
 @bot.tree.command(name="المطور", description="لوحة السيطرة والتحكم العليا للمطورين")
@@ -228,7 +260,7 @@ async def register_command(interaction: discord.Interaction):
     if existing_user:
         return await interaction.response.send_message("❌ أنت مسجل بالفعل في قاعدة البيانات!", ephemeral=True)
     
-    new_user = {
+    , new_user = {
         "user_id": user_id,
         "balance": 1000,
         "bank": 0,
