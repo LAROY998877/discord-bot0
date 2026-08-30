@@ -2,7 +2,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from datetime import datetime, timedelta
-from pymnpmongo import MongoClient  # أو pymongo
 from pymongo import MongoClient
 
 # ----------------- ضع بياناتك هنا مباشرة -----------------
