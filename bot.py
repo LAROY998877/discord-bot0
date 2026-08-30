@@ -1,9 +1,13 @@
 import os
 import random
 import asyncio
+import io
 import discord
 from discord.ext import commands
 from pymongo import MongoClient
+from PIL import Image, ImageDraw, ImageFont
+import arabic_reshaper
+from bidi.algorithm import get_display
 
 # ==================== الاتصال بـ MongoDB ====================
 MONGO_URI = os.getenv("MONGO_URI")
@@ -71,6 +75,42 @@ FAST_WORDS = [
     "Minecraft", "Algorithm", "Cybersecurity", "Blockchain", "Artificial",
     "Microscope", "Technology", "Programming", "Database", "Infrastructure"
 ]
+
+
+# ==================== دالة توليد صورة الكلمة للعبة أسرع ====================
+def create_word_image(word: str) -> discord.File:
+    width, height = 750, 320
+    image = Image.new("RGB", (width, height), color=(18, 18, 24))
+    draw = ImageDraw.Draw(image)
+    
+    # إطار جانبي أنيق بنفس لون الثيم الأزرق
+    draw.rectangle([0, 0, 12, height], fill=(0, 162, 255))
+    
+    try:
+        font_small = ImageFont.truetype("DejaVuSans-Bold.ttf", 26)
+        font_word = ImageFont.truetype("DejaVuSans-Bold.ttf", 46)
+    except IOError:
+        font_small = ImageFont.load_default()
+        font_word = ImageFont.load_default()
+        
+    # معالجة النصوص العربية لظهر متصلة وبشكل صحيح
+    try:
+        reshaped_text = arabic_reshaper.reshape(word)
+        display_word = get_display(reshaped_text)
+    except:
+        display_word = word
+
+    # كتابة النصوص داخل الصورة
+    draw.text((40, 50), "حاول كتابة الكلمة بسرعة", fill=(210, 210, 210), font=font_small)
+    draw.text((40, 95), "لديك 15 ثانية", fill=(130, 130, 150), font=font_small)
+    
+    # الكلمة الرئيسية بخط عريض وواضح
+    draw.text((40, 190), display_word, fill=(255, 255, 255), font=font_word)
+    
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return discord.File(buffer, filename="fast_word.png")
 
 
 # ==================== [اللعبة 1] لابي الأسئلة والصراحة ====================
@@ -305,18 +345,20 @@ class CelebrityLobbyView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=None)
 
 
-# ==================== [اللعبة 4] لعبة أسرع ⚡ (15 ثانية) ====================
+# ==================== [اللعبة 4] لعبة أسرع ⚡ (بالصور والتصميم الجديد) ====================
 async def start_fast_game_round(interaction: discord.Interaction, host: discord.User):
     word = random.choice(FAST_WORDS)
+    file = create_word_image(word)
     
     embed = discord.Embed(
         title="⚡ لعبة أسرع!",
-        description=f"اكتب الكلمة التالية بسرعة قبل الجميع:\n\n# `{word}`\n\n⏰ معك **15 ثانية** فقط!",
+        description="اكتب الكلمة الظاهرة في الصورة بالأسفل بأسرع وقت قبل انتهاء الوقت!",
         color=discord.Color.teal()
     )
-    embed.set_footer(text="لعبة أسرع | اكتب الكلمة بالضبط كما هي!")
+    embed.set_image(url="attachment://fast_word.png")
+    embed.set_footer(text="لعبة أسرع | لديك 15 ثانية فقط!")
 
-    await interaction.response.edit_message(embed=embed, view=None)
+    await interaction.response.edit_message(embed=embed, view=None, attachments=[file])
     message = await interaction.original_response()
 
     def check(m):
@@ -325,22 +367,26 @@ async def start_fast_game_round(interaction: discord.Interaction, host: discord.
 
     try:
         winner_msg = await bot.wait_for("message", check=check, timeout=15.0)
+        win_file = create_word_image(word)
         win_embed = discord.Embed(
             title="⚡ فوز ساحق!",
-            description=f"🏆 **أسرع شخص:** {winner_msg.author.mention}\n\n📝 **الكلمة:** `{word}`",
+            description=f"🏆 **أسرع شخص:** {winner_msg.author.mention}\n\n📝 **الكلمة كانت:** `{word}`",
             color=discord.Color.green()
         )
+        win_embed.set_image(url="attachment://fast_word.png")
         view = FastNextView(host=host)
-        await message.edit(embed=win_embed, view=view)
+        await message.edit(embed=win_embed, view=view, attachments=[win_file])
 
     except asyncio.TimeoutError:
+        loss_file = create_word_image(word)
         loss_embed = discord.Embed(
             title="⏰ انتهى الوقت!",
             description=f"للأسف محد كتب الكلمة بسرعة! 🐢\n\n📝 **الكلمة كانت:** `{word}`",
             color=discord.Color.red()
         )
+        loss_embed.set_image(url="attachment://fast_word.png")
         view = FastNextView(host=host)
-        await message.edit(embed=loss_embed, view=view)
+        await message.edit(embed=loss_embed, view=view, attachments=[loss_file])
 
 
 class FastNextView(discord.ui.View):
@@ -371,7 +417,7 @@ class FastLobbyView(discord.ui.View):
     def generate_embed(self) -> discord.Embed:
         embed = discord.Embed(
             title="⚡ لعبة أسرع",
-            description="سيعطيك البوت كلمة صعبة أو طويلة (عربية أو أجنبية).\nأسرع شخص يكتبها بالضبط خلال **15 ثانية** فقط يفوز!\n\n**المنظم:** " + self.host.mention,
+            description="سيظهر لك البوت **صورة** تحتوي على كلمة صعبة (عربية أو أجنبية).\nأول شخص يكتبها بالشات خلال **15 ثانية** يفوز!\n\n**المنظم:** " + self.host.mention,
             color=discord.Color.teal()
         )
         embed.set_footer(text="اضغط على (بدء 🚀) للبدء!")
@@ -400,9 +446,9 @@ class MainGameSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="لعبة الأسئلة والصراحة", description="3 مستويات: عادي، متوسط، وجريء جداً", emoji="🎯"),
-            discord.SelectOption(label="لعبة لو خيروك", description="خيارات صعبة ومواقف محرمة", emoji="🆚"),
+            discord.SelectOption(label="لعبة لو خيروك", description="خيارات صعبة ومواقف مضحكة", emoji="🆚"),
             discord.SelectOption(label="لعبة المشاهير", description="تخمين صورة المشهور (عرب وأجانب)", emoji="📸"),
-            discord.SelectOption(label="لعبة أسرع", description="كتابة الكلمة بأسرع وقت (15 ثانية)", emoji="⚡"),
+            discord.SelectOption(label="لعبة أسرع", description="كتابة الكلمة من الصورة بأسرع وقت (15 ثانية)", emoji="⚡"),
             discord.SelectOption(label="قريباً...", description="مكان مخصص للعبتك القادمة", emoji="⏳")
         ]
         super().__init__(placeholder="اختر لعبة من المنيو لتشغيلها...", min_values=1, max_values=1, options=options)
@@ -455,7 +501,7 @@ def generate_main_embed() -> discord.Embed:
                     "📸 **3. لعبة المشاهير**\n"
                     "تخمين اسم المشهور من الصورة بسرعة قبل انتهاء الوقت!\n\n"
                     "⚡ **4. لعبة أسرع**\n"
-                    "اختبار السرعة في إعادة كتابة الكلمات العربية والأجنبية خلال 15 ثانية!",
+                    "اختبار سرعة الكتابة عبر صور تصميمية احترافية خلال 15 ثانية!",
         color=discord.Color.from_rgb(255, 105, 180)
     )
 
@@ -472,7 +518,7 @@ async def games_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ البوت {bot.user} جاهز والشغل تمام!")
+    print(f"✅ البوت {bot.user} شغال بنجاح وجاهز بصور لعبة أسرع ⚡!")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 bot.run(TOKEN)
