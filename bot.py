@@ -126,12 +126,12 @@ class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو")
             await interaction.followup.send("❌ يرجى إدخال رقم صحيح للمبلغ!", ephemeral=True)
 
 
-# ================== قوائم اختيار وا شراء المتاجر (Select Menus) ==================
+# ================== قوائم اختيار وشراء المتاجر (Select Menus) ==================
 
 class NormalShopSelect(discord.ui.Select):
     def __init__(self, category_name: str):
         self.category_name = category_name
-        items = NORMAL_SHOP.get(category_name, [])[:25] # أول 25 عنصر
+        items = NORMAL_SHOP.get(category_name, [])[:25]
         options = []
         for idx, item in enumerate(items):
             options.append(discord.SelectOption(
@@ -327,6 +327,60 @@ class BankWithdrawModal(discord.ui.Modal, title="سحب أموال من البن
         await interaction.followup.send(f"✅ تم سحب `{val:,}` 🪙 من البنك إلى محفظتك بنجاح!", ephemeral=True)
 
 
+# ================== نظام تطوير المعدلات المنفصل (Stats Upgrade) ==================
+
+STATS_COST = 5000  # تكلفة التطوير لكل ضغطة (تستطيع تعديلها حسب رغبتك)
+STATS_INCREMENT = 100  # مقدار الزيادة في المعدل
+
+class StatsUpgradeSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="التصويب", description=f"زيادة معدل التصويب (التكلفة: {STATS_COST:,} 🪙)", emoji="🎯", value="aim"),
+            discord.SelectOption(label="المراوغة", description=f"زيادة معدل المراوغة (التكلفة: {STATS_COST:,} 🪙)", emoji="💨", value="evasion"),
+            discord.SelectOption(label="الهجوم", description=f"زيادة معدل الهجوم (التكلفة: {STATS_COST:,} 🪙)", emoji="🗡️", value="attack"),
+            discord.SelectOption(label="الدقة", description=f"زيادة معدل الدقة (التكلفة: {STATS_COST:,} 🪙)", emoji="👁️", value="accuracy"),
+            discord.SelectOption(label="القاتلة", description=f"زيادة معدل الضربة القاتلة (التكلفة: {STATS_COST:,} 🪙)", emoji="💥", value="critical"),
+            discord.SelectOption(label="السحر", description=f"زيادة معدل السحر (التكلفة: {STATS_COST:,} 🪙)", emoji="🔮", value="magic"),
+            discord.SelectOption(label="الذكاء", description=f"زيادة معدل الذكاء (التكلفة: {STATS_COST:,} 🪙)", emoji="🧠", value="intelligence"),
+            discord.SelectOption(label="الدفاع", description=f"زيادة معدل الدفاع (التكلفة: {STATS_COST:,} 🪙)", emoji="🛡️", value="defense"),
+        ]
+        super().__init__(placeholder="📊 اختر المعدل المطلوب تطويره بلا حدود...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id})
+        if not user_data:
+            return await interaction.followup.send("❌ يرجى التسجيل أولاً باستخدام `/تسجيل`.", ephemeral=True)
+        
+        balance = user_data.get("balance", 0)
+        if balance < STATS_COST:
+            return await interaction.followup.send(f"❌ رصيدك ({balance:,} 🪙) لا يكفي! تحتاج إلى `{STATS_COST:,}` ذهبة لتطوير هذا المعدل.", ephemeral=True)
+
+        stat_key = self.values[0]
+        
+        # خصم العملات وزيادة المعدل المطلوب بلا حدود
+        users_col.update_one(
+            {"user_id": user_id},
+            {
+                "$inc": {
+                    "balance": -STATS_COST,
+                    stat_key: STATS_INCREMENT
+                }
+            }
+        )
+        
+        updated_user = users_col.find_one({"user_id": user_id})
+        new_value = updated_user.get(stat_key, 0)
+        
+        await interaction.followup.send(f"✅ **تم تطوير المعدل بنجاح!** أصبحت قيمة `{stat_key}` الجديدة لديك: `{new_value:,}` 📈", ephemeral=True)
+
+class StatsUpgradeView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(StatsUpgradeSelect())
+
+
 # ================== واجهات الطوابق الشاملة بالأزرار المطلوبة ==================
 
 class FloorsView(discord.ui.View):
@@ -401,9 +455,12 @@ class FloorsView(discord.ui.View):
 
     @discord.ui.button(label="تطوير معدلاتي", style=discord.ButtonStyle.secondary, emoji="📊", row=1)
     async def upgrade_stats_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        user_id = str(interaction.user.id)
-        users_col.update_one({"user_id": user_id}, {"$inc": {"attack": 50, "defense": 50, "critical": 25}}, upsert=True)
-        await interaction.response.send_message("📊 **تم تطوير المعدلات القتالية!** ارتفعت معدلات الهجوم والدفاع والضربة القاتلة بنجاح.", ephemeral=True)
+        embed = discord.Embed(
+            title="📊 لوحة تطوير المعدلات القيصرية",
+            description=f"اختر المعدل الذي تريد ترقيته من القائمة أدناه.\nكل ترقية تكلف `{STATS_COST:,}` ذهبة وتمنحك `+100` نقاط إضافية **بلا حدود قصوى**!",
+            color=discord.Color.blurple()
+        )
+        await interaction.response.send_message(embed=embed, view=StatsUpgradeView(), ephemeral=True)
 
 
 # ================== واجهات واختيارات المطورين ==================
@@ -557,10 +614,24 @@ async def floors_command(interaction: discord.Interaction):
     current_floor = user_data.get("max_floor", 0) + 1
     embed = discord.Embed(
         title=f"🏢 بوابة الطوابق الإمبراطورية - الطابق التالي: #{current_floor}",
-        description="اضغط على زر **"الطابق التالي"** للبدء بالمعركة وصعود البرج، أو استخدم الأزرار الأخرى للإدارة.",
+        description="اضغط على زر **الطابق التالي** للبدء بالمعركة وصعود البرج، أو استخدم الأزرار الأخرى للإدارة.",
         color=discord.Color.gold()
     )
     await interaction.response.send_message(embed=embed, view=FloorsView(), ephemeral=False)
+
+@bot.tree.command(name="تطوير_معدلاتي", description="فتح لوحة تطوير المعدلات القتالية بلا حدود قصوى")
+async def upgrade_stats_command(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    user_data = users_col.find_one({"user_id": user_id})
+    if not user_data:
+        return await interaction.response.send_message("❌ يرجى التسجيل أولاً باستخدام `/تسجيل`.", ephemeral=True)
+    
+    embed = discord.Embed(
+        title="📊 لوحة تطوير المعدلات القيصرية",
+        description=f"اختر المعدل الذي تريد ترقيته بلا حدود قصوى.\nكل ترقية تكلف `{STATS_COST:,}` ذهبة وتمنحك نقاطاً إضافية فورية!",
+        color=discord.Color.blurple()
+    )
+    await interaction.response.send_message(embed=embed, view=StatsUpgradeView(), ephemeral=True)
 
 @bot.tree.command(name="تحويل", description="تحويل أموال من رصيدك لعضو آخر بالمنشن")
 @app_commands.describe(member="العضو المراد التحويل له", amount="المبلغ المراد تحويله")
