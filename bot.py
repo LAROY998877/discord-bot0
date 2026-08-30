@@ -37,40 +37,32 @@ def check_and_update_titles(user_id):
     
     unlocked = user_data.get("unlocked_titles", [])
     
-    # 1. المبتدئ (يُمنح عند التسجيل تلقائياً)
     if "المبتدئ" not in unlocked:
         unlocked.append("المبتدئ")
         
-    # 2. الامبراطور (اجتاز 100 طابق أو أكثر)
     max_floor = user_data.get("max_floor", 0)
     if max_floor >= 100 and "الامبراطور" not in unlocked:
         unlocked.append("الامبراطور")
         
-    # 3. الملك (وصل 500 طابق أو أكثر)
     if max_floor >= 500 and "الملك" not in unlocked:
         unlocked.append("الملك")
         
-    # 4. القاتل (قتل 20 لاعب في المعارك)
     kills = user_data.get("kills", 0)
     if kills >= 20 and "القاتل" not in unlocked:
         unlocked.append("القاتل")
         
-    # 5. السفاح (قتل 50 لاعب في المعارك)
     if kills >= 50 and "السفاح" not in unlocked:
         unlocked.append("السفاح")
         
-    # 6. اسطورة القتال (خاض 20 قتال في المعارك)
     battles_played = user_data.get("battles_played", 0)
     if battles_played >= 20 and "اسطورة القتال" not in unlocked:
         unlocked.append("اسطورة القتال")
         
-    # 7. الغني (الأول في الترتيب على مستوى الثراء)
     top_rich = list(users_col.find().sort("balance", -1).limit(1))
     if top_rich and top_rich[0]["user_id"] == user_id:
         if "الغني" not in unlocked:
             unlocked.append("الغني")
     
-    # 8. اقوى الاقوياء (الأول في الترتيب على مستوى القوة)
     top_power = list(users_col.find().sort("power", -1).limit(1))
     if top_power and top_power[0]["user_id"] == user_id:
         if "اقوى الاقوياء" not in unlocked:
@@ -79,7 +71,143 @@ def check_and_update_titles(user_id):
     users_col.update_one({"user_id": user_id}, {"$set": {"unlocked_titles": unlocked}})
     return unlocked
 
-# ================== نظام التسجيل ==================
+# ================== قاعدة بيانات الأسئلة ==================
+TRIVIA_QUESTIONS = {
+    "عادي": [
+        "ما هو لون السماء في الأيام الصافية؟", "كم عدد أيام السنة الميلادية؟", "ما هو الحيوان المعروف بملك الغابة؟", "في أي قارة تقع مصر؟", "ما هو عاصمة المملكة العربية السعودية؟",
+        "كم عدد ساعات اليوم الواحد؟", "ما هو أسرع حيوان بري في العالم؟", "ما هو العنصر الكيميائي للماء؟", "كم عدد الألوان في قوس المطر؟", "ما هي عاصمة فرنسا؟"
+    ],
+    "متوسط": [
+        "ما هي عاصمة أستراليا؟", "من هو القائد المسلم الذي فتح قسطنطينية؟", "في أي عام قامت الحرب العالمية الأولى؟", "ما هو أكبر أقيانوس في العالم؟", "من هو مكتشف قانون الجاذبية الأرضية؟",
+        "ما هي الدولة التي تُلقب ببلاد الـ 1000 بحيرة؟", "ما هو أعمق أخدود في العالم؟", "من هو مؤلف رواية البؤساء؟", "ما هي أصغر دولة مستقلة في العالم مساحة؟", "ما هو غاز الحياة الذي تنتجه النباتات؟"
+    ],
+    "جريئ جدا": [
+        "ما هو أكثر شيء تندم عليه بجدية في حياتك الماضية؟", "لو اضطررت لسرقة شيء واحد للنجاة بحياتك، ماذا ستسرق ومن أين؟", "من هو الشخص في هذا السيرفر الذي تتمنى لو لم تقابله أبداً؟", "ما هو أكبر سر تحافظ عليه بشدة وتخافه أن ينكشف لعائلتك؟", "هل سبق لك أن كذبت كذبة كبيرة ونجحت فيها تماماً دون أن يعلم أحد؟ ما هي؟",
+        "لو أتيحت لك الفرصة لمسح شخص واحد من ذاكرتك للأبد، من سيكون؟", "ما هو أغبى مبلغ مال دفعته على شيء تافه وندمت عليه لاحقاً؟", "هل تشعر بالغيرة من أحد أصدقائك المقربين؟ من ولماذا؟",
+        "ما هو الموقف الأكثر إحراجاً الذي تعرضت له أمام شخص تعجب به؟", "ما هي أقصى عقوبة تعرضت لها في طفولتك وبقيت محفورة بذاكرتك؟"
+    ]
+}
+
+# ================== نظام الألعاب وغرفة الانتظار (ظاهر للكل) ==================
+class TriviaQuestionView(discord.ui.View):
+    def __init__(self, difficulty, questions_list, author_id, players):
+        super().__init__(timeout=300)
+        self.difficulty = difficulty
+        self.questions_list = questions_list
+        self.author_id = author_id
+        self.players = players
+        self.current_q = random.choice(questions_list)
+
+    @discord.ui.button(label="سؤال جديد 🎲", style=discord.ButtonStyle.primary)
+    async def next_question(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id not in self.players:
+            return await interaction.response.send_message("❌ أنت لست مشاركاً في هذه اللعبة!", ephemeral=True)
+        
+        self.current_q = random.choice(self.questions_list)
+        players_mention = ", ".join([f"<@{p}>" for p in self.players])
+        embed = discord.Embed(
+            title=f"🧠 لعبة الأسئلة الجماعية (مستوى: {self.difficulty})",
+            description=f"**اللاعبون المشاركون:** {players_mention}\n\n**السؤال:**\n{self.current_q}",
+            color=discord.Color.purple()
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="إيقاف اللعبة 🛑", style=discord.ButtonStyle.danger)
+    async def stop_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id and interaction.user.id not in self.players:
+            return await interaction.response.send_message("❌ ليس لديك صلاحية لإيقاف هذه اللعبة!", ephemeral=True)
+        self.stop()
+        embed = discord.Embed(title="🛑 تم إيقاف اللعبة", description=ف:=f"تم إنهاء جلسة اللعبة بواسطة <@{interaction.user.id}>.", color=discord.Color.red())
+        await interaction.response.edit_message(embed=embed, view=None)
+
+class TriviaLobbyView(discord.ui.View):
+    def __init__(self, difficulty, author_id):
+        super().__init__(timeout=300)
+        self.difficulty = difficulty
+        self.author_id = author_id
+        self.players = [author_id]
+
+    @discord.ui.button(label="انضمام للعبة 🎮", style=discord.ButtonStyle.green)
+    async def join_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id in self.players:
+            return await interaction.response.send_message("❌ أنت منضم بالفعل في هذه اللعبة!", ephemeral=True)
+        self.players.append(interaction.user.id)
+        await self.update_lobby(interaction)
+
+    @discord.ui.button(label="بدء اللعبة ▶️", style=discord.ButtonStyle.primary)
+    async def start_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message("❌ فقط منشئ اللعبة يمكنه بدءها!", ephemeral=True)
+        if len(self.players) < 2:
+            return await interaction.response.send_message("❌ لا يمكن بدء اللعبة إلا إذا سجل وانضم أكثر من شخص (شخصين على الأقل)!", ephemeral=True)
+        
+        q_list = TRIVIA_QUESTIONS.get(self.difficulty, TRIVIA_QUESTIONS["عادي"])
+        view = TriviaQuestionView(self.difficulty, q_list, self.author_id, self.players)
+        selected_q = random.choice(q_list)
+        players_mention = ", ".join([f"<@{p}>" for p in self.players])
+
+        embed = discord.Embed(
+            title=f"🧠 لعبة الأسئلة الجماعية (مستوى: {self.difficulty})",
+            description=f"**اللاعبون المشاركون:** {players_mention}\n\n**السؤال:**\n{selected_q}",
+            color=discord.Color.purple()
+        )
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    @discord.ui.button(label="إيقاف اللعبة 🛑", style=discord.ButtonStyle.danger)
+    async def stop_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message("❌ فقط منشئ اللعبة يمكنه إيقافها!", ephemeral=True)
+        self.stop()
+        embed = discord.Embed(title="🛑 تم إيقاف اللعبة", description="تم إلغاء غرفة الانتظار بواسطة المنشئ.", color=discord.Color.red())
+        await interaction.response.edit_message(embed=embed, view=None)
+
+    async def update_lobby(self, interaction):
+        players_mention = ", ".join([f"<@{p}>" for p in self.players])
+        embed = discord.Embed(
+            title=f"🎮 غرفة انتظار لعبة الأسئلة (مستوى: {self.difficulty})",
+            description=f"اضغط على زر **انضمام للعبة** للمشاركة! (يتطلب شخصين على الأقل لبدء اللعبة).\n\n**اللاعبون المسجلون ({len(self.players)}):**\n{players_mention}",
+            color=discord.Color.blue()
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+class TriviaDifficultySelect(discord.ui.Select):
+    def __init__(self, author_id):
+        self.author_id = author_id
+        options = [
+            discord.SelectOption(label="عادي", description="أسئلة عامة وبسيطة", emoji="🟢", value="عادي"),
+            discord.SelectOption(label="متوسط", description="أسئلة ثقافية وتاريخية", emoji="🟡", value="متوسط"),
+            discord.SelectOption(label="جريئ جدا", description="أسئلة صريحة وتحديات شخصية", emoji="🔴", value="جريئ جدا")
+        ]
+        super().__init__(placeholder="اختر مستوى صعوبة الأسئلة...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        level = self.values[0]
+        embed = discord.Embed(
+            title=f"🎮 غرفة انتظار لعبة الأسئلة (مستوى: {level})",
+            description=f"اضغط على زر **انضمام للعبة** للمشاركة! (يتطلب شخصين على الأقل لبدء اللعبة).\n\n**اللاعبون المسجلون (1):**\n<@{self.author_id}>",
+            color=discord.Color.blue()
+        )
+        view = TriviaLobbyView(level, self.author_id)
+        # مرئي للكل (ظاهر للجميع في القناة)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
+
+class GamesMenuView(discord.ui.View):
+    def __init__(self, author_id):
+        super().__init__(timeout=180)
+        self.add_item(TriviaDifficultySelect(author_id))
+
+@bot.tree.command(name="العاب", description="قائمة الألعاب الترفيهية الجماعية في السيرفر")
+async def games_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🎮 قاعة الألعاب الترفيهية",
+        description="اختر نوع اللعبة أو مستوى الصعوبة لبدء غرفة الانتظار:",
+        color=discord.Color.dark_magenta()
+    )
+    view = GamesMenuView(interaction.user.id)
+    # مرئي للكل
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
+
+# ================== نظام التسجيل وبقية الأوامر ==================
 @bot.tree.command(name="تسجيل", description="التسجيل في نظام اللعبة والحصول على لقب المبتدئ")
 async def register_command(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -101,42 +229,21 @@ async def register_command(interaction: discord.Interaction):
         "inventory": []
     }
     users_col.insert_one(new_user)
-    await interaction.response.send_message("🎉 **تم تسجيلك بنجاح!** حصلت على لقب `المبتدئ` وردافتك الأولية.", ephemeral=True)
+    await interaction.response.send_message("🎉 **تم تسجيلك بنجاح!** حصلت على لقب `المبتدئ` ورصيدك الأولي.", ephemeral=True)
 
-# ================== قائمة اختيار الألقاب المتاحة فقط ==================
 class TitleSelect(discord.ui.Select):
     def __init__(self, unlocked_titles):
-        # رموز تعبيرية لكل لقب لتزيين القائمة
         title_emojis = {
-            "المبتدئ": "🟢",
-            "الامبراطور": "👑",
-            "الملك": "🔱",
-            "الغني": "💰",
-            "القاتل": "🗡️",
-            "السفاح": "🩸",
-            "اسطورة القتال": "⚡",
-            "اقوى الاقوياء": "🔥"
+            "المبتدئ": "🟢", "الامبراطور": "👑", "الملك": "🔱", "الغني": "💰",
+            "القاتل": "🗡️", "السفاح": "🩸", "اسطورة القتال": "⚡", "اقوى الاقوياء": "🔥"
         }
-        
-        options = [
-            discord.SelectOption(
-                label=title, 
-                value=title, 
-                emoji=title_emojis.get(title, "✨")
-            ) for title in unlocked_titles
-        ]
+        options = [discord.SelectOption(label=t, value=t, emoji=title_emojis.get(t, "✨")) for t in unlocked_titles]
         super().__init__(placeholder="اختر لقباً من ألقابك المتاحة...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         selected_title = self.values[0]
-        user_id = str(interaction.user.id)
-        users_col.update_one({"user_id": user_id}, {"$set": {"custom_title": selected_title}})
+        users_col.update_one({"user_id": str(interaction.user.id)}, {"$set": {"custom_title": selected_title}})
         await interaction.response.edit_message(content=f"✨ **تم تفعيل لقبك الجديد بنجاح:** `{selected_title}`", view=None)
-
-class TitleSelectView(discord.ui.View):
-    def __init__(self, unlocked_titles):
-        super().__init__(timeout=60)
-        self.add_item(TitleSelect(unlocked_titles))
 
 class ProfileView(discord.ui.View):
     def __init__(self, author_id, unlocked_titles):
@@ -146,7 +253,8 @@ class ProfileView(discord.ui.View):
 
     @discord.ui.button(label="اختر اللقب", style=discord.ButtonStyle.blurple, emoji="👑")
     async def change_title(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = TitleSelectView(self.unlocked_titles)
+        view = discord.ui.View()
+        view.add_item(TitleSelect(self.unlocked_titles))
         await interaction.response.send_message("📌 الألقاب المتاحة لك بناءً على إنجازاتك:", view=view, ephemeral=True)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -155,13 +263,11 @@ class ProfileView(discord.ui.View):
             return False
         return True
 
-# ================== أمر الملف الشخصي ==================
 @bot.tree.command(name="الملف", description="عرض الملف الشخصي والإنجازات والألقاب")
 async def profile_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     user_id = str(interaction.user.id)
     
-    # تحديث وفحص الألقاب المتاحة تلقائياً قبل عرض الملف
     unlocked_titles = check_and_update_titles(user_id)
     user_data = users_col.find_one({"user_id": user_id})
     
@@ -184,7 +290,6 @@ async def profile_command(interaction: discord.Interaction):
     view = ProfileView(interaction.user.id, unlocked_titles)
     await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
-# ================== أمر البنك ==================
 @bot.tree.command(name="بنك", description="فتح الحساب البنكي")
 async def bank_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
@@ -200,7 +305,6 @@ async def bank_command(interaction: discord.Interaction):
     embed = discord.Embed(title="🏦 البنك المركزي", description=f"رصيدك الحالي: `{bal:,}` 🪙\nالألماس: `{diamonds:,}` 💎", color=discord.Color.gold())
     await interaction.followup.send(embed=embed, ephemeral=True)
 
-# ================== أمر المعارك ==================
 @bot.tree.command(name="معارك", description="فتح ساحة المعارك الكبرى")
 async def battle_command(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
