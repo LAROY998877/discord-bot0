@@ -23,7 +23,7 @@ class BotClient(commands.Bot):
 
     async def setup_hook(self):
         await self.tree.sync()
-        print("✅ تم مزامنة جميع الأنظمة والألعاب بنجاح!")
+        print("✅ تم مزامنة جميع الأنظمة والألقاب بنجاح!")
 
 bot = BotClient()
 
@@ -79,7 +79,7 @@ TRIVIA_QUESTIONS = {
     ]
 }
 
-# ================== نظام الألعاب المنفصل (أمر /العاب) ==================
+# ================== نظام الألعاب المنفصل (/العاب) ==================
 class TriviaQuestionView(discord.ui.View):
     def __init__(self, difficulty, questions_list, author_id):
         super().__init__(timeout=300)
@@ -147,7 +147,6 @@ class GamesMenuSelect(discord.ui.Select):
         self.author_id = author_id
         options = [
             discord.SelectOption(label="لعبة الأسئلة", description="تحديات وأسئلة بمستويات مختلفة (عادي، متوسط، جريئ)", emoji="❓", value="trivia"),
-            # يمكنك إضافة ألعاب أخرى هنا مستقبلاً
         ]
         super().__init__(placeholder="اختر اللعبة التي تريد إطلاقها...", min_values=1, max_values=1, options=options)
 
@@ -182,56 +181,34 @@ async def games_command(interaction: discord.Interaction):
         description="أهلاً بك في قسم الألعاب! اختر لعبتك المفضلة من القائمة بالأسفل:",
         color=discord.Color.dark_magenta()
     )
-    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/808/808439.png")
-    
     view = GamesMenuView(interaction.user.id)
     await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
-# ================== بقية الأوامر الأساسية (معارك، ملف، بنك، متاجر) ==================
-
-class ShopSpecificSelect(discord.ui.Select):
-    def __init__(self, items_pool, shop_type, category, page=0):
-        self.items_pool = items_pool
-        self.shop_type = shop_type
-        self.category = category
-        self.page = page
-        start = page * 25
-        current_items = items_pool[start:start + 25]
+# ================== نظام اختيار الألقاب المتاحة (بدون كتابة حرة) ==================
+class TitleSelect(discord.ui.Select):
+    def __init__(self, author_id):
+        self.author_id = author_id
+        # يمكنك لاحقاً تعديل هذه القائمة أو جلبها حسب الألقاب التي يمتلكها المستخدم
         options = [
-            discord.SelectOption(label=f"{item['name']} [{item['tier']}]", value=item["id"], description=f"السعر: {item['price']} | {item['stats']}")
-            for item in current_items
+            discord.SelectOption(label="مقاتل مستجد", value="مقاتل مستجد", emoji="🟢"),
+            discord.SelectOption(label="الملك", value="الملك", emoji="👑"),
+            discord.SelectOption(label="أسطورة الظلام", value="أسطورة الظلام", emoji="🌌"),
+            discord.SelectOption(label="فارس الشجاعة", value="فارس الشجاعة", emoji="⚔️"),
+            discord.SelectOption(label="حامي الأبراج", value="حامي الأبراج", emoji="🗼")
         ]
-        super().__init__(placeholder=f"اختر من قسم {category} (صفحة {page+1})...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="اختر لقباً من الألقاب المتاحة لديك...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        item_id = self.values[0]
-        item = next((it for it in self.items_pool if it["id"] == item_id), None)
+        selected_title = self.values[0]
         user_id = str(interaction.user.id)
-        user_data = users_col.find_one({"user_id": user_id}) or {}
+        users_col.update_one({"user_id": user_id}, {"$set": {"custom_title": selected_title}}, upsert=True)
+        await interaction.response.edit_message(content=f"✨ **تم تغيير لقبك بنجاح إلى:** `{selected_title}`", view=None)
 
-        if self.shop_type == "normal":
-            if user_data.get("balance", 0) < item["price"]:
-                return await interaction.followup.send(f"❌ رصيدك العادي غير كافٍ! تحتاج `{item['price']}` 🪙.", ephemeral=True)
-            users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -item["price"]}, "$push": {"inventory": item}}, upsert=True)
-        else:
-            if user_data.get("diamonds", 0) < item["price"]:
-                return await interaction.followup.send(f"❌ رصيدك من الألماس غير كافٍ! تحتاج `💎 {item['price']}`.", ephemeral=True)
-            users_col.update_one({"user_id": user_id}, {"$inc": {"diamonds": -item["price"]}, "$push": {"inventory": item}}, upsert=True)
-
-        await interaction.followup.send(f"🎉 **تم الشراء بنجاح!** حصلت على **{item['name']}** `[{item['tier']}]`", ephemeral=True)
-
-class ShopView(discord.ui.View):
-    def __init__(self, author_id, shop_type):
-        super().__init__(timeout=None)
+class TitleSelectView(discord.ui.View):
+    def __init__(self, author_id):
+        super().__init__(timeout=60)
         self.author_id = author_id
-        options = [
-            discord.SelectOption(label="خوذة", value="خوذة", emoji="🪖"),
-            discord.SelectOption(label="درع", value="درع", emoji="🛡️"),
-            discord.SelectOption(label="سيف", value="سيف", emoji="⚔️"),
-            discord.SelectOption(label="عصا سحرية", value="عصا سحرية", emoji="🪄")
-        ]
-        self.add_item(discord.ui.Select(placeholder="اختر الفئة...", options=options))
+        self.add_item(TitleSelect(author_id))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
@@ -239,18 +216,38 @@ class ShopView(discord.ui.View):
             return False
         return True
 
-@bot.tree.command(name="معارك", description="فتح ساحة المعارك الكبرى")
-async def battle_command(interaction: discord.Interaction):
-    embed = discord.Embed(title="🏟️ ساحة المعارك", description="اختر نوع التحدي من القائمة:", color=discord.Color.dark_gold())
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+class ProfileView(discord.ui.View):
+    def __init__(self, author_id):
+        super().__init__(timeout=180)
+        self.author_id = author_id
+
+    @discord.ui.button(label="اختر اللقب", style=discord.ButtonStyle.blurple, emoji="👑")
+    async def change_title(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = TitleSelectView(self.author_id)
+        await interaction.response.send_message("📌 اختر لقباً من القائمة أدناه:", view=view, ephemeral=True)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ ليست لك!", ephemeral=True)
+            return False
+        return True
 
 @bot.tree.command(name="الملف", description="عرض الملف الأسطوري")
 async def profile_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     user_id = str(interaction.user.id)
     user_data = users_col.find_one({"user_id": user_id}) or {}
-    embed = discord.Embed(title="📜 الملف الشخصي", description=f"⚡ **اللقب:** `{user_data.get('custom_title', 'مقاتل مستجد')}`", color=discord.Color.dark_gold())
-    await interaction.followup.send(embed=embed, ephemeral=True)
+    
+    balance = user_data.get("balance", 0)
+    diamonds = user_data.get("diamonds", 0)
+    custom_title = user_data.get("custom_title", "مقاتل مستجد")
+    inventory = user_data.get("inventory", [])
+    
+    embed = discord.Embed(title="📜 الملف الشخصي للمقاتل", description=f"⚡ **اللقب:** `{custom_title}`", color=discord.Color.dark_gold())
+    embed.add_field(name="الرصيد", value=f"`{balance:,}` 🪙 | `💎 {diamonds:,}`", inline=False)
+    embed.add_field(name="العتاد", value=f"إجمالي القطع: `{len(inventory)}`", inline=False)
+    
+    await interaction.followup.send(embed=embed, view=ProfileView(interaction.user.id), ephemeral=True)
 
 @bot.tree.command(name="بنك", description="فتح الحساب البنكي")
 async def bank_command(interaction: discord.Interaction):
@@ -259,5 +256,10 @@ async def bank_command(interaction: discord.Interaction):
     user_data = users_col.find_one({"user_id": user_id}) or {}
     embed = discord.Embed(title="🏦 البنك المركزي", description=f"رصيدك الحالي: `{user_data.get('balance', 0)}` 🪙", color=discord.Color.gold())
     await interaction.followup.send(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="معارك", description="فتح ساحة المعارك الكبرى")
+async def battle_command(interaction: discord.Interaction):
+    embed = discord.Embed(title="🏟️ ساحة المعارك", description="اختر نوع التحدي:", color=discord.Color.dark_gold())
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 bot.run(DISCORD_TOKEN)
