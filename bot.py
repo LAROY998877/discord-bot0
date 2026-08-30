@@ -14,6 +14,79 @@ client = MongoClient(MONGO_URI)
 db = client["discord_bot_db"]
 users_col = db["users"]
 
+class GamesView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.select(
+        placeholder="اختر لعبة من المنيو لتشغيلها...",
+        options=[
+            discord.SelectOption(
+                label="لعبة الأسئلة والصراحة",
+                description="أسئلة تفاعلية بـ 3 مستويات (عادي، متوسط، جريء جداً🔥)",
+                emoji="🎯"
+            ),
+            discord.SelectOption(
+                label="لعبة لو خيروك",
+                description="تخيير اللاعبين بين خيارين صعبين ومضحكين!",
+                emoji="🆚"
+            ),
+            discord.SelectOption(
+                label="لعبة روليت الملكي",
+                description="أدار الروليت الملكي واحصل على كنز الملك أو عقوبته!",
+                emoji="👑"
+            )
+        ]
+    )
+    async def select_game(self, interaction: discord.Interaction, select: discord.ui.Select):
+        choice = select.values[0]
+        if "الأسئلة" in choice:
+            q_list = [
+                "🎯 **مستوى عادي:** ما هو أكثر موقف مضحك تعرضت له مؤخراً؟",
+                "🎯 **مستوى متوسط:** لو أتيحت لك الفرصة للسفر لأي مكان الآن، أين ستذهب؟",
+                "🔥 **مستوى جريء جداً:** ما هو أكبر سر تخفيه عن أصدقائك المقربين؟"
+            ]
+            await interaction.response.send_message(random.choice(q_list), ephemeral=True)
+        elif "لو خيروك" in choice:
+            options_list = [
+                "🆚 تخسر كل أموالك أم تنسى أصدقائك المقربين للأبد؟",
+                "🆚 تعيش بدون إنترنت لمدة سنة أم بدون هاتف محمول لمدة شهرين؟",
+                "🆚 تتكلم لغة الحيوانات أم تقرأ أفكار الناس؟"
+            ]
+            await interaction.response.send_message(random.choice(options_list), ephemeral=True)
+        elif "روليت الملكي" in choice:
+            outcomes = [
+                "👑 **حظ الملك:** لقد منحك الملك خزينة القلعة! ربحت 50 عملة ذهبية.",
+                "👑 **غضب الملك:** أمر الملك بمصادرة جزء من أموالك! خسرت 20 عملة.",
+                "👑 **عفو ملكي:** لم يحدث شيء، خرجت سالماً من قصر الملك!",
+                "👑 **حفلة القلعة:** استمتعت بحفلة أسطورية مع العائلة الملكية!"
+            ]
+            result = random.choice(outcomes)
+            
+            user_id = str(interaction.user.id)
+            user = users_col.find_one({"user_id": user_id})
+            if user:
+                current_balance = user.get("balance", 0)
+                if "ربحت 50" in result:
+                    new_balance = current_balance + 50
+                    users_col.update_one({"user_id": user_id}, {"$set": {"balance": new_balance}})
+                    result += f"\n💰 رصيدك الجديد: {new_balance} عملة"
+                elif "خسرت 20" in result:
+                    new_balance = max(0, current_balance - 20)
+                    users_col.update_one({"user_id": user_id}, {"$set": {"balance": new_balance}})
+                    result += f"\n💰 رصيدك الحالي: {new_balance} عملة"
+                    
+            await interaction.response.send_message(result, ephemeral=True)
+
+    @discord.ui.button(label="الرئيسية", emoji="🏠", style=discord.ButtonStyle.secondary)
+    async def home_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🎮 قائمة الألعاب المتاحة",
+            description="اختر إحدى الألعاب التالية من المنيو بالأسفل:\n\n🎯 **1. لعبة الأسئلة والصراحة**\nأسئلة تفاعلية بـ 3 مستويات (عادي، متوسط، جريء جداً🔥)\n\n🆚 **2. لعبة لو خيروك**\nتخيير اللاعبين بين خيارين صعبين ومضحكين!\n\n👑 **3. لعبة روليت الملكي**\nأدار الروليت الملكي واحصل على كنز الملك أو عقوبته!",
+            color=0x9b59b6
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
 @bot.event
 async def on_ready():
     try:
@@ -34,7 +107,7 @@ async def register(interaction: discord.Interaction):
     users_col.insert_one({
         "user_id": user_id,
         "username": interaction.user.name,
-        "balance": 100,  # هدية ترحيبية 100 عملة
+        "balance": 100,
         "inventory": []
     })
     await interaction.response.send_message("✅ تم تسجيلك بنجاح وحصلت على 100 عملة هدية ترحيبية!", ephemeral=True)
@@ -72,34 +145,14 @@ async def shop(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="لعبة", description="لعبة حظ سريعة لمضاعفة رصيدك أو خسارته")
-@app_commands.describe(مبلغ="المبلغ المراد المراهنة به")
-async def game(interaction: discord.Interaction, مبلغ: int):
-    user_id = str(interaction.user.id)
-    user = users_col.find_one({"user_id": user_id})
-    
-    if not user:
-        await interaction.response.send_message("❌ يجب عليك التسجيل أولاً باستخدام أمر `/تسجيل`", ephemeral=True)
-        return
-        
-    if مبلغ <= 0:
-        await interaction.response.send_message("❌ يجب أن يكون المبلغ أكبر من صفر!", ephemeral=True)
-        return
-        
-    current_balance = user.get("balance", 0)
-    if current_balance < مبلغ:
-        await interaction.response.send_message(f"❌ رصيدك غير كافي! رصيدك الحالي: {current_balance} عملة", ephemeral=True)
-        return
-
-    win = random.choice([True, False])
-    if win:
-        new_balance = current_balance + مبلغ
-        users_col.update_one({"user_id": user_id}, {"$set": {"balance": new_balance}})
-        await interaction.response.send_message(f"🎉 مبروك! لقد فزت في اللعبة وربحت {مبلغ} عملة!\n💰 رصيدك الجديد: {new_balance} عملة")
-    else:
-        new_balance = current_balance - مبلغ
-        users_col.update_one({"user_id": user_id}, {"$set": {"balance": new_balance}})
-        await interaction.response.send_message(f"😢 حظ أوفر في المرة القادمة! لقد خسرت {مبلغ} عملة.\n💰 رصيدك الحالي: {new_balance} عملة")
+@bot.tree.command(name="العاب", description="فتح قائمة الألعاب التفاعلية المتاحة")
+async def games(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🎮 قائمة الألعاب المتاحة",
+        description="اختر إحدى الألعاب التالية من المنيو بالأسفل:\n\n🎯 **1. لعبة الأسئلة والصراحة**\nأسئلة تفاعلية بـ 3 مستويات (عادي، متوسط، جريء جداً🔥)\n\n🆚 **2. لعبة لو خيروك**\nتخيير اللاعبين بين خيارين صعبين ومضحكين!\n\n👑 **3. لعبة روليت الملكي**\nأدار الروليت الملكي واحصل على كنز الملك أو عقوبته!",
+        color=0x9b59b6
+    )
+    await interaction.response.send_message(embed=embed, view=GamesView())
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 bot.run(TOKEN)
