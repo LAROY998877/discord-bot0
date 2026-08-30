@@ -15,126 +15,186 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="/", intents=intents)
 
-# ==================== بنك الأسئلة للمستويات ====================
+# ==================== بنك الأسئلة ====================
 QUESTIONS = {
-    "normal": [
+    "🟢 عادي": [
         "شنو أكثر شيء تحبه بشخصيتك وترتاحله؟",
         "شنو طموحك المستقبلي اللي محد يعرفه عنك؟",
         "شنو أكره أكلة عندك ومستحيل تأكلها؟",
-        "شنو الموقف المحرج اللي صار وياك بالمدرسة أو الكلية؟",
-        "شنو أكثر موقف ضحكت عليه من قلبك وما تنساه؟",
-        "شنو هو البلد اللي تتمنى تسافرله وتعيش بيه؟",
-        "شنو أول شيء تسويه أول ما تقعد من النوم؟"
+        "شنو الموقف المحرج اللي صار وياك بالمدرسة أو الكلية؟"
     ],
-    "medium": [
+    "🟡 متوسط": [
         "شنو أكبر سر خبيته عن أهلك لحد هسّه؟",
         "شنو الكذبة اللي كذبتها ومحد اكتشفها لحد اليوم؟",
         "منو الشخص الموجود بالسيرفر وتتمنى تحجي وياه بس مستحي؟",
-        "شنو الموقف اللي ندمت عليه بحياتك وتتمنى تمسحه تماماً؟",
-        "هل دخلت بعلاقة بعمرك وحسيت نفسك مظلوم بيها؟",
-        "شنو الصفة اللي بيك واللي كل الناس تشتكي منها؟",
         "هل قد فتحت جهاز شخص قريب عليك وبحثت برسائله بدون علمه؟"
     ],
-    "bold": [
+    "🔴 جريء جداً 🔥": [
         "شنو الشي المحرج أو العيب اللي سويته بحياتك وبقى سر بس بينك وبين نفسك؟",
-        "هل قد حبيت شخص من طرف واحد وتعرّضت للرفض؟ شنو صار؟",
         "منو أكثر شخص موجود بالسيرفر تحس عندك انجذاب خاص إله؟",
-        "شنو الصفة الخاصة والجريئة جداً اللي تدورها بشريك حياتك ومستحي تعترف بيها؟",
         "شنو أغرب شيء سويته لما كنت وحدك بالبيت ومحد يشوفك؟",
-        "هل جربت تبكي بالليل بسبب شخص وتظاهرت باللامبالاة ثاني يوم أمام الناس؟",
-        "هل خنت ثقة شخص قريب منك جداً وما اعترفتله لحد هسّه؟",
-        "شنو أجرأ تصرف سويته بحياتك وما تقدر تقوله لأهلك إطلاقاً؟"
+        "هل خنت ثقة شخص قريب منك جداً وما اعترفتله لحد هسّه؟"
     ]
 }
 
-# ==================== واجهة اختيار مستويات الأسئلة ====================
-class QuestionsLevelView(discord.ui.View):
-    def __init__(self, author):
-        super().__init__(timeout=60)
-        self.author = author
+# ==================== منيو اختيار مود اللعبة ====================
+class TruthOrDareModeSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="عادي", description="أسئلة خفيفة ولطيفة للجميع", emoji="🟢"),
+            discord.SelectOption(label="متوسط", description="أسئلة تحتاج شوية صراحة وشجاعة", emoji="🟡"),
+            discord.SelectOption(label="جريء جداً 🔥", description="أسئلة قوية وقوية جداً وخاصة", emoji="🔴")
+        ]
+        super().__init__(placeholder="اختر المود...", min_values=1, max_values=1, options=options)
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author.id:
-            await interaction.response.send_message("❌ هذه القائمة ليست لك! استخدم أمر `/العاب` الخاص بك.", ephemeral=True)
-            return False
-        return True
+    async def callback(self, interaction: discord.Interaction):
+        view: TruthOrDareLobbyView = self.view
+        selected_mode = self.values[0]
+        if "عادي" in selected_mode:
+            view.mode = "🟢 عادي"
+        elif "متوسط" in selected_mode:
+            view.mode = "🟡 متوسط"
+        else:
+            view.mode = "🔴 جريء جداً 🔥"
+            
+        await view.update_lobby(interaction)
 
-    @discord.ui.button(label="🟢 مستوى عادي", style=discord.ButtonStyle.success)
-    async def normal_level(self, interaction: discord.Interaction, button: discord.ui.Button):
-        q = random.choice(QUESTIONS["normal"])
+# ==================== لوحة تحكم لعبة صراحة أو جرأة ====================
+class TruthOrDareLobbyView(discord.ui.View):
+    def __init__(self, host: discord.User):
+        super().__init__(timeout=300)
+        self.host = host
+        self.players = [host]
+        self.mode = "🟢 عادي"
+        self.add_item(TruthOrDareModeSelect())
+
+    def generate_embed(self) -> discord.Embed:
+        players_list = "\n".join([f"• {p.display_name}" for p in self.players])
         embed = discord.Embed(
-            title="🎯 لعبة الأسئلة - المستوى العادي",
-            description=f"**سؤالك هو:**\n\n💬 `{q}`",
-            color=discord.Color.green()
+            title="🍾 صراحة أو جرأة",
+            description=f"**المود:** `{self.mode}`\n\n👥 **اللاعبين ({len(self.players)})**\n{players_list}\n\n**المنظم:** {self.host.mention}",
+            color=discord.Color.from_rgb(255, 105, 180)
         )
-        embed.set_footer(text=f"اللاعب: {interaction.user.display_name}")
-        await interaction.response.edit_message(embed=embed, view=None)
+        return embed
 
-    @discord.ui.button(label="🟡 مستوى متوسط", style=discord.ButtonStyle.secondary)
-    async def medium_level(self, interaction: discord.Interaction, button: discord.ui.Button):
-        q = random.choice(QUESTIONS["medium"])
+    async def update_lobby(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="انضمام 🏃", style=discord.ButtonStyle.success, row=1)
+    async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user in self.players:
+            await interaction.response.send_message("❌ أنت منضم بالفعل للعبة!", ephemeral=True)
+            return
+        self.players.append(interaction.user)
+        await self.update_lobby(interaction)
+
+    @discord.ui.button(label="خروج 🚪", style=discord.ButtonStyle.secondary, row=1)
+    async def leave_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user not in self.players:
+            await interaction.response.send_message("❌ أنت لست ضمن قائمة اللاعبين!", ephemeral=True)
+            return
+        if interaction.user == self.host:
+            await interaction.response.send_message("❌ المنظم لا يمكنه الخروج من اللعبة!", ephemeral=True)
+            return
+        self.players.remove(interaction.user)
+        await self.update_lobby(interaction)
+
+    @discord.ui.button(label="الشرح 📜", style=discord.ButtonStyle.secondary, row=1)
+    async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg = "📖 **طريقة اللعب:**\nتنضم المجموعة للعبة، وعند الضغط على زر (بدء) يختار البوت لاعباً عشوائياً ويوجه له سؤال صراحة بناءً على المود المحدد!"
+        await interaction.response.send_message(msg, ephemeral=True)
+
+    @discord.ui.button(label="بدء 🚀", style=discord.ButtonStyle.primary, row=1)
+    async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.host:
+            await interaction.response.send_message("❌ فقط المنظم يمكنه لبدء اللعبة!", ephemeral=True)
+            return
+
+        chosen_player = random.choice(self.players)
+        question = random.choice(QUESTIONS[self.mode])
+
         embed = discord.Embed(
-            title="🎯 لعبة الأسئلة - المستوى المتوسط",
-            description=f"**سؤالك هو:**\n\n💬 `{q}`",
-            color=discord.Color.gold()
-        )
-        embed.set_footer(text=f"اللاعب: {interaction.user.display_name}")
-        await interaction.response.edit_message(embed=embed, view=None)
-
-    @discord.ui.button(label="🔴 مستوى جريء جداً 🔥", style=discord.ButtonStyle.danger)
-    async def bold_level(self, interaction: discord.Interaction, button: discord.ui.Button):
-        q = random.choice(QUESTIONS["bold"])
-        embed = discord.Embed(
-            title="🔥 لعبة الأسئلة - المستوى الجريء جداً",
-            description=f"**سؤالك الجريء هو:**\n\n😈 `{q}`",
-            color=discord.Color.red()
-        )
-        embed.set_footer(text=f"اللاعب: {interaction.user.display_name} | جاوب بصراحة!")
-        await interaction.response.edit_message(embed=embed, view=None)
-
-
-# ==================== القائمة الرئيسية للألعاب ====================
-class MainGamesView(discord.ui.View):
-    def __init__(self, author):
-        super().__init__(timeout=60)
-        self.author = author
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author.id:
-            await interaction.response.send_message("❌ هذه القائمة ليست لك! استخدم أمر `/العاب` الخاص بك.", ephemeral=True)
-            return False
-        return True
-
-    @discord.ui.button(label="❓ لعبة الأسئلة (صراحة / جرأة)", style=discord.ButtonStyle.primary, emoji="🎯")
-    async def questions_game(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="🎯 لعبة الأسئلة والصراحة",
-            description="اختر المستوى الذي تجرؤ على الإجابة عليه من الأزرار أدناه:",
+            title=f"🎯 الدور على: {chosen_player.display_name}",
+            description=f"**المود:** `{self.mode}`\n\n💬 **السؤال:**\n`{question}`",
             color=discord.Color.purple()
         )
-        view = QuestionsLevelView(author=self.author)
-        await interaction.response.edit_message(embed=embed, view=view)
+        embed.set_footer(text="جاوب بصراحة أمام الجميع!")
+        await interaction.response.edit_message(embed=embed, view=None)
 
 
-# ==================== أمر السلاش الرئيسي للألعاب ====================
-@bot.tree.command(name="العاب", description="قائمة الألعاب التفاعلية في السيرفر")
-async def games_menu(interaction: discord.Interaction):
+# ==================== منيو الأقسام الرئيسي ====================
+class MainCategorySelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="اجتماعية وضحك", description="صراحة أو جرأة، لو خيروك، شكلي لو", emoji="🎭"),
+            discord.SelectOption(label="ذكاء وسرعة", description="لعبة الحرف، لونا قالت، زر", emoji="🧠"),
+            discord.SelectOption(label="حظ وإثارة", description="الروليت الملكي، المافيا، العجلة", emoji="💀"),
+            discord.SelectOption(label="سريعة وإيفنتات", description="أسرع، أعلام، عواصم", emoji="⚡")
+        ]
+        super().__init__(placeholder="اختر قسم من المنيو...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected = self.values[0]
+        if "اجتماعية" in selected:
+            # فتح غطاء لعبة صراحة أو جرأة
+            lobby_view = TruthOrDareLobbyView(host=interaction.user)
+            await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
+        else:
+            await interaction.response.send_message(f"⚙️ قسم **{selected}** تحت التطوير حالياً وسنضيف ألعابه قريباً!", ephemeral=True)
+
+# ==================== الواجهة الرئيسية للألعاب ====================
+class GamesMainView(discord.ui.View):
+    def __init__(self, author: discord.User):
+        super().__init__(timeout=180)
+        self.author = author
+        self.add_item(MainCategorySelect())
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message("❌ هذه القائمة ليست لك! استخدم `/العاب` لفتح القائمة الخاصة بك.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="الرئيسية 🏠", style=discord.ButtonStyle.secondary, row=1)
+    async def home_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = generate_main_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="لعبة عشوائية 🎲", style=discord.ButtonStyle.success, row=1)
+    async def random_game_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        lobby_view = TruthOrDareLobbyView(host=interaction.user)
+        await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
+
+# ==================== دالة إنشاء الإمبيد الرئيسي ====================
+def generate_main_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="🎮 قائمة الألعاب",
-        description="مرحباً بك في قسم الألعاب! اختر اللعبة التي تريدها من الأزرار في الأسفل:",
-        color=discord.Color.blue()
+        title="🎮 أقسام الألعاب",
+        description="اختر قسم من المنيو، وبعدها شغّل أي لعبة مباشرة من القائمة.\n\n"
+                    "🎭 **اجتماعية وضحك — `1 لعبة`**\n"
+                    "صراحة أو جرأة، شكلي لو، لو خيروك\n\n"
+                    "🧠 **ذكاء وسرعة — `قريباً`**\n"
+                    "لعبة الحرف، لونا قالت، زر\n\n"
+                    "💀 **حظ وإثارة — `قريباً`**\n"
+                    "الروليت الملكي، روليت العجلة، المافيا\n\n"
+                    "⚡ **سريعة وإيفنتات — `قريباً`**\n"
+                    "أسرع، أعلام، عواصم\n\n"
+                    "💡 **ملاحظة:** جرب زر العشوائية إذا ما قدرتوا تتفقون!",
+        color=discord.Color.from_rgb(255, 105, 180)
     )
-    embed.set_thumbnail(url=interaction.user.display_avatar.url)
-    
-    view = MainGamesView(author=interaction.user)
+    return embed
+
+# ==================== أمر السلاش الرئيسي ====================
+@bot.tree.command(name="العاب", description="عرض منيو الألعاب الفخم والسريع")
+async def games_command(interaction: discord.Interaction):
+    embed = generate_main_embed()
+    view = GamesMainView(author=interaction.user)
     await interaction.response.send_message(embed=embed, view=view)
 
-
-# ==================== المزامنة والتشغيل ====================
+# ==================== التشغيل ====================
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ البوت شغال وجاهز كـ {bot.user} ومربوط بـ MongoDB!")
+    print(f"✅ البوت {bot.user} جاهز ومتصل بـ MongoDB المنيو الفخم شغال!")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 bot.run(TOKEN)
