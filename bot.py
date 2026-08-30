@@ -11,6 +11,24 @@ client = MongoClient(MONGO_URI)
 db = client["discord_bot_db"]
 users_col = db["users"]
 
+# دالة مساعدة لحفظ أو تحديث بيانات اللاعب في قاعدة البيانات
+def save_player_data(user_id: int, username: str, extra_data: dict = None):
+    data = {
+        "username": username,
+        "last_seen": discord.utils.utcnow()
+    }
+    if extra_data:
+        data.update(extra_data)
+    
+    users_col.update_one(
+        {"user_id": user_id},
+        {"$set": data, "$inc": {"total_actions": 1}},
+        upsert=True
+    )
+
+def get_player_data(user_id: int):
+    return users_col.find_one({"user_id": user_id})
+
 # ==================== إعدادات البوت ====================
 intents = discord.Intents.default()
 intents.message_content = True
@@ -58,6 +76,8 @@ class QuestionsLobbyView(discord.ui.View):
         self.players = [host]
         self.mode = "🟢 عادي"
 
+        save_player_data(host.id, host.name, {"current_game": "questions"})
+
         mode_select = discord.ui.Select(
             placeholder="اختر المود / المستوى...",
             min_values=1, max_values=1,
@@ -94,6 +114,7 @@ class QuestionsLobbyView(discord.ui.View):
             await interaction.response.send_message("❌ أنت منضم بالفعل!", ephemeral=True)
             return
         self.players.append(interaction.user)
+        save_player_data(interaction.user.id, interaction.user.name, {"current_game": "questions"})
         await self.update_lobby(interaction)
 
     @discord.ui.button(label="خروج 🚪", style=discord.ButtonStyle.secondary, row=1)
@@ -111,12 +132,16 @@ class QuestionsLobbyView(discord.ui.View):
             return
         chosen_player = random.choice(self.players)
         question = random.choice(QUESTIONS[self.mode])
+        
+        # حفظ نتيجة أو دور اللاعب في قاعدة البيانات
+        users_col.update_one({"user_id": chosen_player.id}, {"$inc": {"questions_answered": 1}}, upsert=True)
+
         embed = discord.Embed(
             title=f"🎯 الدور على: {chosen_player.display_name}",
             description=f"**المود:** `{self.mode}`\n\n💬 **السؤال:**\n`{question}`",
             color=discord.Color.purple()
         )
-        embed.set_footer(text="جاوب بصراحة أمام الجميع!")
+        embed.set_footer(text="تم حفظ بيانات الجلسة في قاعدة البيانات بنجاح!")
         await interaction.response.edit_message(embed=embed, view=None)
 
     @discord.ui.button(label="إيقاف 🛑", style=discord.ButtonStyle.danger, row=1)
@@ -136,6 +161,7 @@ class WouldYouRatherLobbyView(discord.ui.View):
         super().__init__(timeout=300)
         self.host = host
         self.players = [host]
+        save_player_data(host.id, host.name, {"current_game": "would_you_rather"})
 
     def generate_embed(self) -> discord.Embed:
         players_list = "\n".join([f"• {p.display_name}" for p in self.players])
@@ -154,6 +180,7 @@ class WouldYouRatherLobbyView(discord.ui.View):
             await interaction.response.send_message("❌ أنت منضم بالفعل!", ephemeral=True)
             return
         self.players.append(interaction.user)
+        save_player_data(interaction.user.id, interaction.user.name, {"current_game": "would_you_rather"})
         await self.update_lobby(interaction)
 
     @discord.ui.button(label="خروج 🚪", style=discord.ButtonStyle.secondary, row=0)
@@ -171,12 +198,15 @@ class WouldYouRatherLobbyView(discord.ui.View):
             return
         chosen_player = random.choice(self.players)
         option_a, option_b = random.choice(WOULD_YOU_RATHER)
+        
+        users_col.update_one({"user_id": chosen_player.id}, {"$inc": {"would_you_rather_rounds": 1}}, upsert=True)
+
         embed = discord.Embed(
             title=f"🆚 لو خيروك يا {chosen_player.display_name}",
             description=f"**الخيار الأول (🔵):**\n`{option_a}`\n\n**الخيار الثاني (🔴):**\n`{option_b}`",
             color=discord.Color.gold()
         )
-        embed.set_footer(text="اختر وبدون تراجع!")
+        embed.set_footer(text="تم تسجيل المشاركة بقاعدة البيانات!")
         await interaction.response.edit_message(embed=embed, view=None)
 
     @discord.ui.button(label="إيقاف 🛑", style=discord.ButtonStyle.danger, row=0)
@@ -200,7 +230,6 @@ class NumberSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         chosen_num = int(self.values[0])
         
-        # التأكد إذا كان الرقم محجوزاً من لاعب آخر
         for p_id, num in self.game_view.player_numbers.items():
             if num == chosen_num and p_id != interaction.user.id:
                 await interaction.response.send_message(f"❌ الرقم `{chosen_num}` محجوز من قبل لاعب آخر! اختر رقماً غيره.", ephemeral=True)
@@ -210,7 +239,10 @@ class NumberSelect(discord.ui.Select):
         if interaction.user not in self.game_view.players:
             self.game_view.players.append(interaction.user)
 
-        await interaction.response.send_message(f"✨ تم اختيار الرقم **{chosen_num}** بنجاح في الروليت الملكي!", ephemeral=True)
+        # حفظ اختيار الرقم في قاعدة البيانات فورياً
+        save_player_data(interaction.user.id, interaction.user.name, {"last_roulette_number": chosen_num})
+
+        await interaction.response.send_message(f"✨ تم حفظ رقمك **{chosen_num}** في قاعدة البيانات بنجاح!", ephemeral=True)
         await self.game_view.update_message(interaction)
 
 class RoyalKickSelect(discord.ui.Select):
@@ -239,9 +271,13 @@ class RoyalKickSelect(discord.ui.Select):
         target_user = interaction.guild.get_member(target_id) or bot.get_user(target_id)
         target_name = target_user.display_name if target_user else "اللاعب"
 
+        # تحديث بيانات الملك واللاعب المطرود في قاعدة البيانات
+        users_col.update_one({"user_id": self.winner.id}, {"$inc": {"royal_wins": 1}}, upsert=True)
+        users_col.update_one({"user_id": target_id}, {"$inc": {"times_kicked": 1}}, upsert=True)
+
         embed = discord.Embed(
             title="⚡ صدر الحكم الملكي!",
-            description=f"👑 الملك {self.winner.mention} أصدر قراره الحاسم!\n👢 تم طرد **{target_name}** من ساحة الروليت الملكي بنجاح!",
+            description=f"👑 الملك {self.winner.mention} أصدر قراره الحاسم!\n👢 تم طرد **{target_name}** من ساحة الروليت الملكي بنجاح!\n*(تم حفظ سجل القرار في قاعدة البيانات)*",
             color=discord.Color.dark_red()
         )
         view = RoyalRouletteNextView(self.host)
@@ -283,7 +319,8 @@ class RoyalRouletteLobbyView(discord.ui.View):
         super().__init__(timeout=300)
         self.host = host
         self.players = [host]
-        self.player_numbers = {} # {user_id: number}
+        self.player_numbers = {} 
+        save_player_data(host.id, host.name, {"current_game": "royal_roulette"})
         self.add_item(NumberSelect(self))
 
     def generate_embed(self) -> discord.Embed:
@@ -298,7 +335,7 @@ class RoyalRouletteLobbyView(discord.ui.View):
         return discord.Embed(
             title="👑 الروليت الملكي 👑",
             description=desc,
-            color=discord.Color.from_rgb(218, 165, 32) # لون ذهبي فخم
+            color=discord.Color.from_rgb(218, 165, 32)
         )
 
     async def update_message(self, interaction: discord.Interaction):
@@ -316,7 +353,6 @@ class RoyalRouletteLobbyView(discord.ui.View):
             await interaction.response.send_message("❌ يجب أن يختار اللاعبون أرقامهم أولاً!", ephemeral=True)
             return
 
-        # تأثير الحركة والتشويق للعجلة
         await interaction.response.defer()
         msg = interaction.message
 
@@ -330,10 +366,8 @@ class RoyalRouletteLobbyView(discord.ui.View):
             await msg.edit(embed=emb, view=None)
             await asyncio.sleep(0.7)
 
-        # اختيار رقم عشوائي من 1 لـ 20
         winning_number = random.randint(1, 20)
 
-        # البحث عن اللاعب الفائز بهذا الرقم
         winner = None
         for p_id, num in self.player_numbers.items():
             if num == winning_number:
@@ -439,7 +473,7 @@ async def games_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ البوت {bot.user} شغال وجميع الألعاب جاهزة بنجاح!")
+    print(f"✅ البوت {bot.user} شغال، وقاعدة البيانات متصلة وجاهزة لحفظ بيانات اللاعبين!")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 bot.run(TOKEN)
