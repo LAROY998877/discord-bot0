@@ -23,7 +23,7 @@ class BotClient(commands.Bot):
 
     async def setup_hook(self):
         await self.tree.sync()
-        print("✅ تم مزامنة جميع الأنظمة (المتاجر، 500 طابق، المعارك، الملف الشخصي، والبنك) بنجاح!")
+        print("✅ تم مزامنة جميع الأنظمة بنجاح!")
 
 bot = BotClient()
 
@@ -82,7 +82,7 @@ def generate_50_items(shop_type):
 NORMAL_SHOP_ITEMS = generate_50_items("normal")
 DARK_SHOP_ITEMS = generate_50_items("dark")
 
-# ================== القوائم المنسدلة للمتاجر مع نظام الصفحات ==================
+# ================== المتاجر والقوائم ==================
 class ShopSpecificSelect(discord.ui.Select):
     def __init__(self, items_pool, shop_type, category, page=0):
         self.items_pool = items_pool
@@ -98,7 +98,7 @@ class ShopSpecificSelect(discord.ui.Select):
             discord.SelectOption(
                 label=f"{item['name']} [{item['tier']}]", 
                 value=item["id"], 
-                description=f"السعر: {item['price']} | {item['stats']} | المخزون: {item['stock']}"
+                description=f"السعر: {item['price']} | {item['stats']}"
             ) for item in current_items
         ]
         super().__init__(placeholder=f"اختر قطعة من قسم {category} (صفحة {page+1})...", min_values=1, max_values=1, options=options)
@@ -119,10 +119,7 @@ class ShopSpecificSelect(discord.ui.Select):
                 return await interaction.followup.send(f"❌ رصيدك من الألماس غير كافٍ! تحتاج `💎 {item['price']}`.", ephemeral=True)
             users_col.update_one({"user_id": user_id}, {"$inc": {"diamonds": -item["price"]}, "$push": {"inventory": item}}, upsert=True)
 
-        await interaction.followup.send(
-            f"🎉 **عملية شراء ناجحة!**\n⚔️ القطعة: **{item['name']}**\n🔰 الرتبة: **{item['tier']}**\n📊 المميزات: `{item['stats']}`\n*تمت إضافتها لحقيبتك!*", 
-            ephemeral=True
-        )
+        await interaction.followup.send(f"🎉 **تم الشراء بنجاح!** حصلت على **{item['name']}** `[{item['tier']}]`", ephemeral=True)
 
 class ShopPageButton(discord.ui.Button):
     def __init__(self, items_pool, shop_type, category, author_id, target_page, label, disabled):
@@ -135,7 +132,7 @@ class ShopPageButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         view = ShopPaginationView(self.items_pool, self.shop_type, self.category, self.author_id, page=self.target_page)
-        await interaction.response.edit_message(content=f"🛒 تتصفح الآن قسم: **{self.category}** (الصفحة {self.target_page + 1} من 2)\nاختر القطعة التي تناسبك:", view=view)
+        await interaction.response.edit_message(content=f"🛒 تتصفح قسم: **{self.category}** (الصفحة {self.target_page + 1})", view=view)
 
 class ShopPaginationView(discord.ui.View):
     def __init__(self, items_pool, shop_type, category, author_id, page=0):
@@ -165,14 +162,13 @@ class ShopCategorySelect(discord.ui.Select):
             discord.SelectOption(label="خنجر", value="خنجر", emoji="🗡️"),
             discord.SelectOption(label="عصا سحرية", value="عصا سحرية", emoji="🪄")
         ]
-        super().__init__(placeholder="اختر فئة العتاد التي تريد تصفحها...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="اختر فئة العتاد...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         category = self.values[0]
         items_pool = NORMAL_SHOP_ITEMS.get(category, []) if self.shop_type == "normal" else DARK_SHOP_ITEMS.get(category, [])
-        
         view = ShopPaginationView(items_pool, self.shop_type, category, interaction.user.id, page=0)
-        await interaction.response.edit_message(content=f"🛒 تتصفح الآن قسم: **{category}** (الصفحة 1 من 2)\nاختر القطعة التي تناسبك:", view=view)
+        await interaction.response.edit_message(content=f"🛒 تتصفح قسم: **{category}**", view=view)
 
 class ShopView(discord.ui.View):
     def __init__(self, author_id, shop_type):
@@ -186,132 +182,64 @@ class ShopView(discord.ui.View):
             return False
         return True
 
-@bot.tree.command(name="المتجر_العادي", description="تصفح وشراء العتاد العادي المتوفر (بالعملة العادية)")
+@bot.tree.command(name="المتجر_العادي", description="تصفح متجر العتاد العادي")
 async def normal_shop(interaction: discord.Interaction):
-    view = ShopView(interaction.user.id, "normal")
-    await interaction.response.send_message("🏬 **متجر العتاد العادي**\nيحتوي على 50 قطعة من كل فئة. اختر القسم من القائمة بالأسفل:", view=view)
+    await interaction.response.send_message("🏬 **متجر العتاد العادي**\nاختر القسم:", view=ShopView(interaction.user.id, "normal"), ephemeral=True)
 
-@bot.tree.command(name="المتجر_المظلم", description="تصفح العتاد الأسطوري والملعون (بالألماس)")
+@bot.tree.command(name="المتجر_المظلم", description="تصفح المتجر المظلم")
 async def dark_shop(interaction: discord.Interaction):
-    view = ShopView(interaction.user.id, "dark")
-    await interaction.response.send_message("🌌 **المتجر المظلم (سوق الأساطير)**\nمكان العتاد المحرم ورتب (الشيطان، الجحيم، السفاح) - 50 قطعة لكل فئة. اختر القسم بحذر:", view=view)
+    await interaction.response.send_message("🌌 **المتجر المظلم**\nاختر القسم:", view=ShopView(interaction.user.id, "dark"), ephemeral=True)
 
-# ================== نظام الـ 500 طابق والزعماء (Modal & Logic) ==================
+# ================== الطوابق والزعماء ==================
 class FloorInputModal(discord.ui.Modal, title='🏰 غزو الأبراج (من 1 إلى 500)'):
-    floor_number = discord.ui.TextInput(
-        label='اختر رقم الطابق المراد غزوه',
-        placeholder='أدخل رقماً بين 1 و 500 (مثال: 154)',
-        required=True,
-        min_length=1,
-        max_length=3
-    )
+    floor_number = discord.ui.TextInput(label='رقم الطابق', placeholder='من 1 إلى 500', required=True, min_length=1, max_length=3)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        
         if not self.floor_number.value.isdigit():
-            return await interaction.followup.send("❌ يرجى إدخال رقم صحيح للطابق بالأرقام فقط!", ephemeral=True)
+            return await interaction.followup.send("❌ أدخل رقماً صحيحاً!", ephemeral=True)
         
         floor_num = int(self.floor_number.value)
-        if floor_num < 1 or floor_num > 500:
-            return await interaction.followup.send("❌ النطاق المسموح للطوابق هو من **1 إلى 500** فقط!", ephemeral=True)
+        if not (1 <= floor_num <= 500):
+            return await interaction.followup.send("❌ النطاق من 1 إلى 500 فقط!", ephemeral=True)
 
         user_id = str(interaction.user.id)
-        
-        boss_titles = ["حارس الجحيم", "سيد الظلال", "عملاق الفوضى", "ملك الموتى", "شيطان الهلاك", "حارس الأبراج الأسطوري", "مدمر الأكوان"]
-        boss_name = f"زعيم الطابق {floor_num}: {random.choice(boss_titles)}"
-        
-        win_probability = max(0.15, 0.95 - (floor_num * 0.0016))
-        won = random.random() < win_probability
+        boss_name = f"زعيم الطابق {floor_num}"
+        won = random.random() < max(0.15, 0.95 - (floor_num * 0.0016))
 
         if not won:
-            return await interaction.followup.send(
-                f"💀 **هزيمة نكراء!** في الطابق `{floor_num}`, واجهت الـ **{boss_name}** ولكنه كان أقوى منك بكثير وسحقك تماماً! قوّ عتادك وحاول مجدداً.",
-                ephemeral=True
-            )
+            return await interaction.followup.send(f"💀 هزيمة أمام **{boss_name}**!", ephemeral=True)
 
-        base_coins = floor_num * 120
-        earned_coins = random.randint(base_coins, base_coins + (floor_num * 40))
-        
-        diamond_chance = min(0.18, 0.05 + (floor_num * 0.0003))
-        earned_diamonds = random.randint(1, max(1, floor_num // 80)) if random.random() < diamond_chance else 0
+        earned_coins = floor_num * 120
+        users_col.update_one({"user_id": user_id}, {"$inc": {"balance": earned_coins}}, upsert=True)
+        await interaction.followup.send(f"🎉 انتصرت في الطابق {floor_num} وكسبت `{earned_coins}` 🪙!", ephemeral=True)
 
-        won_normal_item = None
-        if random.random() < 0.25:
-            random_cat = random.choice(list(NORMAL_SHOP_ITEMS.keys()))
-            won_normal_item = random.choice(NORMAL_SHOP_ITEMS[random_cat])
-
-        dark_item_chance = min(0.03, 0.01 + (floor_num * 0.00004))
-        won_dark_item = None
-        if random.random() < dark_item_chance:
-            random_dark_cat = random.choice(list(DARK_SHOP_ITEMS.keys()))
-            won_dark_item = random.choice(DARK_SHOP_ITEMS[random_dark_cat])
-
-        update_query = {"$inc": {"balance": earned_coins}}
-        if earned_diamonds > 0:
-            update_query.setdefault("$inc", {})["diamonds"] = earned_diamonds
-        
-        items_to_push = []
-        if won_normal_item:
-            items_to_push.append(won_normal_item)
-        if won_dark_item:
-            items_to_push.append(won_dark_item)
-
-        if items_to_push:
-            update_query["$push"] = {"inventory": {"$each": items_to_push}}
-
-        users_col.update_one({"user_id": user_id}, update_query, upsert=True)
-
-        reward_desc = f"🪙 **عملات عادية:** `+{earned_coins}`"
-        if earned_diamonds > 0:
-            reward_desc += f"\n💎 **عملات نادرة (ألماس):** `+{earned_diamonds}` *(حظ نادر جداً!)*"
-        if won_normal_item:
-            reward_desc += f"\n🛡️ **قطعة عتاد عادي:** `{won_normal_item['name']}` `[{won_normal_item['tier']}]`"
-        if won_dark_item:
-            reward_desc += f"\n🌌 **قطعة عتاد مظلم أسطورية (نادرة جداً!):** `{won_dark_item['name']}` `[{won_dark_item['tier']}]`"
-
-        embed = discord.Embed(
-            title=f"🎉 انتصار أسطوري في الطابق {floor_num}!",
-            description=f"لقد تغلبت على **{boss_name}** باقتدار بعد معركة ضارية!\n\n**غنائم الطابق العشوائية:**\n{reward_desc}",
-            color=discord.Color.gold()
-        )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-# ================== نظام المعارك والقتال (أمر /معارك) ==================
+# ================== المعارك ==================
 class JoinPvPButton(discord.ui.Button):
     def __init__(self, host_id, mode):
-        super().__init__(style=discord.ButtonStyle.success, label="انضمام للقتال ⚔️", emoji="🔥")
+        super().__init__(style=discord.ButtonStyle.success, label="انضمام للقتال ⚔️")
         self.host_id = host_id
         self.mode = mode
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id == self.host_id:
-            return await interaction.response.send_message("❌ لا يمكنك الانضمام لمعركتك الخاصة كخصم!", ephemeral=True)
+            return await interaction.response.send_message("❌ لا يمكنك الانضمام لمعركتك الخاصة!", ephemeral=True)
         
         channel = interaction.channel
         await channel.set_permissions(interaction.user, read_messages=True, send_messages=True)
-        
-        embed = discord.Embed(
-            title=f"⚔️ اكتمل طرفا المعركة! ({self.mode})",
-            description=f"المستضيف: <@{self.host_id}>\nالخصم: <@{interaction.user.id}>\n\n🔥 **بدأت المعركة بين الأبطال! استخدموا مهاراتكم بحذر.**",
-            color=discord.Color.green()
-        )
-        await interaction.response.edit_message(embed=embed, view=None)
-        await channel.send(f"🎮 **انطلاق النزال!** <@{self.host_id}> ضد <@{interaction.user.id}>. المشاهدون يمكنكم متابعة الحماس بصمت!")
+        await interaction.response.edit_message(content=f"⚔️ **اكتملت المعركة بين <@{self.host_id}> و <@{interaction.user.id}>!**", view=None)
 
 class BattleSelect(discord.ui.Select):
     def __init__(self, author_id):
         self.author_id = author_id
         options = [
-            discord.SelectOption(label="معركة 1v1", value="1v1", description="تحدي فردي وجهاً لوجه", emoji="⚔️"),
-            discord.SelectOption(label="معركة 2v2", value="2v2", description="معركة جماعية ثنائية", emoji="🛡️"),
-            discord.SelectOption(label="معركة 3v3", value="3v3", description="حرب الفرق الثلاثية", emoji="⚡"),
-            discord.SelectOption(label="الطوابق (500 طابق)", value="floors", description="غزو الأبراج وقتال زعماء الـ 500 طابق", emoji="🗼"),
-            discord.SelectOption(label="المتجر", value="shop", description="الانتقال السريع لأسواق العتاد", emoji="🛒"),
-            discord.SelectOption(label="تطوير عتادك", value="upgrade", description="رفع مستوى قطعك الحالية", emoji="⚒️"),
-            discord.SelectOption(label="حقيبتك", value="inventory", description="استعراض مقتنياتك وأسلحتك", emoji="🎒")
+            discord.SelectOption(label="معركة 1v1", value="1v1", emoji="⚔️"),
+            discord.SelectOption(label="معركة 2v2", value="2v2", emoji="🛡️"),
+            discord.SelectOption(label="معركة 3v3", value="3v3", emoji="⚡"),
+            discord.SelectOption(label="الطوابق (500 طابق)", value="floors", emoji="🗼"),
+            discord.SelectOption(label="الحقيبة", value="inventory", emoji="🎒")
         ]
-        super().__init__(placeholder="اختر وجهتك في عالم المعارك...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="اختر وجهتك...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         choice = self.values[0]
@@ -319,42 +247,35 @@ class BattleSelect(discord.ui.Select):
         if choice == "floors":
             return await interaction.response.send_modal(FloorInputModal())
 
-        await interaction.response.edit_message(content=f"⚙️ جاري تنفيذ خيارك (`{choice}`)...", embed=None, view=None)
+        # تأجيل الاستجابة لمنع خطأ الـ 3 ثوانٍ وتفريغ التعليق
+        await interaction.response.defer(ephemeral=True)
         
         user_id = str(interaction.user.id)
         user_data = users_col.find_one({"user_id": user_id}) or {}
         guild = interaction.guild
 
         if choice in ["1v1", "2v2", "3v3"]:
-            overwrites = {
-                guild.default_role: discord.PermissionOverwrite(read_messages=True, send_messages=False),
-                interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-            }
-            channel_name = f"معركة-{choice}-{interaction.user.name}".lower().replace(" ", "-")
-            room = await guild.create_text_channel(channel_name, overwrites=overwrites)
-            
-            view = discord.ui.View(timeout=None)
-            view.add_item(JoinPvPButton(interaction.user.id, choice))
-            
-            embed = discord.Embed(
-                title=f"⚔️ ساحة تحدي ({choice})",
-                description=f"المستضيف: <@{interaction.user.id}>\n\n⏳ **في انتظار انضمام الخصم...**\n*ملاحظة: هذا الروم مخصص للنزال، المشاهدون بإمكانهم المتابعة بصمت تام.*",
-                color=discord.Color.red()
-            )
-            await room.send(embed=embed, view=view)
-            await interaction.followup.send(f"✅ تم إنشاء روم المعركة الخاص بك بنجاح: {room.mention}!", ephemeral=True)
-
-        elif choice == "shop":
-            view = ShopView(interaction.user.id, "normal")
-            await interaction.followup.send("🏬 **المتاجر السريعة:** اختر القسم من القائمة أدناه:", view=view, ephemeral=True)
-
-        elif choice == "upgrade":
-            await interaction.followup.send("⚒️ **منطقة التطوير:** قريباً يمكنك دمج وتطوير قطع عتادك لزيادة قوتها!", ephemeral=True)
+            try:
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(read_messages=True, send_messages=False),
+                    interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                }
+                channel_name = f"معركة-{choice}-{interaction.user.name}".lower().replace(" ", "-")
+                room = await guild.create_text_channel(channel_name, overwrites=overwrites)
+                
+                view = discord.ui.View(timeout=None)
+                view.add_item(JoinPvPButton(interaction.user.id, choice))
+                
+                embed = discord.Embed(title=f"⚔️ ساحة تحدي ({choice})", description=f"المستضيف: <@{interaction.user.id}>\n⏳ في انتظار الخصم...", color=discord.Color.red())
+                await room.send(embed=embed, view=view)
+                await interaction.followup.send(f"✅ تم إنشاء روم المعركة بنجاح: {room.mention}", ephemeral=True)
+            except discord.Forbidden:
+                await interaction.followup.send("❌ البوت لا يمتلك صلاحية `Manage Channels` لإنشاء روم المعركة!", ephemeral=True)
 
         elif choice == "inventory":
             inventory = user_data.get("inventory", [])
-            inv_list = "\n".join([f"• {item['name']} `[{item['tier']}]` - `{item['stats']}`" for item in inventory]) if inventory else "الحقيبة فارغة تماماً."
-            embed = discord.Embed(title="🎒 حقيبة العتاد الخاصة بك", description=inv_list, color=discord.Color.blue())
+            inv_list = "\n".join([f"• {item['name']} `[{item['tier']}]`" for item in inventory]) if inventory else "الحقيبة فارغة."
+            embed = discord.Embed(title="🎒 حقيبتك", description=inv_list, color=discord.Color.blue())
             await interaction.followup.send(embed=embed, ephemeral=True)
 
 class BattleView(discord.ui.View):
@@ -365,256 +286,69 @@ class BattleView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ عذراً، هذه القائمة خاصة بصاحب الأمر فقط!", ephemeral=True)
+            await interaction.response.send_message("❌ هذه القائمة ليست لك!", ephemeral=True)
             return False
         return True
 
-@bot.tree.command(name="معارك", description="فتح لوحة نظام المعارك والساحات الشاملة")
+@bot.tree.command(name="معارك", description="فتح ساحة المعارك الكبرى")
 async def battle_command(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="🏟️ ساحة المعارك الكبرى",
-        description="أهلاً بك أيها المقاتل في نظام النزالات الأسطوري.\nاختر وجهتك أو نوع التحدي من القائمة أدناه:",
-        color=discord.Color.dark_gold()
-    )
-    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/3211/3211183.png")
-    embed.set_footer(text="اختر بوعي واستعد للنزال القادم")
-    
-    view = BattleView(interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view)
+    embed = discord.Embed(title="🏟️ ساحة المعارك", description="اختر نوع التحدي:", color=discord.Color.dark_gold())
+    await interaction.response.send_message(embed=embed, view=BattleView(interaction.user.id), ephemeral=True)
 
-# ================== نظام الملف الشخصي الأسطوري (أمر /الملف) ==================
-class ProfileEditModal(discord.ui.Modal, title='تعديل اللقب الأسطوري 👑'):
-    new_title = discord.ui.TextInput(
-        label='اكتب لقبك الجديد',
-        placeholder='مثال: فارس الظلام الأبدي، سيد الساحات...',
-        required=True,
-        max_length=35
-    )
+# ================== الملف الشخصي ==================
+class ProfileEditModal(discord.ui.Modal, title='تعديل اللقب 👑'):
+    new_title = discord.ui.TextInput(label='اللقب الجديد', required=True, max_length=35)
 
     async def on_submit(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
         users_col.update_one({"user_id": user_id}, {"$set": {"custom_title": self.new_title.value}}, upsert=True)
-        await interaction.response.send_message(f"✨ **تم نقش لقبك الجديد في السجلات الأسطورية بنجاح!**\nلقبك الحالي أصبح: `{self.new_title.value}`", ephemeral=True)
+        await interaction.response.send_message(f"✨ تم تحديث لقبك إلى: `{self.new_title.value}`", ephemeral=True)
 
 class ProfileView(discord.ui.View):
     def __init__(self, author_id):
         super().__init__(timeout=180)
         self.author_id = author_id
 
-    @discord.ui.button(label="تعديل الألقاب", style=discord.ButtonStyle.blurple, emoji="👑")
+    @discord.ui.button(label="تعديل اللقب", style=discord.ButtonStyle.blurple, emoji="👑")
     async def edit_title(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(ProfileEditModal())
 
-    @discord.ui.button(label="إخفاء/إظهار الحالة", style=discord.ButtonStyle.grey, emoji="👁️‍🗨️")
-    async def toggle_status(self, interaction: discord.Interaction, button: discord.ui.Button):
-        user_id = str(interaction.user.id)
-        user_data = users_col.find_one({"user_id": user_id}) or {}
-        current_hidden = user_data.get("status_hidden", False)
-        new_status = not current_hidden
-        
-        users_col.update_one({"user_id": user_id}, {"$set": {"status_hidden": new_status}}, upsert=True)
-        status_text = "مخفية عن الأعين 🔒" if new_status else "نشطة وظاهرة للجميع ✨"
-        
-        await interaction.response.send_message(f"🛡️ **تم تحديث درع الخصوصية!**\nحالتك الملكية الآن أصبحت: **{status_text}**", ephemeral=True)
-
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ عذراً، هذه اللوحة الملكية تخص صاحب السجل وحده!", ephemeral=True)
+            await interaction.response.send_message("❌ ليست لك!", ephemeral=True)
             return False
         return True
 
-@bot.tree.command(name="الملف", description="استعراض السجل الأرشيفي والملف الأسطوري الفخم للمقاتل")
+@bot.tree.command(name="الملف", description="عرض الملف الأسطوري")
 async def profile_command(interaction: discord.Interaction):
+    # استخدام defer لمنع خطأ الـ 3 ثواني
+    await interaction.response.defer(ephemeral=True)
+    
     user_id = str(interaction.user.id)
     user_data = users_col.find_one({"user_id": user_id}) or {}
     
     balance = user_data.get("balance", 0)
     diamonds = user_data.get("diamonds", 0)
-    custom_title = user_data.get("custom_title", "مقاتل مستجد في عتبة الأبراج")
-    status_hidden = user_data.get("status_hidden", False)
-    status_display = "مخفية عن الأعين 🔒" if status_hidden else "نشط ومرئي للجميع 🟢"
+    custom_title = user_data.get("custom_title", "مقاتل مستجد")
     inventory = user_data.get("inventory", [])
-    items_count = len(inventory)
     
-    embed = discord.Embed(
-        title="📜 ─── [ السجل الأرشيفي الملكي للمقاتل ] ─── 📜",
-        description=(
-            f"مرحباً بك أيها البطل في أرشيف المجد والخلود الخاص بعالم المعارك والظلمات.\n"
-            f"يوثق هذا السجل هيبتك، ممتلكاتك، ومكانتك بين عظماء الساحة.\n\n"
-            f"⚡ **اللقب الأسطوري:** `{custom_title}`\n"
-            f"🛡️ **حالة الحضور:** `{status_display}`"
-        ),
-        color=discord.Color.dark_gold()
-    )
+    embed = discord.Embed(title="📜 الملف الشخصي للمقاتل", description=f"⚡ **اللقب:** `{custom_title}`", color=discord.Color.dark_gold())
+    embed.add_field(name="الرصيد", value=f"`{balance:,}` 🪙 | `💎 {diamonds:,}`", inline=False)
+    embed.add_field(name="العتاد", value=f"إجمالي القطع: `{len(inventory)}`", inline=False)
     
-    if interaction.user.avatar:
-        embed.set_thumbnail(url=interaction.user.avatar.url)
-        
-    embed.add_field(name="💳 خزينة الثروة والأرصدة", value=f"• العملات العادية: `{balance:,}` 🪙\n• العملات النادرة: `{diamonds:,}` 💎", inline=True)
-    embed.add_field(name="🎒 مستودع الترسانة", value=f"• إجمالي القطع المقتناة: `{items_count}` قطعة حربية مسجلة.", inline=True)
-    
-    recent_items = "، ".join([item['name'] for item in inventory[-3:]]) if inventory else "لا توجد قطع مسجلة في حقيبتك حتى الآن."
-    embed.add_field(name="⚔️ آخر مقتنيات العتاد", value=f"*{recent_items}*", inline=False)
-    
-    embed.set_footer(text=f"معرف الهوية الأسطورية: {user_id} • نظام السجلات المؤمّن", icon_url=interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None)
-    
-    view = ProfileView(interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    await interaction.followup.send(embed=embed, view=ProfileView(interaction.user.id), ephemeral=True)
 
-# ================== نظام البنك المركزي ==================
-class TransferModal(discord.ui.Modal, title='تحويل الأموال 💸'):
-    target = discord.ui.TextInput(label='منشن الشخص', placeholder='مثال: @Ahmed', required=True)
-    amount = discord.ui.TextInput(label='المبلغ المراد تحويله', placeholder='مثال: 5000', required=True)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        target_id = re.sub(r'\D', '', self.target.value)
-        if not target_id or not self.amount.value.isdigit():
-            return await interaction.response.send_message("❌ تأكد من المنشن وكتابة المبلغ بالأرقام فقط!", ephemeral=True)
-        
-        amount_val = int(self.amount.value)
-        if amount_val <= 0:
-            return await interaction.response.send_message("❌ المبلغ يجب أن يكون أكبر من الصفر!", ephemeral=True)
-
-        sender_id = str(interaction.user.id)
-        if sender_id == target_id:
-            return await interaction.response.send_message("❌ لا يمكنك التحويل لنفسك!", ephemeral=True)
-
-        sender_data = users_col.find_one({"user_id": sender_id}) or {}
-        if sender_data.get("balance", 0) < amount_val:
-            return await interaction.response.send_message("❌ رصيدك غير كافٍ لإتمام التحويل!", ephemeral=True)
-
-        users_col.update_one({"user_id": sender_id}, {"$inc": {"balance": -amount_val}})
-        users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount_val}}, upsert=True)
-        await interaction.response.send_message(f"✅ **تم التحويل بنجاح!**\nتم تحويل `{amount_val}` 🪙 إلى <@{target_id}>.", ephemeral=False)
-
-class BankSelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="حسابي والرصيد", value="balance", description="عرض أموالك وحقيبتك", emoji="💳"),
-            discord.SelectOption(label="الراتب اليومي", value="daily", description="استلام راتبك", emoji="💰"),
-            discord.SelectOption(label="قسم القروض", value="loan", description="طلب وسداد القروض", emoji="🏦"),
-            discord.SelectOption(label="تحويل عملات", value="transfer", description="إرسال أموال لشخص آخر", emoji="💸")
-        ]
-        super().__init__(placeholder="اختر الخدمة البنكية...", min_values=1, max_values=1, options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        choice = self.values[0]
-        user_id = str(interaction.user.id)
-        user_data = users_col.find_one({"user_id": user_id}) or {}
-
-        if choice == "transfer":
-            return await interaction.response.send_modal(TransferModal())
-
-        await interaction.response.defer()
-
-        if choice == "balance":
-            bal = user_data.get("balance", 0)
-            diamonds = user_data.get("diamonds", 0)
-            inventory = user_data.get("inventory", [])
-            inv_list = "\n".join([f"• {item['name']} `[{item['tier']}]`" for item in inventory]) if inventory else "الحقيبة فارغة"
-            
-            embed = discord.Embed(title="💳 كشف الحساب البنكي", color=discord.Color.gold())
-            embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
-            embed.add_field(name="الرصيد العادي", value=f"`{bal}` 🪙", inline=True)
-            embed.add_field(name="الألماس النادر", value=f"`{diamonds}` 💎", inline=True)
-            embed.add_field(name="🎒 مقتنيات الحقيبة", value=inv_list, inline=False)
-            
-            view = BankView(interaction.user.id)
-            await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=view)
-
-        elif choice == "daily":
-            last_claim = user_data.get("last_daily")
-            now = datetime.utcnow()
-            if last_claim and now - last_claim < timedelta(hours=24):
-                remaining = timedelta(hours=24) - (now - last_claim)
-                hours, remainder = divmod(int(remaining.total_seconds()), 3600)
-                mins, _ = divmod(remainder, 60)
-                msg = f"⏳ **عذراً!** لقد استلمت راتبك مسبقاً. عد بعد `{hours} ساعة و {mins} دقيقة`."
-            else:
-                reward = 5000
-                users_col.update_one({"user_id": user_id}, {"$inc": {"balance": reward}, "$set": {"last_daily": now}}, upsert=True)
-                msg = f"🎁 **تم استلام الراتب!**\nأُضيفت `{reward}` 🪙 عملة إلى حسابك بنجاح."
-            
-            embed = discord.Embed(description=msg, color=discord.Color.green())
-            view = BankView(interaction.user.id)
-            await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=view)
-
-        elif choice == "loan":
-            loan_amount = user_data.get("loan_amount", 0)
-            loan_due = user_data.get("loan_due_date")
-            now = datetime.utcnow()
-            
-            if loan_amount > 0 and loan_due and now > loan_due:
-                penalty = 2000 
-                loan_amount += penalty
-                new_due = now + timedelta(hours=24)
-                users_col.update_one({"user_id": user_id}, {"$set": {"loan_amount": loan_amount, "loan_due_date": new_due}})
-                loan_due = new_due
-
-            embed = discord.Embed(title="🏦 قسم القروض البنكية", color=discord.Color.dark_red())
-            if loan_amount > 0:
-                due_format = f"<t:{int(loan_due.timestamp())}:R>"
-                embed.description = f"⚠️ **عليك قرض حالي!**\nالمبلغ المطلوب سداده: `{loan_amount}` 🪙\nموعد السداد النهائي: {due_format}\n*(تحذير: سيتم إضافة غرامة 2000 عملة عند التأخير)*"
-            else:
-                embed.description = "✅ **سجلك نظيف!**\nلا توجد عليك أي ديون. يمكنك سحب قرض بقيمة `20,000` 🪙 (تُسدد `25,000` مع الفوائد خلال 48 ساعة)."
-            
-            view = BankView(interaction.user.id)
-            if loan_amount > 0:
-                view.add_item(PayLoanButton())
-            else:
-                view.add_item(TakeLoanButton())
-            
-            await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=view)
-
-class TakeLoanButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(style=discord.ButtonStyle.success, label="استلام قرض (20,000)", emoji="💵")
-    async def callback(self, interaction: discord.Interaction):
-        user_id = str(interaction.user.id)
-        due_date = datetime.utcnow() + timedelta(hours=48)
-        users_col.update_one(
-            {"user_id": user_id}, 
-            {"$inc": {"balance": 20000}, "$set": {"loan_amount": 25000, "loan_due_date": due_date}}, 
-            upsert=True
-        )
-        await interaction.response.send_message("✅ **تم إيداع القرض!** استلمت `20,000` وعليك سداد `25,000` خلال يومين.", ephemeral=True)
-
-class PayLoanButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(style=discord.ButtonStyle.danger, label="سداد القرض بالكامل", emoji="💸")
-    async def callback(self, interaction: discord.Interaction):
-        user_id = str(interaction.user.id)
-        user_data = users_col.find_one({"user_id": user_id}) or {}
-        debt = user_data.get("loan_amount", 0)
-        
-        if user_data.get("balance", 0) < debt:
-            return await interaction.response.send_message("❌ رصيدك الحالي لا يكفي لسداد القرض!", ephemeral=True)
-            
-        users_col.update_one(
-            {"user_id": user_id}, 
-            {"$inc": {"balance": -debt}, "$set": {"loan_amount": 0, "loan_due_date": None}}
-        )
-        await interaction.response.send_message("✅ **ممتاز!** تم سداد قرضك بالكامل وتصفية ديونك.", ephemeral=True)
-
-class BankView(discord.ui.View):
-    def __init__(self, author_id):
-        super().__init__(timeout=None)
-        self.author_id = author_id
-        self.add_item(BankSelect())
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ عذراً، هذه اللوحة خاصة بصاحب الأمر فقط!", ephemeral=True)
-            return False
-        return True
-
-@bot.tree.command(name="بنك", description="فتح حسابك البنكي (رصيد، راتب، تحويل، قروض)")
+# ================== البنك ==================
+@bot.tree.command(name="بنك", description="فتح الحساب البنكي")
 async def bank_command(interaction: discord.Interaction):
-    embed = discord.Embed(title="🏦 البنك المركزي للعبة", description="أهلاً بك في نظام البنك الشامل. الرجاء اختيار الخدمة المطلوبة من القائمة أدناه.", color=discord.Color.gold())
-    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/2830/2830284.png")
-    embed.set_footer(text="جميع المعاملات مسجلة ومؤمنة في قاعدة البيانات")
+    await interaction.response.defer(ephemeral=True)
+    user_id = str(interaction.user.id)
+    user_data = users_col.find_one({"user_id": user_id}) or {}
     
-    view = BankView(interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view)
+    bal = user_data.get("balance", 0)
+    diamonds = user_data.get("diamonds", 0)
+    
+    embed = discord.Embed(title="🏦 البنك المركزي", description=f"رصيدك الحالي: `{bal}` 🪙\nالألماس: `{diamonds}` 💎", color=discord.Color.gold())
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 bot.run(DISCORD_TOKEN)
