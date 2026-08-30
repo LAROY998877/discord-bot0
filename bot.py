@@ -5,6 +5,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+# استيراد التوكن بأمان من ملف config.py الخارجي لضمان عدم تسريبه
+try:
+    from config import TOKEN
+except ImportError:
+    TOKEN = None
+
 # 1. إعداد مسار ثابت ودائم لقاعدة البيانات في مجلد العمل الحالي
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "bot_database.db")
@@ -265,7 +271,148 @@ async def profile_command(
 
 
 # ==========================================
-# 3. نظام الألعاب (لعبة صراحة أو جرأة كاملة)
+# 3. لوحة تحكم المطورين (Developer Panel)
+# ==========================================
+
+
+@bot.tree.command(
+    name="dev_add", description="[مطور] إضافة مطور جديد بواسطة الأيدي"
+)
+@app_commands.describe(user_id="أيدي المستخدم المراد ترقيته لمطور")
+async def dev_add(interaction: discord.Interaction, user_id: str):
+    # صاحب البوت أو أول مطور فقط يمكنه إضافة مطورين آخرين (أو ضع أيدي حسابك الأساسي هنا كشرط أول)
+    cursor.execute("SELECT user_id FROM developers")
+    devs = cursor.fetchall()
+
+    if devs and not is_dev(interaction.user.id):
+        await interaction.response.send_message(
+            "❌ عذراً، هذا الأمر مخصص للمطورين فقط!", ephemeral=True
+        )
+        return
+
+    try:
+        uid = int(user_id)
+    except ValueError:
+        await interaction.response.send_message(
+            "❌ يرجى إدخال أيدي صحيح (أرقام فقط).", ephemeral=True
+        )
+        return
+
+    cursor.execute(
+        "INSERT OR IGNORE INTO developers (user_id) VALUES (?)", (uid,)
+    )
+    db_connection.commit()
+    await interaction.response.send_message(
+        f"✅ تم بنجاح إضافة المستخدم صاحب الأيدي `<@{uid}>` إلى قائمة المطورين!",
+        ephemeral=True,
+    )
+
+
+@bot.tree.command(
+    name="dev_balance", description="[مطور] إضافة عملات لامنهائية أو تعديل رصيد شخص"
+)
+@app_commands.describe(
+    amount="المبلغ المراد إضافته (يمكنك وضع رقم كبير جداً)",
+    member="الشخص المراد إرسال العملات له (اختياري، الافتراضي أنت)",
+)
+async def dev_balance(
+    interaction: discord.Interaction, amount: int, member: discord.Member = None
+):
+    if not is_dev(interaction.user.id):
+        await interaction.response.send_message(
+            "❌ عذراً، أمر المطورين هذا ليس متاحاً لك!", ephemeral=True
+        )
+        return
+
+    target = member if member else interaction.user
+    ensure_user(target.id, str(target))
+
+    cursor.execute(
+        "UPDATE user_data SET balance = balance + ? WHERE user_id = ?",
+        (amount, target.id),
+    )
+    db_connection.commit()
+
+    cursor.execute(
+        "SELECT balance FROM user_data WHERE user_id = ?", (target.id,)
+    )
+    new_balance = cursor.fetchone()[0]
+
+    await interaction.response.send_message(
+        f"💎 **[لوحة المطور]** تم تعديل رصيد العضو `{target.display_name}` بنجاح!\n• المبلغ المضاف: `{amount}`\n• الرصيد الحالي الجديد: `{new_balance}`",
+        ephemeral=True,
+    )
+
+
+@bot.tree.command(
+    name="dev_item", description="[مطور] إعطاء أو تعديل عتاد ونقاط معدات أي شخص"
+)
+@app_commands.describe(
+    equipment_name="اسم العتاد الجديد",
+    equipment_score="قيمة نقاط المعدات والقوة",
+    member="العضو المراد تعديل عتاده",
+)
+async def dev_item(
+    interaction: discord.Interaction,
+    equipment_name: str,
+    equipment_score: int,
+    member: discord.Member,
+):
+    if not is_dev(interaction.user.id):
+        await interaction.response.send_message(
+            "❌ عذراً، أمر المطورين هذا ليس متاحاً لك!", ephemeral=True
+        )
+        return
+
+    ensure_user(member.id, str(member))
+    cursor.execute(
+        "UPDATE user_data SET equipment_name = ?, equipment_score = ? WHERE user_id = ?",
+        (equipment_name, equipment_score, member.id),
+    )
+    db_connection.commit()
+
+    await interaction.response.send_message(
+        f"⚔️ **[لوحة المطور]** تم تحديث عتاد العضو `<@{member.id}>` بنجاح!\n• العتاد: `{equipment_name}`\n• نقاط القوة: `{equipment_score}`",
+        ephemeral=True,
+    )
+
+
+@bot.tree.command(
+    name="dev_stats",
+    description="[مطور] تعديل الطوابق المكتسحة والمستوى لأي شخص بالكامل",
+)
+@app_commands.describe(
+    floors="عدد الطوابق المكتسحة",
+    max_floors="أقصى طابق متاح فتحه",
+    member="العضو المراد تعديل معدلاته",
+)
+async def dev_stats(
+    interaction: discord.Interaction,
+    floors: int,
+    max_floors: int,
+    member: discord.Member,
+):
+    if not is_dev(interaction.user.id):
+        await interaction.response.send_message(
+            "❌ عذراً، أمر المطورين هذا ليس متاحاً لك!", ephemeral=True
+        )
+        return
+
+    ensure_user(member.id, str(member))
+    cursor.execute(
+        "UPDATE user_data SET floors = ?, max_unlocked_floor = ? WHERE user_id = ?",
+        (floors, max_floors, member.id),
+    )
+    db_connection.commit()
+
+    await interaction.response.send_message(
+        f"📊 **[لوحة المطور]** تم تعديل إحصائيات وطوابق العضو `<@{member.id}>` بنجاح!\n• الطوابق المكتسحة: `{floors}`\n• أقصى طابق مفتوح: `{max_floors}`",
+        ephemeral=True,
+    )
+
+
+# ==========================================
+# 4. نظام الألعاب (لعبة صراحة أو جرأة كاملة)
 # ==========================================
 
 TRUTH_OR_DARE_QUESTIONS = {
@@ -368,10 +515,8 @@ async def games_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-# ضع توكن البوت الخاص بك هنا بين علامات التنصيص
-TOKEN = "YOUR_BOT_TOKEN"
-
-if TOKEN == "YOUR_BOT_TOKEN" or not TOKEN:
-    print("خطأ: لم يتم العثور على توكن البوت")
+# التحقق من التوكن بأمان من ملف config.py الخارجي
+if not TOKEN or TOKEN == "هنا_ضع_توكن_بوتك_الخاص_بسرية_تامة":
+    print("خطأ: لم يتم العثور على توكن البوت في ملف config.py")
 else:
     bot.run(TOKEN)
