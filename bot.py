@@ -12,7 +12,7 @@ DB_PATH = os.path.join(BASE_DIR, "bot_database.db")
 db_connection = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = db_connection.cursor()
 
-# إنشاء الجداول ودعم التحديث التلقائي للحقول إن وجدت مسبقاً
+# إنشاء الجداول الأساسية وجداول النقابات الجديدة
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS user_data (
@@ -32,7 +32,8 @@ cursor.execute(
         equipment_name TEXT DEFAULT 'لم يتم الاختيار',
         title TEXT DEFAULT 'مبتدئ',
         hide_stats INTEGER DEFAULT 0,
-        hide_titles INTEGER DEFAULT 0
+        hide_titles INTEGER DEFAULT 0,
+        guild_name TEXT DEFAULT NULL
     )
 """
 )
@@ -41,6 +42,19 @@ cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS developers (
         user_id INTEGER PRIMARY KEY
+    )
+"""
+)
+
+cursor.execute(
+    """
+    CREATE TABLE IF NOT EXISTS guilds (
+        guild_name TEXT PRIMARY KEY,
+        leader_id INTEGER,
+        level INTEGER DEFAULT 1,
+        coins_donated INTEGER DEFAULT 0,
+        equipment_donations_count INTEGER DEFAULT 0,
+        members_count INTEGER DEFAULT 1
     )
 """
 )
@@ -94,12 +108,315 @@ def ensure_user(user_id: int, username: str):
 
 
 # ==========================================
+# نظام النقابات (إنشاء، تبرع، منيو نقابتي)
+# ==========================================
+
+
+class CreateGuildModal(discord.ui.Modal, title="تأسيس نقابة جديدة"):
+    guild_input_name = discord.ui.TextInput(
+        label="اسم النقابة",
+        placeholder="اكتب اسم نقابتك الأسطورية...",
+        required=True,
+        max_length=40,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        user_id = interaction.user.id
+        ensure_user(user_id, str(interaction.user))
+        g_name = self.guild_input_name.value.strip()
+
+        # التحقق من رصيد المستخدم (تكلفة الإنشاء 300 عملة)
+        cursor.execute(
+            "SELECT balance, guild_name FROM user_data WHERE user_id = ?",
+            (user_id,),
+        )
+        balance, current_guild = cursor.fetchone()
+
+        if current_guild:
+            await interaction.response.send_message(
+                "❌ أنت تنتمي بالفعل إلى نقابة! يجب عليك مغادرتها أولاً لتأسيس نقابة جديدة.",
+                ephemeral=True,
+            )
+            return
+
+        if balance < 300:
+            await interaction.response.send_message(
+                f"❌ رصيدك الحالي (`{balance} 💎`) لا يكفي! تأسيس النقابة يكلف `300 💎`.",
+                ephemeral=True,
+            ) خصم
+            return
+
+        # التحقق إن كان اسم النقابة مستخدماً مسبقاً
+        cursor.execute(
+            "SELECT guild_name FROM guilds WHERE guild_name = ?", (g_name,)
+        )
+        if cursor.fetchone() is not None:
+            await interaction.response.send_message(
+                "❌ اسم هذه النقابة مستخدم مسبقاً، يجدر بك اختيار اسم فريد آخر!",
+                ephemeral=True,
+            )
+            return
+
+        # خصم العملات وتحديث بيانات المستخدم والنقابة
+        cursor.execute(
+            "UPDATE user_data SET balance = balance - 300, guild_name = ? WHERE user_id = ?",
+            (g_name, user_id),
+        )
+        cursor.execute(
+            """
+            INSERT INTO guilds (guild_name, leader_id, level, coins_donated, equipment_donations_count, members_count)
+            VALUES (?, ?, 1, 0, 0, 1)
+        """,
+            (g_name, user_id),
+        )
+        db_connection.commit()
+
+        embed = discord.Embed(
+            title=f"🏰 تم تأسيس النقابة بنجاح: {g_name}!",
+            description=(
+                f"مبروك يا {interaction.user.mention}! لقد أصبحت قائداً لنقابتك الجديدة.\n"
+                f"• تكلفة التأسيس: `300 💎`\n"
+                f"• مستوى النقابة الابتدائي: `1/500`\n\n"
+                "يمكنك الآن استخدام أمر `/نقابتي` لإدارة شؤون النقابة والتبرع لها!"
+            ),
+            color=discord.Color.dark_gold(),
+        )
+        await interaction.response.send_message(embed=embed)
+
+
+class DonateCoinsModal(discord.ui.Modal, title="التبرع بالعملات للنقابة"):
+    coins_amount = discord.ui.TextInput(
+        label="عدد العملات للتبرع",
+        placeholder="أدخل عدد العملات المراد التبرع بها...",
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        user_id = interaction.user.id
+        cursor.execute(
+            "SELECT guild_name, balance FROM user_data WHERE user_id = ?",
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            await interaction.response.send_message(
+                "❌ أنت لست عضواً في أي نقابة لتتبرع لها!", ephemeral=True
+            )
+            return
+
+        g_name, balance = row
+        try:
+            amount = int(self.coins_amount.value)
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ يرجى إدخال أرقام صحيحة فقط!", ephemeral=True
+            )
+            return
+
+        if amount <= 0:
+            await interaction.response.send_message(
+                "❌ المبلغ غير صالح!", ephemeral=True
+            )
+            return
+
+        if balance < amount:
+            await interaction.response.send_message(
+                f"❌ رصيدك الحالي (`{balance} 💎`) لا يكفي لهذا التبرع!",
+                ephemeral=True,
+            )
+            return
+
+        # خصم العملات من المستخدم وإضافتها لرصيد النقابة وتطوير مستواها (كل 1000 عملة متبرع بها ترفع المستوى بـ 1، وبحد أقصى 500)
+        cursor.execute(
+            "UPDATE user_data SET balance = balance - ? WHERE user_id = ?",
+            (amount, user_id),
+        )
+        cursor.execute(
+            "UPDATE guilds SET coins_donated = coins_donated + ? WHERE guild_name = ?",
+            (amount, g_name),
+        )
+
+        # حساب وترقية مستوى النقابة (أقصى مستوى 500)
+        cursor.execute(
+            "SELECT coins_donated, level FROM guilds WHERE guild_name = ?",
+            (g_name,),
+        )
+        total_coins, current_level = cursor.fetchone()
+        new_level = min(500, 1 + (total_coins // 1000))
+
+        if new_level > current_level:
+            cursor.execute(
+                "UPDATE guilds SET level = ? WHERE guild_name = ?",
+                (new_level, g_name),
+            )
+
+        db_connection.commit()
+
+        embed = discord.Embed(
+            title="💰 تم التبرع بالعملات بنجاح!",
+            description=(
+                f"لقد تبرعت بـ `💎 {amount}` لنقابتك **{g_name}**.\n"
+                f"• إجمالي تبرعات العملات للنقابة: `💎 {total_coins}`\n"
+                f"• مستوى النقابة الحالي: `{new_level}/500` 🌟"
+            ),
+            color=discord.Color.green(),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class GuildMenuView(discord.ui.View):
+
+    def __init__(self, user_id: int, guild_name: str):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.guild_name = guild_name
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "❌ هذه القائمة لا تخصك!", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(
+        label="التبرع بالعملات",
+        style=discord.ButtonStyle.success,
+        emoji="💎",
+        row=0,
+    )
+    async def donate_coins_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.send_modal(DonateCoinsModal())
+
+    @discord.ui.button(
+        label="التبرع بالعتاد",
+        style=discord.ButtonStyle.primary,
+        emoji="⚔️",
+        row=0,
+    )
+    async def donate_equipment_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        user_id = interaction.user.id
+        cursor.execute(
+            "SELECT equipment_name, equipment_score FROM user_data WHERE user_id = ?",
+            (user_id,),
+        )
+        eq_name, eq_score = cursor.fetchone()
+
+        if eq_name == "لم يتم الاختيار" or eq_score <= 10:
+            await interaction.response.send_message(
+                "❌ ليس لديك عتاد قوي بما يكفي للتبرع به لنقابتك!",
+                ephemeral=True,
+            )
+            return
+
+        # خصم العتاد من المستخدم وإعادته لمستواه الأساسي، وزيادة عداد تبرعات العتاد للنقابة
+        cursor.execute(
+            "UPDATE user_data SET equipment_name = 'لم يتم الاختيار', equipment_score = 10 WHERE user_id = ?",
+            (user_id,),
+        )
+        cursor.execute(
+            "UPDATE guilds SET equipment_donations_count = equipment_donations_count + 1 WHERE guild_name = ?",
+            (self.guild_name,),
+        )
+        db_connection.commit()
+
+        embed = discord.Embed(
+            title="🛡️ تم التبرع بالعتاد بنجاح!",
+            description=(
+                f"لقد قمت بالتبرع بعتادك (`{eq_name}`) لصالح خزينة نقابة **{self.guild_name}**!\n"
+                "• ساهم هذا التبرع في تقوية مستودع النقابة العسكري."
+            ),
+            color=discord.Color.blue(),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="انشاء_نقابة", description="تأسيس نقابة جديدة بتكلفة 300 عملة")
+async def create_guild_command(interaction: discord.Interaction):
+    ensure_user(interaction.user.id, str(interaction.user))
+    cursor.execute(
+        "SELECT guild_name FROM user_data WHERE user_id = ?",
+        (interaction.user.id,),
+    )
+    current_guild = cursor.fetchone()[0]
+
+    if current_guild:
+        await interaction.response.send_message(
+            "❌ أنت تنتمي بالفعل إلى نقابة ولا يمكنك إنشاء أخرى جديدة!",
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.send_modal(CreateGuildModal())
+
+
+@bot.tree.command(name="نقابتي", description="عرض منيو نقابتك وإدارتها والتبرع لها")
+async def my_guild_command(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    ensure_user(user_id, str(interaction.user))
+
+    cursor.execute(
+        "SELECT guild_name FROM user_data WHERE user_id = ?", (user_id,)
+    )
+    res = cursor.fetchone()
+    if not res or not res[0]:
+        embed = discord.Embed(
+            title="🏰 لا توجد نقابة",
+            description=(
+                "أنت لست منضماً لأي نقابة حالياً.\n"
+                "استخدم أمر `/انشاء_نقابة` لتأسيس نقابتك الخاصة مقابل `300 💎`!"
+            ),
+            color=discord.Color.dark_red(),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    g_name = res[0]
+    cursor.execute(
+        "SELECT leader_id, level, coins_donated, equipment_donations_count, members_count FROM guilds WHERE guild_name = ?",
+        (g_name,),
+    )
+    g_data = cursor.fetchone()
+    if not g_data:
+        await interaction.response.send_message(
+            "❌ حدث خطأ، بيانات النقابة غير موجودة.", ephemeral=True
+        )
+        return
+
+    leader_id, level, coins_donated, eq_donations, members_count = g_data
+    leader_user = bot.get_user(leader_id)
+    leader_name = leader_user.display_name if leader_user else f"ID: {leader_id}"
+
+    embed = discord.Embed(
+        title=f"🏰 لوحة تحكم النقابة: {g_name}",
+        description=(
+            f"• 👑 **القائد:** `{leader_name}`\n"
+            f"• 🌟 **مستوى النقابة:** `{level}/500`\n"
+            f"• 💎 **رصيد العملات المتبرع به:** `{coins_donated}`\n"
+            f"• ⚔️ **إجمالي تبرعات العتاد:** `{eq_donations}`\n"
+            f"• 👥 **عدد الأعضاء:** `{members_count}`\n\n"
+            "استخدم الأزرار بالأسفل للتبرع بالعملات أو العتاد لتطوير نقابتك:"
+        ),
+        color=discord.Color.dark_gold(),
+    )
+    embed.set_thumbnail(
+        url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800"
+    )
+
+    view = GuildMenuView(user_id, g_name)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+# ==========================================
 # 2. الملف الشخصي
 # ==========================================
 
 
 class EditTitleModal(discord.ui.Modal, title="تعديل اللقب الشخصي"):
-
     new_title = discord.ui.TextInput(
         label="اللقب الجديد",
         placeholder="اكتب لقبك الفانتازي الجديد...",
@@ -209,7 +526,7 @@ async def profile_command(
     ensure_user(target.id, str(target))
 
     cursor.execute(
-        "SELECT name, age, gender, balance, bank_balance, loan_amount, equipment_score, floors, max_unlocked_floor, hero_name, equipment_name, title, hide_stats, hide_titles FROM user_data WHERE user_id = ?",
+        "SELECT name, age, gender, balance, bank_balance, loan_amount, equipment_score, floors, max_unlocked_floor, hero_name, equipment_name, title, hide_stats, hide_titles, guild_name FROM user_data WHERE user_id = ?",
         (target.id,),
     )
     data = cursor.fetchone()
@@ -228,6 +545,7 @@ async def profile_command(
         title,
         hide_stats,
         hide_titles,
+        guild_name,
     ) = data
 
     embed = discord.Embed(
@@ -238,6 +556,11 @@ async def profile_command(
 
     display_title = "مخفي 🔒" if hide_titles == 1 else f"`{title}`"
     embed.add_field(name="🏷️ اللقب الشخصي", value=display_title, inline=False)
+    embed.add_field(
+        name="🏰 النقابة",
+        value=f"`{guild_name}`" if guild_name else "لا توجد نقابة",
+        inline=False,
+    )
 
     embed.add_field(name="👤 الاسم الحقيقي", value=f"`{name}`", inline=True)
     embed.add_field(name="🎂 العمر", value=f"`{age}`", inline=True)
@@ -297,7 +620,7 @@ async def inventory_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 4. أوامر التحويل والإهداء (العملات والعتاد)
+# 4. أوامر التحويل والإهداء
 # ==========================================
 
 
@@ -353,49 +676,6 @@ async def transfer_coins(
 
 
 @bot.tree.command(
-    name="تحويل_عتاد", description="إرسال عتادك الحالي وسلاحه إلى شخص آخر"
-)
-@app_commands.describe(member="الشخص المراد إرسال العتاد له")
-async def transfer_equipment(
-    interaction: discord.Interaction, member: discord.Member
-):
-    if member.id == interaction.user.id:
-        await interaction.response.send_message(
-            "❌ لا يمكنك إرسال العتاد لنفسك!", ephemeral=True
-        )
-        return
-
-    ensure_user(interaction.user.id, str(interaction.user))
-    ensure_user(member.id, str(member))
-
-    cursor.execute(
-        "SELECT equipment_name, equipment_score FROM user_data WHERE user_id = ?",
-        (interaction.user.id,),
-    )
-    eq_name, eq_score = cursor.fetchone()
-
-    if eq_name == "لم يتم الاختيار":
-        await interaction.response.send_message(
-            "❌ ليس لديك عتاد مميز لنقله!", ephemeral=True
-        )
-        return
-
-    cursor.execute(
-        "UPDATE user_data SET equipment_name = ?, equipment_score = equipment_score + ? WHERE user_id = ?",
-        (eq_name, eq_score, member.id),
-    )
-    cursor.execute(
-        "UPDATE user_data SET equipment_name = 'لم يتم الاختيار', equipment_score = 10 WHERE user_id = ?",
-        (interaction.user.id,),
-    )
-    db_connection.commit()
-
-    await interaction.response.send_message(
-        f"✅ تم إرسال عتادك (`{eq_name}`) بقوة `{eq_score}` بنجاح إلى العضو {member.mention}!"
-    )
-
-
-@bot.tree.command(
     name="إهداء_عتاد_الظلام",
     description="[مطور] إعطاء مجموعة متجر الظلام الكاملة لشخص عبر المنشن",
 )
@@ -443,875 +723,75 @@ async def give_dark_gear_to_member(
 
 
 # ==========================================
-# 5. نظام الطوابق الشامل
+# 5. أمر الليدربورد المحدث (يشمل النقابات)
 # ==========================================
-
-
-class FloorBattleView(discord.ui.View):
-
-    def __init__(self, user_id: int, target_floor: int):
-        super().__init__(timeout=60)
-        self.user_id = user_id
-        self.target_floor = target_floor
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                "❌ هذه المعركة لا تخصك!", ephemeral=True
-            )
-            return False
-        return True
-
-    @discord.ui.button(
-        label="⚔️ تنفيذ الهجوم على الزعيم",
-        style=discord.ButtonStyle.danger,
-        emoji="🔥",
-    )
-    async def attack_boss(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        user_id = interaction.user.id
-        cursor.execute(
-            "SELECT equipment_score, balance, max_unlocked_floor FROM user_data WHERE user_id = ?",
-            (user_id,),
-        )
-        eq_score, balance, max_unlocked = cursor.fetchone()
-
-        boss_power = self.target_floor * 15 + random.randint(50, 200)
-        player_total_power = eq_score + random.randint(10, 80)
-
-        boss_names = [
-            "حارس الظل الملعون",
-            "ملك الغول الحديدي",
-            "تنين الجحيم الرمادي",
-            "سيد العواصف الشيطانية",
-            "كارثة الأكوان المظلمة",
-        ]
-        boss_title = boss_names[
-            min(self.target_floor // 200, len(boss_names) - 1)
-        ]
-
-        if player_total_power >= boss_power or self.target_floor <= max_unlocked:
-            reward_coins = self.target_floor * 50 + random.randint(100, 500)
-            reward_eq_score = self.target_floor * 2 + random.randint(5, 15)
-            loot_names = [
-                "سيف الأرواح المشتعل",
-                "درع التنين الأسطوري",
-                "خنجر اغتيال الظلال",
-                "مطرقة النيازك الكونية",
-                "عباءة البعد الخفي",
-            ]
-            won_loot = random.choice(loot_names) + f" (طابق {self.target_floor})"
-
-            new_max = (
-                max(max_unlocked, self.target_floor + 1)
-                if self.target_floor == max_unlocked
-                else max_unlocked
-            )
-
-            cursor.execute(
-                """
-                UPDATE user_data 
-                SET balance = balance + ?, 
-                    equipment_score = equipment_score + ?, 
-                    floors = ?, 
-                    max_unlocked_floor = ?,
-                    equipment_name = ?
-                WHERE user_id = ?
-            """,
-                (
-                    reward_coins,
-                    reward_eq_score,
-                    self.target_floor,
-                    new_max,
-                    won_loot,
-                    user_id,
-                ),
-            )
-            db_connection.commit()
-
-            embed = discord.Embed(
-                title=f"🎉 انتصار في الطابق {self.target_floor}!",
-                description=(
-                    f"**⚔️ الزعيم المنهزم:** `{boss_title}` (قوة الزعيم: {boss_power})\n"
-                    f"**🛡️ قوتك:** {player_total_power}\n\n"
-                    f"🎁 **الجوائز:**\n"
-                    f"• عملات: `+{reward_coins}` 💎\n"
-                    f"• نقاط عتاد: `+{reward_eq_score}` ⚔️\n"
-                    f"• العتاد الجديد: **{won_loot}**"
-                ),
-                color=discord.Color.green(),
-            )
-            for child in self.children:
-                child.disabled = True
-            await interaction.response.edit_message(embed=embed, view=self)
-        else:
-            embed = discord.Embed(
-                title=f"💀 هزيمة في الطابق {self.target_floor}!",
-                description=(
-                    f"**⚔️ الزعيم:** `{boss_title}` (قوة الزعيم: {boss_power})\n"
-                    f"**🛡️ قوتك:** {player_total_power}\n\n"
-                    f"❌ عتادك ضعيف جداً مقارنة بقوة الزعيم في هذا الطابق! قم بتطوير عتادك أولاً."
-                ),
-                color=discord.Color.dark_red(),
-            )
-            await interaction.response.edit_message(embed=embed, view=self)
-
-
-class SelectFloorDropdown(discord.ui.Select):
-
-    def __init__(self, max_unlocked: int):
-        options = []
-        start_f = max(1, max_unlocked - 20)
-        end_f = max_unlocked
-        for f in range(end_f, start_f - 1, -1):
-            options.append(
-                discord.SelectOption(
-                    label=f"الطابق رقم {f}",
-                    description=f"دخول معركة زعيم الطابق {f}",
-                    emoji="🏢",
-                    value=str(f),
-                )
-            )
-        super().__init__(
-            placeholder="اختر الطابق الذي تريد خوض معركته...",
-            min_values=1,
-            max_values=1,
-            options=options[:25],
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        floor_num = int(self.values[0])
-        embed = discord.Embed(
-            title=f"🏢 الاستعداد لمعركة الطابق [{floor_num}/1000]",
-            description="اضغط على زر الهجوم بالأسفل لبدء المعركة ضد زعيم الطابق:",
-            color=discord.Color.dark_gold(),
-        )
-        view = FloorBattleView(interaction.user.id, floor_num)
-        await interaction.response.send_message(
-            embed=embed, view=view, ephemeral=True
-        )
-
-
-class FloorMainMenuView(discord.ui.View):
-
-    def __init__(self, user_id: int):
-        super().__init__(timeout=180)
-        self.user_id = user_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                "❌ هذه القائمة لا تخصك!", ephemeral=True
-            )
-            return False
-        return True
-
-    @discord.ui.button(
-        label="صعود الطوابق",
-        style=discord.ButtonStyle.primary,
-        emoji="🏢",
-        row=0,
-    )
-    async def choose_floor_btn(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        cursor.execute(
-            "SELECT max_unlocked_floor FROM user_data WHERE user_id = ?",
-            (self.user_id,),
-        )
-        max_unlocked = cursor.fetchone()[0]
-
-        view = discord.ui.View()
-        view.add_item(SelectFloorDropdown(max_unlocked))
-        await interaction.response.send_message(
-            "اختر الطابق الذي ترغب باختراقه من القائمة:",
-            view=view,
-            ephemeral=True,
-        )
-
-    @discord.ui.button(
-        label="المتجر العادي",
-        style=discord.ButtonStyle.success,
-        emoji="🛍️",
-        row=0,
-    )
-    async def normal_shop_btn(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        embed = discord.Embed(
-            title="🛍️ المتجر العادي الإمبراطوري",
-            description="استخدم أمر `/المتجر` لعرض الأسلحة أو قم بشرائها مباشرة.",
-            color=discord.Color.gold(),
-        )
-        await interaction.response.send_message(
-            embed=embed, view=NormalShopView(), ephemeral=True
-        )
-
-    @discord.ui.button(
-        label="متجر الظلام",
-        style=discord.ButtonStyle.danger,
-        emoji="🌑",
-        row=0,
-    )
-    async def dark_shop_btn(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        embed = discord.Embed(
-            title="🌑 متجر الظلام السري",
-            description="أسلحة محرمة تمنحك قوة خارقة.",
-            color=discord.Color.dark_red(),
-        )
-        await interaction.response.send_message(
-            embed=embed, view=DarkShopView(), ephemeral=True
-        )
-
-    @discord.ui.button(
-        label="تطوير العتاد",
-        style=discord.ButtonStyle.secondary,
-        emoji="⚒️",
-        row=1,
-    )
-    async def upgrade_eq_btn(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        cursor.execute(
-            "SELECT balance, equipment_score FROM user_data WHERE user_id = ?",
-            (self.user_id,),
-        )
-        bal, eq_sc = cursor.fetchone()
-        cost = 150
-        if bal < cost:
-            await interaction.response.send_message(
-                "❌ رصيدك غير كافي لتطوير العتاد! تكلفة التطوير `150 💎`.",
-                ephemeral=True,
-            )
-            return
-
-        cursor.execute(
-            "UPDATE user_data SET balance = balance - ?, equipment_score = equipment_score + 25 WHERE user_id = ?",
-            (cost, self.user_id),
-        )
-        db_connection.commit()
-        await interaction.response.send_message(
-            "⚒️ تم تطوير عتادك بنجاح مقابل `150 💎` وزادت نقاط قوتك بقيمة `+25`!",
-            ephemeral=True,
-        )
-
-    @discord.ui.button(
-        label="الحقيبة", style=discord.ButtonStyle.secondary, emoji="🎒", row=1
-    )
-    async def bag_btn(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        cursor.execute(
-            "SELECT equipment_name, equipment_score, balance, floors, max_unlocked_floor FROM user_data WHERE user_id = ?",
-            (self.user_id,),
-        )
-        eq_name, eq_score, balance, floors, max_unlocked = cursor.fetchone()
-
-        embed = discord.Embed(
-            title="🎒 حقيبة المغامر",
-            description=(
-                f"• 🗡️ **العتاد الحالي:** `{eq_name}`\n"
-                f"• ⚔️ **نقاط قوة العتاد:** `{eq_score}`\n"
-                f"• 💎 **العملات:** `{balance}`\n"
-                f"• 🏢 **الطابق الحالي:** `{floors}` (أقصى طابق: `{max_unlocked}/1000`)"
-            ),
-            color=discord.Color.blue(),
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 @bot.tree.command(
-    name="الطوابق", description="فتح منيو برج الطوابق الألف والخيارات الرئيسية"
+    name="ليدربورد",
+    description="لوحة الصدارة لأقوى اللاعبين، الأغنياء، وأقوى النقابات",
 )
-async def floors_command(interaction: discord.Interaction):
-    ensure_user(interaction.user.id, str(interaction.user))
-
-    cursor.execute(
-        "SELECT max_unlocked_floor, equipment_score, floors FROM user_data WHERE user_id = ?",
-        (interaction.user.id,),
-    )
-    max_unlocked, eq_score, current_floor = cursor.fetchone()
-
+async def leaderboard_command(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="🏢 برج الطوابق الأسطوري (1 إلى 1000)",
-        description=(
-            "مرحباً بك في بوابة الأبراج الكبرى.\n"
-            f"• طابقك الحالي: `{current_floor}`\n"
-            f"• أعلى طابق متاح: `{max_unlocked}/1000`\n"
-            f"• قوتك الحالية: `{eq_score}` ⚔️\n\n"
-            "اختر ما تحب من الأزرار بالأسفل للتنقل بين الصعود، المتاجر، تطوير العتاد، أو الحقيبة:"
-        ),
-        color=discord.Color.dark_gold(),
-    )
-    embed.set_image(
-        url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800"
-    )
-
-    view = FloorMainMenuView(interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-
-# ==========================================
-# 6. الأبطال الأسطوريين الجدد
-# ==========================================
-HEROES_DATA = {
-    "vanguard": {
-        "title": "فانغارد - فارس الإمبراطورية الأبدي",
-        "gender": "ذكر",
-        "power": 920,
-        "defense": 950,
-        "story": "قائد الحرس الملكي الذي صمد وحيداً أمام جيش من التنانين لمدة ثلاثة أيام بلياليها، درعه مصنوع من حجر النيزك القديم.",
-        "image": "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800",
-    },
-    "kaelthas": {
-        "title": "كائيلثاس - سيد اللهب المحرق",
-        "gender": "ذكر",
-        "power": 980,
-        "defense": 700,
-        "story": "أمير السحرة المنفي الذي سخر أرواح النيران البدائية في يديه، لتصبح تعويذاته قادرة على إذابة الجبال وتحويلها إلى رماد.",
-        "image": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800",
-    },
-    "fenrir": {
-        "title": "فنرير - صياد العواصف الشبح",
-        "gender": "ذكر",
-        "power": 940,
-        "defense": 810,
-        "story": "محارب غامض يتحرك بسرعة البرق بين ظلال الغابات الملعونة، يحمل خنجراً مسحوراً يمتص طاقة الأعداء بنظرة واحدة.",
-        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?w=800",
-    },
-    "valkyrie": {
-        "title": "فالكيري - فارسة السماء المضيئة",
-        "gender": "أنثى",
-        "power": 930,
-        "defense": 900,
-        "story": "محاربة مقدسة هبطت من السماء بجناحي نور، تقود أرواح الأبطال في المعارك العظمى وتزرع الرعب في قلوب الشياطين.",
-        "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800",
-    },
-    "morgana": {
-        "title": "مورغانا - ساحرة الظلال المطلقة",
-        "gender": "أنثى",
-        "power": 990,
-        "defense": 680,
-        "story": "ملكة الفنون المظلمة التي تلاعبت بالزمن والأبعاد، تستطيع فتح بوابات الجحيم وسحب أعدائها إلى العدم الأبدي.",
-        "image": "https://images.unsplash.com/photo-1514539079130-25950c84af65?w=800",
-    },
-    "Aria": {
-        "title": "آريا - أميرة الرياح الفضية",
-        "gender": "أنثى",
-        "power": 910,
-        "defense": 850,
-        "story": "رامية السهام الأسطورية التي لا تخطئ هدفها أبداً، تطلق سهاماً مشبعة برياح عاصفة تقتلع الجيوش من جذورها.",
-        "image": "https://images.unsplash.com/photo-1569003339405-ea393a5629f7?w=800",
-    },
-}
-
-
-class HeroSelectDropdown(discord.ui.Select):
-
-    def __init__(self):
-        options = [
-            discord.SelectOption(
-                label="فانغارد (فارس الإمبراطورية)",
-                description="ذكر | دفاع فولاذي وصلابة مطلقة",
-                emoji="🛡️",
-                value="vanguard",
-            ),
-            discord.SelectOption(
-                label="كائيلثاس (سيد اللهب)",
-                description="ذكر | هجوم ناري مدمر",
-                emoji="🔥",
-                value="kaelthas",
-            ),
-            discord.SelectOption(
-                label="فنرير (صياد العواصف)",
-                description="ذكر | سرعة وخفة برقية",
-                emoji="⚡",
-                value="fenrir",
-            ),
-            discord.SelectOption(
-                label="فالكيري (فارسة السماء)",
-                description="أنثى | توازن عالي ونور مقدس",
-                emoji="✨",
-                value="valkyrie",
-            ),
-            discord.SelectOption(
-                label="مورغانا (ساحرة الظلال)",
-                description="أنثى | طاقة سحرية مظلمة فائقة",
-                emoji="🌑",
-                value="morgana",
-            ),
-            discord.SelectOption(
-                label="آريا (أميرة الرياح)",
-                description="أنثى | دقة قاتلة وسهام عاصفة",
-                emoji="🏹",
-                value="Aria",
-            ),
-        ]
-        super().__init__(
-            placeholder="اختر بطلاً أسطورياً لعرض قصته...",
-            min_values=1,
-            max_values=1,
-            options=options,
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        choice = self.values[0]
-        hero = HEROES_DATA[choice]
-        user_id = interaction.user.id
-
-        cursor.execute(
-            "UPDATE user_data SET hero_name = ? WHERE user_id = ?",
-            (hero["title"], user_id),
-        )
-        db_connection.commit()
-
-        embed = discord.Embed(
-            title=f"🛡️ البطل: {hero['title']}",
-            description=(
-                f"**📖 القصة:**\n{hero['story']}\n\n"
-                f"📊 **المعدلات:**\n"
-                f"• الهجوم: `{hero['power']}` ⚔️\n"
-                f"• الدفاع: `{hero['defense']}` 🛡️\n\n"
-                "✅ تم تعيينه بطلاً أساسياً!"
-            ),
-            color=discord.Color.purple(),
-        )
-        embed.set_image(url=hero["image"])
-        await interaction.response.edit_message(embed=embed, view=self.view)
-
-
-class HeroMenuView(discord.ui.View):
-
-    def __init__(self):
-        super().__init__(timeout=120)
-        self.add_item(HeroSelectDropdown())
-
-
-@bot.tree.command(name="الابطال", description="فتح قاعة الأبطال الفانتازيا")
-async def heroes_command(interaction: discord.Interaction):
-    ensure_user(interaction.user.id, str(interaction.user))
-
-    embed = discord.Embed(
-        title="🌟 قاعة الأبطال الأسطوريين",
-        description="اختر بطلاً من القائمة لاستعراضه:",
-        color=discord.Color.dark_gold(),
-    )
-    view = HeroMenuView()
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-
-# ==========================================
-# 7. المتاجر
-# ==========================================
-
-NORMAL_SHOP_ITEMS = {
-    "sword": {
-        "title": "سيف اللهب الأبدي",
-        "price": "250 💎",
-        "desc": "سيف مشتعل بنيران التنانين.",
-        "image": "https://images.unsplash.com/photo-1589241062272-c0a000071dfa?w=800",
-    },
-    "hammer": {
-        "title": "مطرقة الرعد الكونية",
-        "price": "320 💎",
-        "desc": "مطرقة من نيازك ساطعة.",
-        "image": "https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800",
-    },
-}
-
-
-class NormalShopDropdown(discord.ui.Select):
-
-    def __init__(self):
-        options = [
-            discord.SelectOption(
-                label="سيف اللهب الأبدي",
-                description="السعر: 250 💎",
-                emoji="⚔️",
-                value="sword",
-            ),
-            discord.SelectOption(
-                label="مطرقة الرعد الكونية",
-                description="السعر: 320 💎",
-                emoji="🔨",
-                value="hammer",
-            ),
-        ]
-        super().__init__(
-            placeholder="اختر معدة من المتجر العادي...",
-            min_values=1,
-            max_values=1,
-            options=options,
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        choice = self.values[0]
-        item = NORMAL_SHOP_ITEMS[choice]
-        user_id = interaction.user.id
-
-        cursor.execute(
-            "UPDATE user_data SET equipment_name = ?, equipment_score = equipment_score + 30 WHERE user_id = ?",
-            (item["title"], user_id),
-        )
-        db_connection.commit()
-
-        embed = discord.Embed(
-            title=f"✅ تم شراء وتجهيز: {item['title']}",
-            description=item["desc"],
-            color=discord.Color.gold(),
-        )
-        embed.set_image(url=item["image"])
-        await interaction.response.send_message(
-            embed=embed, ephemeral=True
-        )
-
-
-class NormalShopView(discord.ui.View):
-
-    def __init__(self):
-        super().__init__(timeout=120)
-        self.add_item(NormalShopDropdown())
-
-
-@bot.tree.command(name="المتجر", description="فتح المتجر العادي للأسلحة")
-async def shop_command(interaction: discord.Interaction):
-    ensure_user(interaction.user.id, str(interaction.user))
-
-    embed = discord.Embed(
-        title="🛍️ المتجر العادي الإمبراطوري",
-        description="اختر سلاحاً أسطورياً لتعزيز قوتك:",
+        title="🏆 لوحة الشرف وصدارة الأكوان",
         color=discord.Color.gold(),
     )
-    embed.set_image(
-        url="https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800"
-    )
-    view = NormalShopView()
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-
-DARK_SHOP_ITEMS = {
-    "dark_blade": {
-        "title": "شفرة الموت المظلمة",
-        "price": "666 💎",
-        "desc": "شفرة مسحورة بطاقة الهلاك الأبدي.",
-        "image": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800",
-    }
-}
-
-
-class DarkShopDropdown(discord.ui.Select):
-
-    def __init__(self):
-        options = [
-            discord.SelectOption(
-                label="شفرة الموت المظلمة",
-                description="السعر: 666 💎",
-                emoji="🗡️",
-                value="dark_blade",
-            )
-        ]
-        super().__init__(
-            placeholder="اختر سلاحاً من متجر الظلام...",
-            min_values=1,
-            max_values=1,
-            options=options,
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        choice = self.values[0]
-        item = DARK_SHOP_ITEMS[choice]
-        user_id = interaction.user.id
-
-        cursor.execute(
-            "UPDATE user_data SET equipment_name = ?, equipment_score = equipment_score + 80 WHERE user_id = ?",
-            (item["title"], user_id),
-        )
-        db_connection.commit()
-
-        embed = discord.Embed(
-            title=f"💀 تم الحصول على السلاح المحرم: {item['title']}",
-            description=item["desc"],
-            color=discord.Color.dark_red(),
-        )
-        embed.set_image(url=item["image"])
-        await interaction.response.send_message(
-            embed=embed, ephemeral=True
-        )
-
-
-class DarkShopView(discord.ui.View):
-
-    def __init__(self):
-        super().__init__(timeout=120)
-        self.add_item(DarkShopDropdown())
-
-
-@bot.tree.command(name="متجر_الظلام", description="فتح متجر الظلام السري")
-async def dark_shop_command(interaction: discord.Interaction):
-    ensure_user(interaction.user.id, str(interaction.user))
-
-    embed = discord.Embed(
-        title="🌑 متجر الظلام السري",
-        description="أسلحة محرّمة قوية جداً:",
-        color=discord.Color.dark_red(),
-    )
-    embed.set_image(
-        url="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800"
-    )
-    view = DarkShopView()
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-
-# ==========================================
-# 8. نظام البنك المطور، القروض، والتحذيرات
-# ==========================================
-
-
-class LoanModal(discord.ui.Modal, title="طلب قرض بنكي"):
-    amount = discord.ui.TextInput(
-        label="مبلغ القرض المطلوب",
-        placeholder="اكتب المبلغ الذي تريد اقتراضه...",
-        required=True,
-    )
-
-    async def on_submit(self, interaction: discord.Interaction):
-        try:
-            loan_val = int(self.amount.value)
-        except ValueError:
-            await interaction.response.send_message(
-                "❌ يرجى إدخال أرقام صحيحة فقط!", ephemeral=True
-            )
-            return
-
-        if loan_val <= 0:
-            await interaction.response.send_message(
-                "❌ المبلغ غير صالح!", ephemeral=True
-            )
-            return
-
-        cursor.execute(
-            "SELECT loan_amount FROM user_data WHERE user_id = ?",
-            (interaction.user.id,),
-        )
-        current_loan = cursor.fetchone()[0]
-
-        if current_loan > 0:
-            await interaction.response.send_message(
-                "❌ لديك قرض قديم لم تقم بسداده بعد! لا يمكنك أخذ قرض جديد.",
-                ephemeral=True,
-            )
-            return
-
-        cursor.execute(
-            "UPDATE user_data SET bank_balance = bank_balance + ?, loan_amount = loan_amount + ? WHERE user_id = ?",
-            (loan_val, loan_val, interaction.user.id),
-        )
-        db_connection.commit()
-
-        embed = discord.Embed(
-            title="🏦 صندوق البنك المركزي - تمت الموافقة على القرض",
-            description=(
-                f"لقد حصلت على قرض بنكي بقيمة `💎 {loan_val}` بنجاح.\n\n"
-                "⚠️ **تنبيه هام:** يجب عليك سداد القرض في أقرب وقت عبر زر **سداد القرض**!"
-            ),
-            color=discord.Color.gold(),
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-class BankView(discord.ui.View):
-
-    def __init__(self, user_id: int):
-        super().__init__(timeout=180)
-        self.user_id = user_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                "❌ هذه اللوحة لا تخصك، قم بفتح لوحتك الخاصة عبر `/البنك`!",
-                ephemeral=True,
-            )
-            return False
-        return True
-
-    @discord.ui.button(
-        label="إيداع رصيد بالتوفير (+50)",
-        style=discord.ButtonStyle.success,
-        emoji="📥",
-        row=0,
-    )
-    async def deposit(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        cursor.execute(
-            "UPDATE user_data SET bank_balance = bank_balance + 50 WHERE user_id = ?",
-            (self.user_id,),
-        )
-        db_connection.commit()
-        cursor.execute(
-            "SELECT bank_balance FROM user_data WHERE user_id = ?",
-            (self.user_id,),
-        )
-        new_bank = cursor.fetchone()[0]
-        await interaction.response.send_message(
-            f"✅ تم إيداع 50 جوهرة في حسابك البنكي الآمن! الرصيد البنكي الحالي: `{new_bank}` 🏦",
-            ephemeral=True,
-        )
-
-    @discord.ui.button(
-        label="اقتراض مبلغ",
-        style=discord.ButtonStyle.danger,
-        emoji="📜",
-        row=0,
-    )
-    async def take_loan(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        await interaction.response.send_modal(LoanModal())
-
-    @discord.ui.button(
-        label="سداد القرض",
-        style=discord.ButtonStyle.primary,
-        emoji="💸",
-        row=1,
-    )
-    async def pay_loan(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        ensure_user(interaction.user.id, str(interaction.user))
-        cursor.execute(
-            "SELECT balance, bank_balance, loan_amount FROM user_data WHERE user_id = ?",
-            (interaction.user.id,),
-        )
-        balance, bank_balance, loan = cursor.fetchone()
-
-        if loan <= 0:
-            await interaction.response.send_message(
-                "✨ ليس لديك أي قروض مسجلة لتسديدها!", ephemeral=True
-            )
-            return
-
-        total_available = balance + bank_balance
-        if total_available < loan:
-            await interaction.response.send_message(
-                f"❌ رصيدك الإجمالي لا يكفي لسداد قيمة القرض البالغة `💎 {loan}`!",
-                ephemeral=True,
-            )
-            return
-
-        new_balance = balance
-        new_bank = bank_balance
-        remaining_loan = loan
-
-        if new_bank >= remaining_loan:
-            new_bank -= remaining_loan
-        else:
-            remaining_loan -= new_bank
-            new_bank = 0
-            new_balance -= remaining_loan
-
-        cursor.execute(
-            "UPDATE user_data SET balance = ?, bank_balance = ?, loan_amount = 0 WHERE user_id = ?",
-            (new_balance, new_bank, interaction.user.id),
-        )
-        db_connection.commit()
-
-        await interaction.response.send_message(
-            "✅ تم سداد كامل القرض بنجاح وأصبح سجلك البنكي نظيفاً وآمناً!",
-            ephemeral=True,
-        )
-
-    @discord.ui.button(
-        label="فحص الإنذار والعقوبات",
-        style=discord.ButtonStyle.secondary,
-        emoji="🚨",
-        row=1,
-    )
-    async def check_warning(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        ensure_user(interaction.user.id, str(interaction.user))
-        cursor.execute(
-            "SELECT loan_amount, equipment_score, equipment_name FROM user_data WHERE user_id = ?",
-            (interaction.user.id,),
-        )
-        loan, eq_score, eq_name = cursor.fetchone()
-
-        if loan > 0:
-            embed = discord.Embed(
-                title="🚨 نظام الإنذار البنكي الخطر",
-                description=(
-                    f"لديك قرض نشط بقيمة: `💎 {loan}`\n"
-                    f"العتاد الحالي المعرض للخطر: **{eq_name}** (قوة: `{eq_score}`)\n\n"
-                    "⚠️ **تحذير نهائي:** إذا تخلفت عن السداد، ستقوم إدارة البنك ببيع أغراضك تلقائياً لاسترداد الأموال!"
-                ),
-                color=discord.Color.red(),
-            )
-        else:
-            embed = discord.Embed(
-                title="🛡️ الحالة المالية آمنة",
-                description=(
-                    "حسابك نظيف تماماً وليس عليك أي قروض أو إنذارات مالية حالية."
-                ),
-                color=discord.Color.green(),
-            )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-@bot.tree.command(
-    name="البنك", description="فتح لوحة المصرف الإمبراطوري الفاخرة والقروض"
-)
-async def bank_command(interaction: discord.Interaction):
-    ensure_user(interaction.user.id, str(interaction.user))
+    # 1. أقوى النقابات
     cursor.execute(
-        "SELECT balance, bank_balance, loan_amount, equipment_name, equipment_score FROM user_data WHERE user_id = ?",
-        (interaction.user.id,),
+        "SELECT guild_name, level, coins_donated, equipment_donations_count FROM guilds ORDER BY level DESC, coins_donated DESC LIMIT 5"
     )
-    balance, bank_balance, loan, eq_name, eq_score = cursor.fetchone()
-
-    embed = discord.Embed(
-        title="🏛️ المصرف الإمبراطوري الملكي - لوحة المعاملات الفاخرة",
-        description=(
-            "مرحباً بك في المؤسسة المالية الرسمية للمغامرين.\n"
-            "إليك ملخص حسابك المصرفي والخدمات المتاحة:"
-        ),
-        color=discord.Color.dark_gold(),
-    )
-    embed.set_thumbnail(
-        url="https://cdn-icons-png.flaticon.com/512/2830/2830284.png"
-    )
-
+    guilds_top = cursor.fetchall()
+    guilds_text = ""
+    for idx, (g_name, lvl, c_donated, eq_donated) in enumerate(
+        guilds_top, start=1
+    ):
+        total_donations = c_donated + eq_donated
+        guilds_text += (
+            f"**{idx}. {g_name}**\n"
+            f"  • المستوى: `{lvl}/500` 🌟 | العملات: `💎 {c_donated}`\n"
+            f"  • التبرعات الكلية: `{total_donations}` 📦\n\n"
+        )
     embed.add_field(
-        name="💰 الأرصدة المالية",
-        value=(
-            f"• الرصيد اليدوي (الكاش): `💎 {balance}`\n"
-            f"• الرصيد البنكي الآمن: `💎 {bank_balance}`\n"
-            f"• إجمالي الثروة: `💎 {balance + bank_balance}`"
-        ),
+        name="🏰 أعلى النقابات قوة",
+        value=guilds_text if guilds_text else "لا توجد نقابات مسجلة بعد.",
         inline=False,
     )
 
-    loan_status = (
-        f"`💎 {loan}` (يوجد إنذار خطر!) 🚨" if loan > 0 else "لا يوجد (سجل نظيف) ✅"
+    # 2. أغنى اللاعبين
+    cursor.execute(
+        "SELECT name, balance FROM user_data ORDER BY balance DESC LIMIT 3"
     )
+    rich_top = cursor.fetchall()
+    rich_text = ""
+    for idx, (name, bal) in enumerate(rich_top, start=1):
+        rich_text += f"**{idx}.** `{name}` — `💎 {bal}`\n"
     embed.add_field(
-        name="📜 حالة القروض والديون",
-        value=(
-            f"• قيمة القرض الحالي: {loan_status}\n"
-            f"• العتاد المرهون للضمان: **{eq_name}**"
-        ),
+        name="💎 أغنى المغامرين",
+        value=rich_text if rich_text else "لا توجد بيانات.",
         inline=False,
     )
 
-    view = BankView(interaction.user.id)
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    # 3. أقوى اللاعبين عتاداً
+    cursor.execute(
+        "SELECT name, equipment_score FROM user_data ORDER BY equipment_score DESC LIMIT 3"
+    )
+    power_top = cursor.fetchall()
+    power_text = ""
+    for idx, (name, score) in enumerate(power_top, start=1):
+        power_text += f"**{idx}.** `{name}` — `⚔️ {score}`\n"
+    embed.add_field(
+        name="⚔️ أبطال القوة والعتاد",
+        value=power_text if power_text else "لا توجد بيانات.",
+        inline=False,
+    )
+
+    embed.set_footer(text="استمر في تطوير نقابتك ورفع مستواها لتعتلي القمة!")
+    await interaction.response.send_message(embed=embed)
 
 
 # ==========================================
-# 9. لوحة المطورين
+# 6. لوحة المطورين
 # ==========================================
 
 BUTCHER_HERO = {
@@ -1429,45 +909,6 @@ class DevPanelView(discord.ui.View):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @discord.ui.button(
-        label="🗡️ استدعاء شخصية 'السفاح' السرية",
-        style=discord.ButtonStyle.danger,
-        row=2,
-    )
-    async def unlock_butcher_btn(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        if (
-            not is_dev(interaction.user.id)
-            and interaction.user.id != interaction.guild.owner_id
-        ):
-            await interaction.response.send_message(
-                "❌ عذراً، هذه الشخصية المرعبة مخصصة للمطور حصرياً!",
-                ephemeral=True,
-            )
-            return
-
-        user_id = interaction.user.id
-        cursor.execute(
-            "UPDATE user_data SET hero_name = ?, equipment_score = 9999 WHERE user_id = ?",
-            (BUTCHER_HERO["title"], user_id),
-        )
-        db_connection.commit()
-
-        embed = discord.Embed(
-            title=f"⚠️ تم استدعاء الشخصية المرعبة: {BUTCHER_HERO['title']}",
-            description=(
-                f"**📖 القصة الملعونة:**\n{BUTCHER_HERO['story']}\n\n"
-                f"💀 **المعدلات الخارقة:**\n"
-                f"• الهجوم المطلق: `{BUTCHER_HERO['power']}` ⚔️\n"
-                f"• الدفاع المطلق: `{BUTCHER_HERO['defense']}` 🛡️\n\n"
-                "🩸 تم ربط سفاح الموت بملفك الشخصي بنجاح تام!"
-            ),
-            color=discord.Color.dark_red(),
-        )
-        embed.set_image(url=BUTCHER_HERO["image"])
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
 
 @bot.tree.command(name="مطور", description="فتح منيو لوحة تحكم المطورين السرية")
 async def dev_panel(interaction: discord.Interaction):
@@ -1492,5 +933,19 @@ async def dev_panel(interaction: discord.Interaction):
         title="✨ منيو الإدارة المركزية للمطورين",
         description=(
             "مرحباً بك في لوحة تحكم المطور السرية.\n"
-            "يمكنك تفعيل العملات، زر **عتاد** للحصول على عتاد الظلام الشامل، أو استدعاء السفاح:"
-  
+            "يمكنك تفعيل العملات، زر **عتاد** للحصول على عتاد الظلام الشامل، أو ترقية النظام:"
+        ),
+        color=discord.Color.from_rgb(40, 40, 45),
+    )
+    view = DevPanelView(interaction.user.id)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+# ==========================================
+# 7. تشغيل البوت
+# ==========================================
+TOKEN = os.getenv("DISCORD_TOKEN")
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("خطأ: لم يتم العثور على توكن البوت (DISCORD_TOKEN).")
