@@ -520,7 +520,7 @@ class LeaderboardView(discord.ui.View):
         self.add_item(LeaderboardSelect())
 
 
-# ================== نظام الطوابق الشامل والجديد (500 طابق وصعوبة أسطورية مع جوائز عشوائية) ==================
+# ================== نظام الطوابق التلقائي الواقعي والدموي (500 طابق) ==================
 
 class FloorsView(discord.ui.View):
     def __init__(self):
@@ -535,18 +535,71 @@ class FloorsView(discord.ui.View):
         
         current_floor = user_data.get("max_floor", 0)
         
-        # فحص الحد الأقصى للطوابق (500 طابق)
         if current_floor >= 500:
             return await interaction.response.send_message("🏆 **لقد وصلت إلى القمة المطلقة!** لقد أتممت جميع طوابق البرج الـ 500 وأصبحت سيد الأبعاد.", ephemeral=True)
         
         target_floor = current_floor + 1
         power = user_data.get("power", 100)
-        
-        # معادلة صعوبة تصاعدية قاسية وصعبة جداً (تعتمد على أسس تصاعدية للطوابق)
         required_power = int(1000 * (target_floor ** 1.65))
 
-        if power >= required_power:
-            # صعد بنجاح! نختار مكافأة عشوائية من الأنواع المطلوبة
+        # بدء الاستجابة المبدئية للقتال التلقائي الدموي
+        await interaction.response.defer(ephemeral=False)
+        
+        player_name = interaction.user.display_name
+        p_hp = 100
+        z_hp = 100
+        
+        embed = discord.Embed(
+            title=f"⚔️ [ الطابق #{target_floor} / 500 - معركة ضد وحوش الزومبي ] ⚔️",
+            description=f"التحام مباشر ودموي بين **{player_name}** وزومبي كاسر في قاعة مظلمة...\n\n"
+                        f"👤 **{player_name}** [██████████] (`{p_hp}/100 HP`)\n"
+                        f"🆚\n"
+                        f"🧟 **زومبي متوحش** [██████████] (`{z_hp}/100 HP`)",
+            color=discord.Color.dark_red()
+        )
+        msg = await interaction.followup.send(embed=embed)
+        await asyncio.sleep(2)
+
+        # محاكاة جولات القتال التلقائي الواقعي الدموي
+        battle_log = ""
+        while p_hp > 0 and z_hp > 0:
+            # ضربة اللاعب
+            p_dmg = random.randint(30, 50)
+            z_hp = max(0, z_hp - p_dmg)
+            z_bar = "█" * (z_hp // 10) + "░" * (10 - (z_hp // 10))
+            battle_log += f"🗡️ سدد **{player_name}** ضربة قوية بسلاحه نحو رأس الزومبي، مهشماً جمجمته! (`-{p_dmg} HP 🩸`)\n"
+            
+            embed.description = (
+                f"معركة محتدمة في الطابق **#{target_floor}**:\n\n"
+                f"👤 **{player_name}** [██████████] (`{p_hp}/100 HP`)\n"
+                f"🆚\n"
+                f"🧟 **زومبي متوحش** [{z_bar}] (`{z_hp}/100 HP`)\n\n"
+                f"📜 **سجل المعركة الحية:**\n{battle_log}"
+            )
+            await msg.edit(embed=embed)
+            await asyncio.sleep(2)
+            
+            if z_hp <= 0:
+                break
+                
+            # ضربة الزومبي
+            z_dmg = random.randint(15, 35)
+            p_hp = max(0, p_hp - z_dmg)
+            p_bar = "█" * (p_hp // 10) + "░" * (10 - (p_hp // 10))
+            battle_log += f"🧟 انقضّ الزومبي بأنيابه المتعفنة ونهش كتف اللاعب، مخلفاً جرحاً غائراً ينزف! (`-{z_dmg} HP 🩸`)\n"
+            
+            embed.description = (
+                f"معركة محتدمة في الطابق **#{target_floor}**:\n\n"
+                f"👤 **{player_name}** [{p_bar}] (`{p_hp}/100 HP`)\n"
+                f"🆚\n"
+                f"🧟 **زومبي متوحش** [██████████] (`{z_hp}/100 HP`)\n\n"
+                f"📜 **سجل المعركة الحية:**\n{battle_log}"
+            )
+            await msg.edit(embed=embed)
+            await asyncio.sleep(2)
+
+        # النتيجة النهائية
+        if power >= required_power and p_hp > 0:
             reward_type = random.choice(["normal_gear", "dark_gear", "rare_currency", "normal_currency"])
             reward_desc = ""
             
@@ -556,51 +609,43 @@ class FloorsView(discord.ui.View):
             }
 
             if reward_type == "normal_gear":
-                # عتاد عادي عشوائي
                 cat = random.choice(CATEGORIES)
                 gear_level = random.randint(1, 25)
                 item = NORMAL_SHOP[cat][gear_level - 1]
                 update_data.setdefault("$push", {})["inventory"] = item["name"]
                 reward_desc = f"🛡️ عتاد عادي: **{item['name']}**"
-
             elif reward_type == "dark_gear":
-                # عتاد محرم/ظلال عشوائي
                 cat = random.choice(CATEGORIES)
                 gear_level = random.randint(1, 25)
                 item = DARK_SHOP[cat][gear_level - 1]
                 update_data.setdefault("$push", {})["inventory"] = item["name"]
                 reward_desc = f"🩸 سلاح محرم من الظلال: **{item['name']}**"
-
             elif reward_type == "rare_currency":
-                # عملات نادرة (ألماس أسود / ألماس عادي)
                 diamonds_won = target_floor * random.randint(5, 20)
                 update_data.setdefault("$inc", {})["diamonds"] = diamonds_won
                 reward_desc = f"💎 عملات نادرة: **+{diamonds_won:,}** ألماسة"
-
             else:
-                # عملات عادية (ذهب)
                 gold_won = target_floor * random.randint(1500, 5000)
                 update_data.setdefault("$inc", {})["balance"] = gold_won
                 reward_desc = f"🪙 عملات عادية: **+{gold_won:,}** ذهبة"
 
             users_col.update_one({"user_id": user_id}, update_data)
 
-            embed = discord.Embed(
-                title=f"🏢 الطابق #{target_floor} / 500 - انتصار باهر وسحق للوحوش!",
-                description=f"استطاع بطلك بقوته (`{power:,}`) اختراق دفاعات الطابق `{target_floor}` الصعب وهزيمة الزعيم بقوة!",
+            final_embed = discord.Embed(
+                title=f"🏢 الطابق #{target_floor} / 500 - انتصار دموي ساحق!",
+                description=f"تطاورت الدماء في أرجاء القاعة حتى سقط آخر زومبي هامداً على الارض!\n\n🎁 **المكافأة العشوائية المكتسبة:**\n{reward_desc}",
                 color=discord.Color.green()
             )
-            embed.add_field(name="🎁 المكافأة العشوائية المكتسبة", value=reward_desc, inline=False)
-            embed.set_footer(text=f"التقدم الحالي: {target_floor} من 500 طابق.")
+            final_embed.set_footer(text=f"التقدم الحالي: {target_floor} من 500 طابق.")
+            await msg.edit(embed=final_embed, view=self)
         else:
-            embed = discord.Embed(
-                title=f"🏢 الطابق #{target_floor} / 500 - هزيمة ساحقة وقاسية!",
-                description=f"طاقتك الحالية (`{power:,}`) ضعيفة جداً أمام وحوش هذا الطابق الصعب!\n🔒 القوة المطلوبة لاجتياز هذا الطابق: `{required_power:,}` طاقة.",
+            final_embed = discord.Embed(
+                title=f"🏢 الطابق #{target_floor} / 500 - هزيمة قاسية ومجزرة!",
+                description=f"تغلبت حشود الزومبي على بطلك وسط نزيف حاد ودمرت دفاعاته!\n🔒 القوة المطلوبة لاجتياز هذا الطابق بسلام: `{required_power:,}` طاقة.",
                 color=discord.Color.red()
             )
-            embed.set_footer(text="قم بشراء عتاد أقوى، طور معدلاتك، أو تسلق المتاجر لرفع طاقتك!")
-
-        await interaction.response.edit_message(embed=embed, view=self)
+            final_embed.set_footer(text="قم بشراء عتاد أقوى، طور معدلاتك، أو ارفع طاقتك لمحاولة أخرى!")
+            await msg.edit(embed=final_embed, view=self)
 
     @discord.ui.button(label="المتجر", style=discord.ButtonStyle.primary, emoji="🏛️", row=0)
     async def shop_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -795,10 +840,100 @@ async def floors_command(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title=f"🏢 برج الإمبراطورية الأسطوري (الحد الأقصى: 500 طابق)",
-        description=f"أنت في الطابق الحالي: **{current_floor}**\nالطابق التالي للتحدي: **#{next_f}**\n\nاضغط على زر **الطابق التالي** لخوض المعركة الصعبة والحصول على مكافآت عشوائية (عتاد عادي، عتاد محرم، عملات ذهبية، أو ألماسات نادرة)!",
+        description=f"أنت في الطابق الحالي: **{current_floor}**\nالطابق التالي للتحدي: **#{next_f}**\n\nاضغط على زر **الطابق التالي** لخوض المعركة الدموية التلقائية وحصد مكافآت عشوائية (عتاد عادي، عتاد محرم، ذهب، أو ألماسات نادرة)!",
         color=discord.Color.gold()
     )
     await interaction.response.send_message(embed=embed, view=FloorsView(), ephemeral=False)
+
+@bot.tree.command(name="المعارك", description="خوض معركة تكتيكية دموية وتلقائية ضد لاعب آخر")
+@app_commands.describe(member="اللاعب المراد قتاله")
+async def battle_command(interaction: discord.Interaction, member: discord.Member):
+    if member.id == interaction.user.id:
+        return await interaction.response.send_message("❌ لا يمكنك قتال نفسك يا هذا!", ephemeral=True)
+    
+    attacker_id = str(interaction.user.id)
+    defender_id = str(member.id)
+    
+    att_data = users_col.find_one({"user_id": attacker_id})
+    def_data = users_col.find_one({"user_id": defender_id})
+    
+    if not att_data:
+        return await interaction.response.send_message("❌ يجب عليك التسجيل أولاً باستخدام `/تسجيل`.", ephemeral=True)
+    if not def_data:
+        return await interaction.response.send_message("❌ خصمك المستهدف غير مسجل في قاعدة بيانات اللعبة!", ephemeral=True)
+    
+    await interaction.response.defer(ephemeral=False)
+    
+    att_name = interaction.user.display_name
+    def_name = member.display_name
+    
+    att_hp = 100
+    def_hp = 100
+    
+    embed = discord.Embed(
+        title=f"⚔️ [ ساحة المعركة الدموية المشتعلة ] ⚔️",
+        description=f"اشتباك عنيف ومباشر يبدأ بين **{att_name}** و **{def_name}**!\n\n"
+                    f"👤 **{att_name}** [██████████] (`{att_hp}/100 HP`)\n"
+                    f"🆚\n"
+                    f"👤 **{def_name}** [██████████] (`{def_hp}/100 HP`)",
+        color=discord.Color.dark_purple()
+    )
+    msg = await interaction.followup.send(embed=embed)
+    await asyncio.sleep(2)
+    
+    battle_log = ""
+    while att_hp > 0 and def_hp > 0:
+        # ضربة المهاجم
+        dmg1 = random.randint(25, 45)
+        def_hp = max(0, def_hp - dmg1)
+        def_bar = "█" * (def_hp // 10) + "░" * (10 - (def_hp // 10))
+        battle_log += f"🗡️ سدد **{att_name}** ضربة قاضية بسلاحه بمنتصف صدر خصمه متطايرةً منها الدماء! (`-{dmg1} HP 🩸`)\n"
+        
+        embed.description = (
+            f"معركة ضارية بين الحكّام:\n\n"
+            f"👤 **{att_name}** [██████████] (`{att_hp}/100 HP`)\n"
+            f"🆚\n"
+            f"👤 **{def_name}** [{def_bar}] (`{def_hp}/100 HP`)\n\n"
+            f"📜 **سجل المعركة:**\n{battle_log}"
+        )
+        await msg.edit(embed=embed)
+        await asyncio.sleep(2)
+        
+        if def_hp <= 0:
+            break
+            
+        # ضربة المدافع
+        dmg2 = random.randint(25, 45)
+        att_hp = max(0, att_hp - dmg2)
+        att_bar = "█" * (att_hp // 10) + "░" * (10 - (att_hp // 10))
+        battle_log += f"🛡️ استغل **{def_name}** الثغرة وشن هجمة مرتدة وحشية خلفت جرحاً نازفاً بغزارة! (`-{dmg2} HP 🩸`)\n"
+        
+        embed.description = (
+            f"معركة ضارية بين الحكّام:\n\n"
+            f"👤 **{att_name}** [{att_bar}] (`{att_hp}/100 HP`)\n"
+            f"🆚\n"
+            f"👤 **{def_name}** [██████████] (`{def_hp}/100 HP`)\n\n"
+            f"📜 **سجل المعركة:**\n{battle_log}"
+        )
+        await msg.edit(embed=embed)
+        await asyncio.sleep(2)
+
+    # إعلان الفائز وتحديث السجلات
+    if att_hp > def_hp:
+        users_col.update_one({"user_id": attacker_id}, {"$inc": {"kills": 1, "balance": 5000}})
+        winner_text = f"🏆 **انتهت المجزرة!** انتصر البطل **{att_name}** ببراعة وحصل على `5,000` ذهبة وسجل نقطة قتل!"
+        color = discord.Color.green()
+    else:
+        users_col.update_one({"user_id": defender_id}, {"$inc": {"kills": 1, "balance": 5000}})
+        winner_text = f"🏆 **انتهت المجزرة!** انتصر البطل الدفاعي **{def_name}** وسحق خصمه بقسوة!"
+        color = discord.Color.red()
+
+    final_embed = discord.Embed(
+        title="⚔️ نتائج المعركة الحاسمة",
+        description=f"{winner_text}\n\n📜 **السجل النهائي:**\n{battle_log}",
+        color=color
+    )
+    await msg.edit(embed=final_embed)
 
 @bot.tree.command(name="تطوير_معدلاتي", description="فتح لوحة تطوير المعدلات القتالية بلا حدود قصوى")
 async def upgrade_stats_command(interaction: discord.Interaction):
@@ -899,40 +1034,4 @@ async def profile_command(interaction: discord.Interaction):
         f"🛡️ **الدفاع:** `{defense:,}` | 💥 **القاتلة:** `{critical:,}`\n"
         f"🔮 **السحر:** `{magic:,}` | 🧠 **الذكاء:** `{intelligence:,}`"
     )
-    embed.add_field(name="📊 ترسانة المعدلات القتالية المطلقة", value=stats_text, inline=False)
-    
-    embed.add_field(name="🏢 أعلى طابق متجاوز", value=f"{max_floor} / 500", inline=True)
-    embed.add_field(name="💀 الخصوم المقضي عليهم", value=str(kills), inline=True)
-    embed.add_field(name="💰 المحفظة والبنك", value=f"{balance:,} 🪙 | 💳 {bank:,} 🪙", inline=False)
-    embed.add_field(name="💎 الألماس والعملات", value=f"{diamonds:,} 💎", inline=True)
-
-    embed.set_footer(text=f"معرف المستخدم: {user_id}", icon_url=interaction.user.display_avatar.url)
-    await interaction.followup.send(embed=embed, ephemeral=False)
-
-@bot.tree.command(name="تسجيل", description="التسجيل في نظام اللعبة والحصول على لقب المبتدئ")
-async def register_command(interaction: discord.Interaction):
-    user_id = str(interaction.user.id)
-    existing_user = users_col.find_one({"user_id": user_id})
-    if existing_user:
-        return await interaction.response.send_message("❌ أنت مسجل بالفعل في قاعدة البيانات!", ephemeral=True)
-    
-    new_user = {
-        "user_id": user_id,
-        "balance": 1000,
-        "bank": 0,
-        "diamonds": 10,
-        "max_floor": 0,
-        "kills": 0,
-        "battles_played": 0,
-        "power": 100,
-        "custom_title": "المبتدئ",
-        "unlocked_titles": ["المبتدئ"],
-        "selected_hero": "لم يتم اختيار بطل بعد",
-        "inventory": [],
-        "aim": 10, "evasion": 10, "attack": 10, "accuracy": 10,
-        "defense": 10, "critical": 10, "magic": 10, "intelligence": 10
-    }
-    users_col.insert_one(new_user)
-    await interaction.response.send_message("🎉 **تم تسجيلك بنجاح!** حصلت على لقب `المبتدئ` ورصيدك الأولي.", ephemeral=True)
-
-bot.run(DISCORD_TOKEN)
+    embed.add_field(name="📊 ترسانة الم
