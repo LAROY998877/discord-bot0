@@ -1,7 +1,31 @@
+import os
+import random
+import re
+import asyncio
 import discord
 from discord import app_commands
 from discord.ui import View, Select, Button
-from datetime import datetime, timedelta
+from discord.ext import commands
+from pymongo import MongoClient
+from datetime import datetime, timedelta, timezone
+
+# ==========================================
+# إعداد البوت
+# ==========================================
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+MONGO_URI = os.getenv("MONGO_URI")
+
+if not MONGO_URI:
+    raise RuntimeError(
+        "❌ متغير MONGO_URI غير موجود في Railway Environment Variables."
+    )
+
+client = MongoClient(MONGO_URI)
+db = client["discord_bot_db"]
+users_col = db["users"]
 
 # ==========================================
 # واجهة قائمة الخدمات المصرفية (Select Menu)
@@ -33,11 +57,8 @@ class BankSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         choice = self.values[0]
         
-        # 1. الراتب اليومي
         if choice == "bank_daily":
-            # هنا تستعلم من قاعدة بيانات MongoDB إذا كان المستخدم قد استلم راتبه اليوم أم لا
             has_claimed = False  # مثال افتراضي
-            
             if has_claimed:
                 return await interaction.response.send_message("⏳ لقد استلمت راتبك اليومي مسبقاً، عد غداً!", ephemeral=True)
 
@@ -46,7 +67,6 @@ class BankSelect(discord.ui.Select):
                 ephemeral=True
             )
         
-        # 2. نظام القروض والمعدات
         elif choice == "bank_loans":
             embed = discord.Embed(
                 title="📜 | قسم القروض وضمان المعدات",
@@ -57,24 +77,22 @@ class BankSelect(discord.ui.Select):
                     "2. في حال انتهاء المهلة ولم تقم بالسداد، **سيقوم النظام تلقائياً ببيع معداتك وأصولك** المعروضة للرهن لاسترداد الأموال!\n\n"
                     "اضغط على الزر بالأسفل لتقديم طلب قرض جديد."
                 ),
-                color=0x8B0000  # أحمر ملكي تحذيري
+                color=0x8B0000
             )
             
-            # زر تقديم الطلب داخل نافذة القروض
             class LoanView(View):
                 def __init__(self):
                     super().__init__(timeout=180)
 
                 @discord.ui.button(label="تقديم طلب قرض", style=discord.ButtonStyle.danger, emoji="⚖️", custom_id="request_loan_btn")
                 async def request_loan(self, interaction: discord.Interaction, button: Button):
-                    await interaction.response.send_message("📝 تم فتح نافذة تقديم طلب القرض بنجاح! (يمكنك ربطها بـ Modal لتحديد المبلغ والمدة).", ephemeral=True)
+                    await interaction.response.send_message("📝 تم فتح نافذة تقديم طلب القرض بنجاح!", ephemeral=True)
 
             return await interaction.response.send_message(embed=embed, view=LoanView(), ephemeral=True)
         
-        # 3. تحويل العملات
         elif choice == "bank_transfer":
             return await interaction.response.send_message(
-                "💸 ميزة التحويل قيد التفعيل. (يمكنك استخدام Modal لطلب ID الشخص والمبلغ المراد تحويله).",
+                "💸 ميزة التحويل قيد التفعيل.",
                 ephemeral=True
             )
 
@@ -94,11 +112,11 @@ async def bank(interaction: discord.Interaction):
             "مرحباً بك في النظام المصرفي الأكثر تطوراً وفخامة.\n"
             "نحن نضع ثروتك وأصولك بين يديك بأعلى معايير الأمان والسرعة.\n\n"
             "✨ **الخدمات المتاحة حالياً:**\n"
-            "• `💰` **الراتب اليومي:** استلم مكافأتك المالية بانتظام.\n"
+            "• `💰` **الراتب اليومي:** استلام مكافأتك المالية بانتظام.\n"
             "• `📜` **نظام القروض:** اقتراض مالي مع نظام حماية الأصول وبيع المعدات تلقائياً عند انتهاء المهلة.\n"
             "• `💸` **تحويل العملات:** إرسال الأموال فورياً لأي شخص بأمان تام."
         ),
-        color=0xD4AF37  # لون الذهب الفاخر
+        color=0xD4AF37
     )
     bank_embed.set_thumbnail(url="https://i.imgur.com/3Z66v7q.png")
     bank_embed.set_footer(
@@ -108,3 +126,19 @@ async def bank(interaction: discord.Interaction):
     bank_embed.timestamp = datetime.now()
 
     await interaction.response.send_message(embed=bank_embed, view=BankView(), ephemeral=False)
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} command(s).")
+    except Exception as e:
+        print(e)
+
+# تشغيل البوت
+TOKEN = os.getenv("DISCORD_TOKEN")
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("❌ متغير DISCORD_TOKEN غير موجود في البيئة.")
