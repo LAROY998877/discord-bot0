@@ -77,6 +77,7 @@ def is_dev(user_id: int) -> bool:
     return cursor.fetchone() is not None
 
 
+# نظام التحقق والتسجيل التلقائي الخفي (بدون نوافذ إجبار مزعجة)
 def ensure_user(user_id: int, username: str):
     cursor.execute(
         "SELECT user_id FROM user_data WHERE user_id = ?", (user_id,)
@@ -93,9 +94,181 @@ def ensure_user(user_id: int, username: str):
 
 
 # ==========================================
-# 2. بنك أسئلة "صراحة أو جرأة" (50 سؤال لكل مستوى)
+# 2. الملف الشخصي (ظاهر للكل مع تحكم خاص بصاحب الملف فقط)
 # ==========================================
 
+
+class EditTitleModal(discord.ui.Modal, title="تعديل اللقب الشخصي"):
+
+    new_title = discord.ui.TextInput(
+        label="اللقب الجديد",
+        placeholder="اكتب لقبك الفانتازي الجديد...",
+        required=True,
+        max_length=30,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        cursor.execute(
+            "UPDATE user_data SET title = ? WHERE user_id = ?",
+            (self.new_title.value, interaction.user.id),
+        )
+        db_connection.commit()
+        await interaction.response.send_message(
+            f"✅ تم تحديث لقبك إلى: **{self.new_title.value}** بنجاح!",
+            ephemeral=True,
+        )
+
+
+class ProfileControlView(discord.ui.View):
+
+    def __init__(self, owner_id: int):
+        super().__init__(timeout=180)
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "❌ عذراً، هذا الملف الشخصي لا يخصك ولا يمكنك التعديل عليه!",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    @discord.ui.button(
+        label="تعديل اللقب",
+        style=discord.ButtonStyle.primary,
+        emoji="✏️",
+        row=0,
+    )
+    async def edit_title_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.send_modal(EditTitleModal())
+
+    @discord.ui.button(
+        label="إخفاء/إظهار المعدلات",
+        style=discord.ButtonStyle.secondary,
+        emoji="👁️",
+        row=0,
+    )
+    async def toggle_stats_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute(
+            "SELECT hide_stats FROM user_data WHERE user_id = ?",
+            (interaction.user.id,),
+        )
+        current = cursor.fetchone()[0]
+        new_val = 0 if current == 1 else 1
+        cursor.execute(
+            "UPDATE user_data SET hide_stats = ? WHERE user_id = ?",
+            (new_val, interaction.user.id),
+        )
+        db_connection.commit()
+
+        status_text = "مخفية 🔒" if new_val == 1 else "ظاهرة 🔓"
+        await interaction.response.send_message(
+            f"✅ تم تغيير حالة إخفاء المعدلات لتصبح: **{status_text}**",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="إخفاء/إظهار الألقاب",
+        style=discord.ButtonStyle.secondary,
+        emoji="🛡️",
+        row=0,
+    )
+    async def toggle_titles_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute(
+            "SELECT hide_titles FROM user_data WHERE user_id = ?",
+            (interaction.user.id,),
+        )
+        current = cursor.fetchone()[0]
+        new_val = 0 if current == 1 else 1
+        cursor.execute(
+            "UPDATE user_data SET hide_titles = ? WHERE user_id = ?",
+            (new_val, interaction.user.id),
+        )
+        db_connection.commit()
+
+        status_text = "مخفي 🔒" if new_val == 1 else "ظاهر 🔓"
+        await interaction.response.send_message(
+            f"✅ تم تغيير حالة إخفاء الألقاب لتصبح: **{status_text}**",
+            ephemeral=True,
+        )
+
+
+@bot.tree.command(name="الملف", description="عرض الملف الشخصي")
+@app_commands.describe(member="العضو المراد عرض ملفه (اختياري)")
+async def profile_command(
+    interaction: discord.Interaction, member: discord.Member = None
+):
+    target = member if member else interaction.user
+    ensure_user(target.id, str(target))
+
+    cursor.execute(
+        "SELECT name, age, gender, balance, equipment_score, floors, max_unlocked_floor, hero_name, equipment_name, title, hide_stats, hide_titles FROM user_data WHERE user_id = ?",
+        (target.id,),
+    )
+    data = cursor.fetchone()
+    (
+        name,
+        age,
+        gender,
+        balance,
+        eq_score,
+        floors,
+        max_unlocked,
+        hero,
+        equipment,
+        title,
+        hide_stats,
+        hide_titles,
+    ) = data
+
+    embed = discord.Embed(
+        title=f"📜 الملف الشخصي لـ: {target.display_name}",
+        color=discord.Color.dark_purple(),
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+
+    display_title = "مخفي 🔒" if hide_titles == 1 else f"`{title}`"
+    embed.add_field(name="🏷️ اللقب الشخصي", value=display_title, inline=False)
+
+    embed.add_field(name="👤 الاسم الحقيقي", value=f"`{name}`", inline=True)
+    embed.add_field(name="🎂 العمر", value=f"`{age}`", inline=True)
+    embed.add_field(name="🚻 الجنس", value=f"`{gender}`", inline=True)
+
+    if hide_stats == 1:
+        embed.add_field(
+            name="📊 المعدلات والقوة",
+            value="*المعدلات مخفية بواسطة صاحب الملف 🔒*",
+            inline=False,
+        )
+    else:
+        embed.add_field(
+            name="📊 المعدلات والقوة",
+            value=(
+                f"• الرصيد: `{balance}` 💎\n"
+                f"• نقاط المعدات: `{eq_score}` ⚔️\n"
+                f"• الطابق الحالي: `{floors}` 🏢 (أقصى طابق: {max_unlocked}/1000)\n"
+                f"• البطل المختار: `{hero}` 🦸‍♂️\n"
+                f"• العتاد الحالي: `{equipment}` 🗡️"
+            ),
+            inline=False,
+        )
+
+    view = ProfileControlView(target.id)
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+# ==========================================
+# 3. أوامر اللعب (إضافة لعبة "صراحة أو جرأة")
+# ==========================================
+
+# بنك الأسئلة (تم تصحيح الخطأ وإضافة 50 سؤال لكل مستوى)
 TRUTH_OR_DARE_QUESTIONS = {
     "normal": [
         {"type": "صراحة", "q": "ما هو أغلى شيء تمتلكه وتخاف خسارته؟"},
@@ -138,64 +311,4 @@ TRUTH_OR_DARE_QUESTIONS = {
         {"type": "جرأة", "q": "غيّر صورة حسابك الشخصي إلى صورة كرتونية مضحكة لمدة 24 ساعة."},
         {"type": "صراحة", "q": "من هو الشخص الذي تعتبره منافسك الأول؟"},
         {"type": "جرأة", "q": "اجعل أصدقاءك يختارون لك اسماً مستعاراً جديداً واستخدمه لمدة يوم."},
-        {"type": "صراحة", "q": "ما هو الشيء الذي تخاف من الاعتراف به؟"},
-        {"type": "جرأة", "q": "قم بالغناء أثناء التحدث في الهاتف."},
-        {"type": "صراحة", "q": "من هو الشخص الذي تعتبره أفضل صديق لك؟"},
-        {"type": "جرأة", "q": "افعل حركة يوغا صعبة واحتفظ بها لمدة 30 ثانية."},
-        {"type": "صراحة", "q": "ما هو الشيء الذي تندم على عدم فعله؟"},
-        {"type": "جرأة", "q": "اتصل بصديق وقل له إنك ستقابله بعد 5 دقائق وأغلق الخط."},
-        {"type": "صراحة", "q": "من هو الشخص الذي تعتبره أسوأ عدو لك؟"},
-        {"type": "جرأة", "q": "اذهب إلى الخارج (أو الشرفة) واصرخ 'أنا أحب البطاطا المقلية' بأعلى صوت."},
-        {"type": "صراحة", "q": "ما هو الشيء الذي تفعله بالرغم من أنه يضايقك؟"},
-        {"type": "جرأة", "q": "ابدأ كل جملة بكلمة 'حسناً' حتى نهاية اللعبة."},
-        # ... يمكنك إضافة المزيد هنا لتكملة الـ 50 سؤال لكل مستوى
-    ],
-    "medium": [
-        {"type": "صراحة", "q": "ما هو أكبر سر تخفيه عن عائلتك؟"},
-        {"type": "جرأة", "q": "أرسل آخر صورة قمت بالتقاطها إلى الدردشة العامة فوراً."},
-        {"type": "صراحة", "q": "ما هي أسوأ صفة في شريك حياتك المستقبلي؟"},
-        {"type": "جرأة", "q": "ابحث عن أغنية حزينة جداً وغنِّها بصوت باكٍ."},
-        {"type": "صراحة", "q": "ما هو أغرب حلم حلمت به في حياتك؟"},
-        {"type": "جرأة", "q": "اكتب في حالتك على ديسكورد 'أنا فضائي وقد جئت لغزو الأرض'."},
-        {"type": "صراحة", "q": "ما هو أسوأ شيء قمت به على الإطلاق؟"},
-        {"type": "جرأة", "q": "اتصل بوالديك وقل لهما إنك رسبت في الامتحان (مقلب)."},
-        {"type": "صراحة", "q": "من هو الشخص الذي لا تطيق وجوده في نفس الغرفة؟"},
-        {"type": "جرأة", "q": "غيّر لغة حسابك على ديسكورد إلى اللغة الهندية لمدة ساعة."},
-        {"type": "صراحة", "q": "ما هي أكبر كذبة كذبتها على مديرك/معلمك؟"},
-        {"type": "جرأة", "q": "صور نفسك بفيديو وأنت تقول 'أنا دجاجة' وانشره في الدردشة العامة."},
-        {"type": "صراحة", "q": "من هو الشخص الذي تتمنى أن تحذفه من حياتك؟"},
-        {"type": "جرأة", "q": "اقفز في حوض الاستحمام بملابسك (إذا أمكن)."},
-        {"type": "صراحة", "q": "ما هي أسوأ عادة لديك وتتمنى تغييرها؟"},
-        {"type": "جرأة", "q": "اجعل أصدقاءك يكتبون لك رسالة وأرسلها إلى رئيسك/معلمك."},
-        {"type": "صراحة", "q": "ما هو أكثر شيء ندمت عليه في حياتك العاطفية؟"},
-        {"type": "جرأة", "q": "تناول ملعقة صغيرة من شيء مقزز (مثل الكاتشب والملح)."},
-        {"type": "صراحة", "q": "من هو الشخص الذي يعتبره أسوأ عدو لك؟"},
-        {"type": "جرأة", "q": "قم بعمل 30 تمرين بطن الآن."},
-        {"type": "صراحة", "q": "ما هي أكبر شائعة سمعتها عن نفسك؟"},
-        {"type": "جرأة", "q": "تكلم بلهجة سعودية قوية لمدة 10 دقائق."},
-        {"type": "صراحة", "q": "ما هو أسوأ موقف محرج حدث لك في العمل/المدرسة؟"},
-        {"type": "جرأة", "q": "ارتدِ قميصاً مقلوباً واذهب إلى الخارج أو التقط صورة."},
-        {"type": "صراحة", "q": "من هو الشخص الذي تتمنى أن تعترف له بحبك؟"},
-        {"type": "جرأة", "q": "اذهب إلى الحمام واغسل وجهك بالصابون والماء البارد."},
-        {"type": "صراحة", "q": "ما هي أسوأ نصيحة قدمتها لصديق؟"},
-        {"type": "جرأة", "q": "ابدأ كل إجابة بكلمة 'نعم' حتى نهاية اللعبة."},
-        {"type": "صراحة", "q": "من هو الشخص الذي تتمنى أن تصفعه على وجهه؟"},
-        {"type": "جرأة", "q": "قم بعمل 10 تمرينات رفع (Pull-ups) إذا أمكن."},
-        {"type": "صراحة", "q": "ما هي أكبر صفة تكرهها في شخصيتك وتتمنى تغييرها؟"},
-        {"type": "جرأة", "q": "اكتب في الدردشة 'أنا أحب الموز' لمدة 5 مرات متتالية."},
-        {"type": "صراحة", "q": "من هو الشخص الذي تتمنى أن يختفي من حياتك؟"},
-        {"type": "جرأة", "q": "اتصل بصديق وقل له إنك تحبه وأغلق الخط."},
-        {"type": "صراحة", "q": "ما هي أسوأ عادة لديك وتتمنى تغييرها؟"},
-        {"type": "جرأة", "q": "ارفع صوتك عند التحدث في الهاتف."},
-        {"type": "صراحة", "q": "من هو الشخص الذي تتمنى أن تقتله؟"},
-        {"type": "جرأة", "q": "افعل حركة يوغا صعبة واحتفظ بها لمدة 30 ثانية."},
-        {"type": "صراحة", "q": "ما هو الشيء الذي تفعله بالرغم من أنه يضايقك؟"},
-        {"type": "جرأة", "q": "اتصل بصديق وقل له إنك ستنتظره خارج المنزل وأغلق الخط."},
-        {"type": "صراحة", "q": "ما هو الشيء الذي تخاف من الاعتراف به؟"},
-        {"type": "جرأة", "q": "اتصل بصديق وقل له إنك تحبه وأغلق الخط."},
-        {"type": "صراحة", "q": "من هو الشخص الذي تعتبره أسوأ عدو لك؟"},
-        {"type": "جرأة", "q": "افعل حركة يوغا صعبة واحتفظ بها لمدة 30 ثانية."},
-        {"type": "صراحة", "q": "ما هي أكبر صفة تكرهها في شخصيتك؟"},
-        {"type": "جرأة", "q": "اتصل بصديق وقل له إنك تحبه وأغلق الخط."},
-        {"type": "صراحة", "q": "ما هو الشيء الذي تفعله بالرغم من أنه يضايقك؟"},
-        {"type": "جرأة", "q": "اتصل بصديق وقل له إنك تحبه وأغلق الخط."},
+        {"type": "صراحة", "q": "ما هو الشيء الذي تخ
