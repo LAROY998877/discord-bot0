@@ -97,17 +97,22 @@ class TriviaQuestionView(discord.ui.View):
         self.author_id = author_id
         self.players = players
         self.current_q = random.choice(questions_list)
+        # اختيار لاعب عشوائي واحد للإجابة عند بدء السؤال
+        self.selected_responder = random.choice(players)
 
     @discord.ui.button(label="سؤال جديد 🎲", style=discord.ButtonStyle.primary)
     async def next_question(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id not in self.players:
             return await interaction.response.send_message("❌ أنت لست مشاركاً في هذه اللعبة!", ephemeral=True)
         
-        self.current_q = random.choice(self.questions_list)
+        self.current_q = random.choice(questions_list) if 'questions_list' in globals() else random.choice(self.questions_list)
+        # اختيار لاعب عشوائي جديد لكل سؤال جديد
+        self.selected_responder = random.choice(self.players)
+        
         players_mention = ", ".join([f"<@{p}>" for p in self.players])
         embed = discord.Embed(
             title=f"🧠 لعبة الأسئلة الجماعية (مستوى: {self.difficulty})",
-            description=f"**اللاعبون المشاركون:** {players_mention}\n\n**السؤال:**\n{self.current_q}",
+            description=f"**اللاعبون المشاركون:** {players_mention}\n\n🎯 **المكلف بالإجابة عشوائياً:** <@{self.selected_responder}>\n\n**السؤال:**\n{self.current_q}",
             color=discord.Color.purple()
         )
         await interaction.response.edit_message(embed=embed, view=self)
@@ -149,13 +154,16 @@ class TriviaLobbyView(discord.ui.View):
             return await interaction.response.send_message("❌ لا يمكن بدء اللعبة إلا إذا انضم أكثر من شخص (شخصين على الأقل)!", ephemeral=True)
         
         q_list = TRIVIA_QUESTIONS.get(self.difficulty, TRIVIA_QUESTIONS["عادي"])
-        view = TriviaQuestionView(self.difficulty, q_list, self.author_id, self.players)
         selected_q = random.choice(q_list)
+        # اختيار لاعب عشوائي واحد للإجابة عند البدء
+        selected_responder = random.choice(self.players)
+        
+        view = TriviaQuestionView(self.difficulty, q_list, self.author_id, self.players)
         players_mention = ", ".join([f"<@{p}>" for p in self.players])
 
         embed = discord.Embed(
             title=f"🧠 لعبة الأسئلة الجماعية (مستوى: {self.difficulty})",
-            description=f"**اللاعبون المشاركون:** {players_mention}\n\n**السؤال:**\n{selected_q}",
+            description=f"**اللاعبون المشاركون:** {players_mention}\n\n🎯 **المكلف بالإجابة عشوائياً:** <@{selected_responder}>\n\n**السؤال:**\n{selected_q}",
             color=discord.Color.purple()
         )
         await interaction.response.edit_message(embed=embed, view=view)
