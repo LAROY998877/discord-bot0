@@ -101,7 +101,7 @@ class TriviaQuestionView(discord.ui.View):
     async def auto_questions_loop(self):
         try:
             while self.is_running:
-                await asyncio.sleep(15)  # يتغير السؤال تلقائياً كل 15 ثانية
+                await asyncio.sleep(15)
                 if not self.is_running:
                     break
                 
@@ -466,7 +466,8 @@ async def register_command(interaction: discord.Interaction):
     await interaction.response.send_message("🎉 **تم تسجيلك بنجاح!** حصلت على لقب `المبتدئ` ورصيدك الأولي.", ephemeral=True)
 
 class TitleSelect(discord.ui.Select):
-    def __init__(self, unlocked_titles):
+    def __init__(self, unlocked_titles, author_id):
+        self.author_id = author_id
         title_emojis = {
             "المبتدئ": "🟢", "الامبراطور": "👑", "الملك": "🔱", "الغني": "💰",
             "القاتل": "🗡️", "السفاح": "🩸", "اسطورة القتال": "⚡", "اقوى الاقوياء": "🔥"
@@ -475,6 +476,9 @@ class TitleSelect(discord.ui.Select):
         super().__init__(placeholder="اختر لقباً من ألقابك المتاحة...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message("❌ هذه القائمة ليست لك ولا يمكنك تعديل لقب صاحب الملف!", ephemeral=True)
+            
         selected_title = self.values[0]
         users_col.update_one({"user_id": str(interaction.user.id)}, {"$set": {"custom_title": selected_title}})
         await interaction.response.edit_message(content=f"✨ **تم تفعيل لقبك الجديد بنجاح:** `{selected_title}`", view=None)
@@ -485,28 +489,31 @@ class ProfileView(discord.ui.View):
         self.author_id = author_id
         self.unlocked_titles = unlocked_titles
 
-    @discord.ui.button(label="اختر اللقب", style=discord.ButtonStyle.blurple, emoji="👑")
+    @discord.ui.button(label="تغيير اللقب الملكي 👑", style=discord.ButtonStyle.blurple)
     async def change_title(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message("❌ هذه الأزرار خاصة بصاحب الملف فقط! لا يمكنك العبث بها.", ephemeral=True)
+            
         view = discord.ui.View()
-        view.add_item(TitleSelect(self.unlocked_titles))
-        await interaction.response.send_message("📌 الألقاب المتاحة لك بناءً على إنجازاتك:", view=view, ephemeral=True)
+        view.add_item(TitleSelect(self.unlocked_titles, self.author_id))
+        await interaction.response.send_message("📌 الألقاب الأسطورية المتاحة لك بناءً على إنجازاتك الكبرى:", view=view, ephemeral=True)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ هذه القائمة ليست لك!", ephemeral=True)
+            await interaction.response.send_message("❌ عذراً، هذه القائمة تخص مقاتلاً آخر ولا يمكنك تفاعلك مع أزرارها!", ephemeral=True)
             return False
         return True
 
-@bot.tree.command(name="الملف", description="عرض الملف الشخصي والإنجازات والألقاب")
+@bot.tree.command(name="الملف", description="عرض الملف الشخصي الأسطوري للعامة مع تفاصيل وإحصائيات ضخمة")
 async def profile_command(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=False) # يظهر للكل في الروم
     user_id = str(interaction.user.id)
     
     unlocked_titles = check_and_update_titles(user_id)
     user_data = users_col.find_one({"user_id": user_id})
     
     if not user_data:
-        return await interaction.followup.send("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=True)
+        return await interaction.followup.send("❌ لم تقم بالتسجيل بعد في سجلات المقاتلين! استخدم أمر `/تسجيل` أولاً.", ephemeral=False)
     
     balance = user_data.get("balance", 0)
     diamonds = user_data.get("diamonds", 0)
@@ -514,15 +521,47 @@ async def profile_command(interaction: discord.Interaction):
     max_floor = user_data.get("max_floor", 0)
     kills = user_data.get("kills", 0)
     battles = user_data.get("battles_played", 0)
+    power = user_data.get("power", 100)
     
-    embed = discord.Embed(title="📜 الملف الشخصي للمقاتل", color=discord.Color.dark_gold())
-    embed.add_field(name="اللقب الحالي", value=f"`{custom_title}`", inline=False)
-    embed.add_field(name="الأرصدة", value=f"`{balance:,}` 🪙 | `💎 {diamonds:,}`", inline=False)
-    embed.add_field(name="الإحصائيات", value=f"🗼 أعلى طابق: `{max_floor}`\n⚔️ المعارك: `{battles}`\n💀 القتلات: `{kills}`", inline=False)
-    embed.add_field(name="الألقاب المتاحة", value=", ".join([f"`{t}`" for t in unlocked_titles]), inline=False)
+    embed = discord.Embed(
+        title=f"⚔️ السجل الأسطوري للمقاتل: {interaction.user.display_name} 🛡️",
+        description="*«هنا تُدون إنجازات الأبطال، وتُقاس القوى في ساحات الشرف والأبراج المظلمة. هذا السجل يعكس مسيرة مقاتل عظيم سطر اسمه في تاريخ السيرفر بحروف من نور ونار.»*",
+        color=discord.Color.from_rgb(212, 175, 55)
+    )
+    embed.set_thumbnail(url=interaction.user.display_avatar.url)
+    
+    embed.add_field(
+        name="👑 الرتبة واللقب الحالي",
+        value=f"```yaml\n{custom_title}\n```",
+        inline=False
+    )
+    embed.add_field(
+        name="💰 الخزينة والثروة الإمبراطورية",
+        value=f"• **العملات النقدية:** `{balance:,}` 🪙\n• **الألماس النادر:** `{diamonds:,}` 💎\n• **الحالة الاقتصادية:** `مستقرة ومزدهرة`",
+        inline=True
+    )
+    embed.add_field(
+        name="⚡ مؤشرات القوة القتالية",
+        value=f"• **مستوى الطاقة:** `{power:,}` ⚡\n• **المعارك المحسومة:** `{battles:,}` ⚔️\n• **عدد الخصوم المقضي عليهم:** `{kills:,}` 💀",
+        inline=True
+    )
+    embed.add_field(
+        name="🗼 إنجازات برج المعارك الأسطوري",
+        value=f"• **أعلى طابق تم اجتيازه:** `{max_floor} / 500` طابق 🗼\n• **نسبة الإنجاز في الأبراج:** `{(max_floor / 500) * 100:.1f}%` 📊",
+        inline=False
+    )
+    
+    titles_display = ", ".join([f"`{t}`" for t in unlocked_titles])
+    embed.add_field(
+        name="✨ الألقاب الأسطورية المفتوحة في سجلك",
+        value=f"{titles_display}\n*استمر في خوض التحديات الكبرى وصعود الطوابق لفتح المزيد من الألقاب السرية الفخمة!*",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"طلب بواسطة البطل: {interaction.user.name} • نظام السجلات الموحد", icon_url=interaction.client.user.display_avatar.url)
     
     view = ProfileView(interaction.user.id, unlocked_titles)
-    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+    await interaction.followup.send(embed=embed, view=view, ephemeral=False)
 
 @bot.tree.command(name="بنك", description="فتح الحساب البنكي")
 async def bank_command(interaction: discord.Interaction):
