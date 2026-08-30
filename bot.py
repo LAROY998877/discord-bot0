@@ -23,7 +23,7 @@ class BotClient(commands.Bot):
 
     async def setup_hook(self):
         await self.tree.sync()
-        print("✅ تم مزامنة البنك والمتاجر ونظام المعارك والطوابق بنجاح!")
+        print("✅ تم مزامنة البنك والمتاجر والمعارك والطوابق بنجاح!")
 
 bot = BotClient()
 
@@ -206,15 +206,13 @@ class FloorSelect(discord.ui.Select):
             discord.SelectOption(label="الطابق 4: قلعة الأرواح الهائمة", value="4", description="صعوبة: صعبة | أشباح ووحوش سحرية", emoji="🔴"),
             discord.SelectOption(label="الطابق 5: برج سيد الظلام (Boss)", value="5", description="صعوبة: أسطورية | زعيم الطابق الأخير وحاشيته", emoji="💀"),
         ]
-        super().__init__(placeholder="اختر الطابق المراد استكشافه وقؤاله...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="اختر الطابق المراد استكشافه وقتال أعدائه...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         floor_num = int(self.values[0])
         user_id = str(interaction.user.id)
-        user_data = users_col.find_one({"user_id": user_id}) or {}
 
-        # تحديد طبيعة الخصم بناءً على الطابق
         if floor_num < 5:
             enemy_type = "زومبي أو وحوش الحراسة"
             base_coins = floor_num * 350
@@ -222,10 +220,9 @@ class FloorSelect(discord.ui.Select):
             enemy_type = "زعيم الطابق الأسطوري (Boss)"
             base_coins = floor_num * 1000
 
-        # محاكاة القتال (نسبة نجاح تعتمد على الصعوبة وقوة اللاعب الوهمية، لنجعلها مضمونة بنسبة تفوق 75% مع تنوع الغنائم)
-        won = random.random() < (0.9 - (floor_num * 0.05))  # كل ما زاد الطابق زادت الصعوبة قليلاً
+        won = random.random() < (0.9 - (floor_num * 0.05))
         if floor_num == 5:
-            won = random.random() < 0.65  # الزعيم أصعب
+            won = random.random() < 0.65
 
         if not won:
             return await interaction.followup.send(
@@ -233,31 +230,25 @@ class FloorSelect(discord.ui.Select):
                 ephemeral=True
             )
 
-        # حساب المكاسب عشوائياً
         earned_coins = random.randint(base_coins, base_coins + 500)
         
-        # احتمالات ضئيلة لعملات نادرة (ألماس) وعتاد ظلام
-        # نسبة الألماس: مثلاً 15% إلى 30% حسب الطابق
-        diamond_chance = 0.10 + (floor_num * 0.04) # من 14% إلى 30%
+        diamond_chance = 0.10 + (floor_num * 0.04)
         earned_diamonds = random.randint(1, floor_num * 2) if random.random() < diamond_chance else 0
 
-        # نسبة الحصول على عتاد عادي عشوائي (مثلاً 35% فرصة)
         won_normal_item = None
         if random.random() < 0.35:
             random_cat = random.choice(list(NORMAL_SHOP_ITEMS.keys()))
             won_normal_item = random.choice(NORMAL_SHOP_ITEMS[random_cat])
 
-        # نسبة الحصول على عتاد ظلام أو شيء نادر جداً (ضئيلة جداً: من 2% إلى 7%)
-        dark_item_chance = 0.02 + (floor_num * 0.01) # من 3% إلى 7%
+        dark_item_chance = 0.02 + (floor_num * 0.01)
         won_dark_item = None
         if random.random() < dark_item_chance:
             random_dark_cat = random.choice(list(DARK_SHOP_ITEMS.keys()))
             won_dark_item = random.choice(DARK_SHOP_ITEMS[random_dark_cat])
 
-        # تحديث قاعدة البيانات
         update_query = {"$inc": {"balance": earned_coins}}
         if earned_diamonds > 0:
-            update_query["$inc"]["diamonds"] = earned_diamonds
+            update_query.setdefault("$inc", {})["diamonds"] = earned_diamonds
         
         items_to_push = []
         if won_normal_item:
@@ -270,7 +261,6 @@ class FloorSelect(discord.ui.Select):
 
         users_col.update_one({"user_id": user_id}, update_query, upsert=True)
 
-        # صياغة رسالة النصر والغنائم
         reward_desc = f"🪙 **عملات عادية:** `+{earned_coins}`"
         if earned_diamonds > 0:
             reward_desc += f"\n💎 **عملات نادرة (ألماس):** `+{earned_diamonds}` (صنفت ضمن النادر جداً!)"
@@ -335,6 +325,9 @@ class BattleSelect(discord.ui.Select):
         super().__init__(placeholder="اختر وجهتك في عالم المعارك...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
+        # تأجيل الاستجابة فوراً لتفادي خطأ انتهاء الـ 3 ثواني
+        await interaction.response.defer(ephemeral=True)
+        
         choice = self.values[0]
         user_id = str(interaction.user.id)
         user_data = users_col.find_one({"user_id": user_id}) or {}
@@ -357,24 +350,24 @@ class BattleSelect(discord.ui.Select):
                 color=discord.Color.red()
             )
             await room.send(embed=embed, view=view)
-            await interaction.response.send_message(f"✅ تم إنشاء روم المعركة الخاص بك بنجاح: {room.mention}!", ephemeral=True)
+            await interaction.followup.send(f"✅ تم إنشاء روم المعركة الخاص بك بنجاح: {room.mention}!", ephemeral=True)
 
         elif choice == "floors":
             floor_view = FloorView(interaction.user.id)
-            await interaction.response.send_message("🗼 **اختر الطابق الذي ترغب في غزوه وتجاوز مصاعبه:**", view=floor_view, ephemeral=True)
+            await interaction.followup.send("🗼 **اختر الطابق الذي ترغب في غزوه وتجاوز مصاعبه:**", view=floor_view, ephemeral=True)
 
         elif choice == "shop":
             view = ShopView(interaction.user.id, "normal")
-            await interaction.response.send_message("🏬 **المتاجر السريعة:** اختر القسم من القائمة أدناه:", view=view, ephemeral=True)
+            await interaction.followup.send("🏬 **المتاجر السريعة:** اختر القسم من القائمة أدناه:", view=view, ephemeral=True)
 
         elif choice == "upgrade":
-            await interaction.response.send_message("⚒️ **منطقة التطوير:** قريباً يمكنك دمج وتطوير قطع عتادك لزيادة قوتها!", ephemeral=True)
+            await interaction.followup.send("⚒️ **منطقة التطوير:** قريباً يمكنك دمج وتطوير قطع عتادك لزيادة قوتها!", ephemeral=True)
 
         elif choice == "inventory":
             inventory = user_data.get("inventory", [])
             inv_list = "\n".join([f"• {item['name']} `[{item['tier']}]` - `{item['stats']}`" for item in inventory]) if inventory else "الحقيبة فارغة تماماً."
             embed = discord.Embed(title="🎒 حقيبة العتاد الخاصة بك", description=inv_list, color=discord.Color.blue())
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
 class BattleView(discord.ui.View):
     def __init__(self, author_id):
