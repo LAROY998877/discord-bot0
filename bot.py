@@ -538,7 +538,7 @@ class FloorMainMenuView(discord.ui.View):
         cost = 150
         if bal < cost:
             await interaction.response.send_message(
-                f"❌ رصيدك غير كافي لتطوير العتاد! تكلفة التطوير `{cost} 💎`.",
+                "❌ رصيدك غير كافي لتطوير العتاد! تكلفة التطوير `150 💎`.",
                 ephemeral=True,
             )
             return
@@ -549,7 +549,7 @@ class FloorMainMenuView(discord.ui.View):
         )
         db_connection.commit()
         await interaction.response.send_message(
-            f"⚒️ تم تطوير عتادك بنجاح مقابل `{cost} 💎` وزادت نقاط قوتك بقيمة `+25`!",
+            "⚒️ تم تطوير عتادك بنجاح مقابل `150 💎` وزادت نقاط قوتك بقيمة `+25`!",
             ephemeral=True,
         )
 
@@ -566,7 +566,7 @@ class FloorMainMenuView(discord.ui.View):
         eq_name, eq_score, balance, floors, max_unlocked = cursor.fetchone()
 
         embed = discord.Embed(
-            title=f"🎒 حقيبة المغامر",
+            title="🎒 حقيبة المغامر",
             description=(
                 f"• 🗡️ **العتاد الحالي:** `{eq_name}`\n"
                 f"• ⚔️ **نقاط قوة العتاد:** `{eq_score}`\n"
@@ -593,11 +593,11 @@ async def floors_command(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🏢 برج الطوابق الأسطوري (1 إلى 1000)",
         description=(
-            f"مرحباً بك في بوابة الأبراج الكبرى.\n"
+            "مرحباً بك في بوابة الأبراج الكبرى.\n"
             f"• طابقك الحالي: `{current_floor}`\n"
             f"• أعلى طابق متاح: `{max_unlocked}/1000`\n"
             f"• قوتك الحالية: `{eq_score}` ⚔️\n\n"
-            f"اختر ما تحب من الأزرار بالأسفل للتنقل بين الصعود، المتاجر، تطوير العتاد، أو الحقيبة:"
+            "اختر ما تحب من الأزرار بالأسفل للتنقل بين الصعود، المتاجر، تطوير العتاد، أو الحقيبة:"
         ),
         color=discord.Color.dark_gold(),
     )
@@ -610,24 +610,56 @@ async def floors_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 5. الأبطال الأسطوريين
+# 5. الأبطال الأسطوريين الجدد (3 ذكور + 3 إناث)
 # ==========================================
 HEROES_DATA = {
-    "arthur": {
-        "title": "آرثر - فارس الظلال الملكي",
+    "vanguard": {
+        "title": "فانغارد - فارس الإمبراطورية الأبدي",
         "gender": "ذكر",
-        "power": 950,
-        "defense": 880,
-        "story": "فارس محارب ارتدى درع الملوك الفولاذي، وحمل سيف النور المخضب بالنار ليطهر الأراضي.",
+        "power": 920,
+        "defense": 950,
+        "story": "قائد الحرس الملكي الذي صمد وحيداً أمام جيش من التنانين لمدة ثلاثة أيام بلياليها، درعه مصنوع من حجر النيزك القديم.",
         "image": "https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800",
     },
-    "zeus": {
-        "title": "زيوس - إله الصواعق الأبدي",
+    "kaelthas": {
+        "title": "كائيلثاس - سيد اللهب المحرق",
         "gender": "ذكر",
-        "power": 990,
-        "defense": 750,
-        "story": "سيد العواصف الذي يتسيد القمم العالية، يطلق رعداً يزلزل الجبال.",
+        "power": 980,
+        "defense": 700,
+        "story": "أمير السحرة المنفي الذي سخر أرواح النيران البدائية في يديه، لتصبح تعويذاته قادرة على إذابة الجبال وتحويلها إلى رماد.",
         "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800",
+    },
+    "fenrir": {
+        "title": "فنرير - صياد العواصف الشبح",
+        "gender": "ذكر",
+        "power": 940,
+        "defense": 810,
+        "story": "محارب غامض يتحرك بسرعة البرق بين ظلال الغابات الملعونة، يحمل خنجراً مسحوراً يمتص طاقة الأعداء بنظرة واحدة.",
+        "image": "https://images.unsplash.com/photo-1563089145-599997674d42?w=800",
+    },
+    "valkyrie": {
+        "title": "فالكيري - فارسة السماء المضيئة",
+        "gender": "أنثى",
+        "power": 930,
+        "defense": 900,
+        "story": "محاربة مقدسة هبطت من السماء بجناحي نور، تقود أرواح الأبطال في المعارك العظمى وتزرع الرعب في قلوب الشياطين.",
+        "image": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800",
+    },
+    "morgana": {
+        "title": "مورغانا - ساحرة الظلال المطلقة",
+        "gender": "أنثى",
+        "power": 990,
+        "defense": 680,
+        "story": "ملكة الفنون المظلمة التي تلاعبت بالزمن والأبعاد، تستطيع فتح بوابات الجحيم وسحب أعدائها إلى العدم الأبدي.",
+        "image": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800",
+    },
+    "Aria": {
+        "title": "آريا - أميرة الرياح الفضية",
+        "gender": "أنثى",
+        "power": 910,
+        "defense": 850,
+        "story": "رامية السهام الأسطورية التي لا تخطئ هدفها أبداً، تطلق سهاماً مشبعة برياح عاصفة تقتلع الجيوش من جذورها.",
+        "image": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800",
     },
 }
 
@@ -637,16 +669,40 @@ class HeroSelectDropdown(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(
-                label="آرثر (فارس الظلال)",
-                description="ذكر | قوة عالية وسيف مقدس",
-                emoji="⚔️",
-                value="arthur",
+                label="فانغارد (فارس الإمبراطورية)",
+                description="ذكر | دفاع فولاذي وصلابة مطلقة",
+                emoji="🛡️",
+                value="vanguard",
             ),
             discord.SelectOption(
-                label="زيوس (سيد الصواعق)",
-                description="ذكر | طاقة رعدية مدمرة",
+                label="كائيلثاس (سيد اللهب)",
+                description="ذكر | هجوم ناري مدمر",
+                emoji="🔥",
+                value="kaelthas",
+            ),
+            discord.SelectOption(
+                label="فنرير (صياد العواصف)",
+                description="ذكر | سرعة وخفة برقية",
                 emoji="⚡",
-                value="zeus",
+                value="fenrir",
+            ),
+            discord.SelectOption(
+                label="فالكيري (فارسة السماء)",
+                description="أنثى | توازن عالي ونور مقدس",
+                emoji="✨",
+                value="valkyrie",
+            ),
+            discord.SelectOption(
+                label="مورغانا (ساحرة الظلال)",
+                description="أنثى | طاقة سحرية مظلمة فائقة",
+                emoji="🌑",
+                value="morgana",
+            ),
+            discord.SelectOption(
+                label="آريا (أميرة الرياح)",
+                description="أنثى | دقة قاتلة وسهام عاصفة",
+                emoji="🏹",
+                value="Aria",
             ),
         ]
         super().__init__(
@@ -674,7 +730,7 @@ class HeroSelectDropdown(discord.ui.Select):
                 f"📊 **المعدلات:**\n"
                 f"• الهجوم: `{hero['power']}` ⚔️\n"
                 f"• الدفاع: `{hero['defense']}` 🛡️\n\n"
-                f"✅ تم تعيينه بطلاً أساسياً!"
+                "✅ تم تعيينه بطلاً أساسياً!"
             ),
             color=discord.Color.purple(),
         )
@@ -899,7 +955,7 @@ class LoanModal(discord.ui.Modal, title="طلب قرض بنكي"):
             title="🏦 صندوق البنك المركزي - تمت الموافقة على القرض",
             description=(
                 f"لقد حصلت على قرض بنكي بقيمة `💎 {loan_val}` بنجاح.\n\n"
-                "⚠️ **تنبيه هام:** يجب عليك سداد القرض في أقرب وقت عبر زر **سداد القرض**، وفي حال تخلفك عن السداد، سيتم بيع عتادك وأغراضك تلقائياً لتسوية الدين!"
+                "⚠️ **تنبيه هام:** يجب عليك سداد القرض في أقرب وقت عبر زر **سداد القرض**، وفي حال تخلفك عن السداد، سيتم بيع عتادك وأغراضك تلقائياً لاستسوية الدين!"
             ),
             color=discord.Color.gold(),
         )
@@ -1102,8 +1158,17 @@ async def bank_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 8. لوحة المطورين والإدارة
+# 8. لوحة المطورين (مع شخصية السفاح السرية الخاصة بالمطور فقط)
 # ==========================================
+
+# بيانات شخصية السفاح المرعبة والسرية
+BUTCHER_HERO = {
+    "title": "السفاح - كابوس الأكوان المظلمة",
+    "power": 9999,
+    "defense": 9999,
+    "story": "كيان شيطاني مرعب ولد من رحم الدماء والظدام الأبدي، لا ينام ولا يرحم. تلامس خطاه أراضي الموتى فيرتجف لروعبها ملوك الطوابق. يحمل منجل المنون المقطر بالسموم الفتاكة، وقوته تتجاوز حدود العقل والبشر.",
+    "image": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800",
+}
 
 
 class DevPanelView(discord.ui.View):
@@ -1113,9 +1178,8 @@ class DevPanelView(discord.ui.View):
         self.author_id = author_id
 
     @discord.ui.button(
-        label="إحصائيات والأوامر",
+        label="📊 إحصائيات الأوامر",
         style=discord.ButtonStyle.blurple,
-        emoji="📊",
         row=0,
     )
     async def stats_button(
@@ -1133,6 +1197,48 @@ class DevPanelView(discord.ui.View):
             inline=True,
         )
         await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(
+        label="🗡️ تفعيل شخصية 'السفاح' (للمطور فقط)",
+        style=discord.ButtonStyle.danger,
+        row=0,
+    )
+    async def unlock_butcher_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        # التحقق الأمني الإضافي للتأكد أن المستخدم مطور حقاً
+        if (
+            not is_dev(interaction.user.id)
+            and interaction.user.id != interaction.guild.owner_id
+        ):
+            await interaction.response.send_message(
+                "❌ عذراً، هذه الشخصية المرعبة مخصصة للمطور حصرياً!",
+                ephemeral=True,
+            )
+            return
+
+        user_id = interaction.user.id
+        cursor.execute(
+            "UPDATE user_data SET hero_name = ?, equipment_score = 9999 WHERE user_id = ?",
+            (BUTCHER_HERO["title"], user_id),
+        )
+        db_connection.commit()
+
+        embed = discord.Embed(
+            title=f"⚠️ تم استدعاء الشخصية المرعبة: {BUTCHER_HERO['title']}",
+            description=(
+                f"**📖 القصة الملعونة:**\n{BUTCHER_HERO['story']}\n\n"
+                f"💀 **المعدلات الخارقة:**\n"
+                f"• الهجوم المطلق: `{BUTCHER_HERO['power']}` ⚔️\n"
+                f"• الدفاع المطلق: `{BUTCHER_HERO['defense']}` 🛡️\n\n"
+                "🩸 تم ربط سفاح الموت بملفك الشخصي بنجاح تام!"
+            ),
+            color=discord.Color.dark_red(),
+        )
+        embed.set_image(url=BUTCHER_HERO["image"])
+        await interaction.response.send_message(
+            embed=embed, ephemeral=True
+        )
 
 
 @bot.tree.command(name="مطور", description="فتح منيو لوحة تحكم المطورين")
@@ -1156,7 +1262,7 @@ async def dev_panel(interaction: discord.Interaction):
 
     embed = discord.Embed(
         title="✨ منيو الإدارة المركزية للمطورين",
-        description="اختر الخيار المناسب:",
+        description="اختر الخيار المناسب من لوحة التحكم السرية:",
         color=discord.Color.from_rgb(40, 40, 45),
     )
     view = DevPanelView(interaction.user.id)
