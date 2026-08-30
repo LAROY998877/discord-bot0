@@ -368,5 +368,10 @@ async def games_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-# تشغيل البوت باستخدام متغير البيئة في Railway (تأكد أن اسم المتغير لديك هو TOKEN)
-bot.run(os.getenv("TOKEN"))
+# ضع توكن البوت الخاص بك هنا بين علامات التنصيص
+TOKEN = "YOUR_BOT_TOKEN"
+
+if TOKEN == "YOUR_BOT_TOKEN" or not TOKEN:
+    print("خطأ: لم يتم العثور على توكن البوت")
+else:
+    bot.run(TOKEN)
