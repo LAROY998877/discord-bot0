@@ -85,7 +85,7 @@ TRIVIA_QUESTIONS = {
     ]
 }
 
-# ================== نظام الألعاب (أسئلة مع اختيار عشوائي لمجيب واحد) ==================
+# ================== نظام الألعاب الجماعية ==================
 class TriviaQuestionView(discord.ui.View):
     def __init__(self, difficulty, questions_list, author_id, players):
         super().__init__(timeout=300)
@@ -205,34 +205,93 @@ async def games_command(interaction: discord.Interaction):
     view = GamesMenuView(interaction.user.id)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
-# ================== نظام المعارك الفخم (1v1, 2v2, 3v3 والطوابق) ==================
-class ActiveBattleView(discord.ui.View):
-    def __init__(self, p1_hp, p2_hp, p1_name, p2_name):
-        super().__init__(timeout=60)
-        self.p1_hp = p1_hp
-        self.p2_hp = p2_hp
-        self.p1_name = p1_name
-        self.p2_name = p2_name
+# ================== نظام معارك الطوابق والقتال التفاعلي ==================
+class FloorFightView(discord.ui.View):
+    def __init__(self, user_id, target_floor, player_hp, monster_hp, monster_name):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.target_floor = target_floor
+        self.player_hp = player_hp
+        self.monster_hp = monster_hp
+        self.monster_name = monster_name
 
-    @discord.ui.button(label="⚔️ هجوم عنيف", style=discord.ButtonStyle.danger)
-    async def attack_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        damage = random.randint(15, 35)
-        self.p2_hp = max(0, self.p2_hp - damage)
+    @discord.ui.button(label="⚔️ هجوم", style=discord.ButtonStyle.danger)
+    async def attack(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ هذه المعركة ليست لك!", ephemeral=True)
         
-        if self.p2_hp <= 0:
+        p_dmg = random.randint(20, 40)
+        m_dmg = random.randint(10, 30 + (self.target_floor // 20))
+        
+        self.monster_hp = max(0, self.monster_hp - p_dmg)
+        if self.monster_hp > 0:
+            self.player_hp = max(0, self.player_hp - m_dmg)
+
+        if self.monster_hp <= 0:
+            users_col.update_one({"user_id": str(self.user_id)}, {"$max": {"max_floor": self.target_floor}, "$inc": {"balance": self.target_floor * 50}})
             embed = discord.Embed(
-                title="🏆 نهاية المعركة",
-                description=f"💥 **ضربة قاضية!**\n🩸 فقد الخصم `{damage}` نقطة دم.\n\n👑 الفائز في المعركة هو: **{self.p1_name}**!",
+                title=f"🎉 تم انتصارك في الطابق {self.target_floor}!",
+                description=f"🏆 لقد قتلت **{self.monster_name}** بنجاح!\n💰 حصلت على مكافأة مالية وهبطت في السجل برقم طابق أعلى.",
                 color=discord.Color.gold()
             )
             return await interaction.response.edit_message(embed=embed, view=None)
 
+        if self.player_hp <= 0:
+            embed = discord.Embed(
+                title="💀 هزيمة نكراء!",
+                description=f"لقد سحقتك قوة **{self.monster_name}** في الطابق {self.target_floor}. حاول تطوير عتادك أولاً!",
+                color=discord.Color.dark_red()
+            )
+            return await interaction.response.edit_message(embed=embed, view=None)
+
         embed = discord.Embed(
-            title="⚔️ ساحة المعركة المشتعلة",
-            description=f"🩸 تلقى **{self.p2_name}** ضربة قوية ونقص دم بمقدار `{damage}`!\n\n🔹 **{self.p1_name} (دمه):** `{'❤️' * (self.p1_hp // 20)}` ({self.p1_hp}/100)\n🔸 **{self.p2_name} (دمه):** `{'❤️' * (self.p2_hp // 20)}` ({self.p2_hp}/100)",
-            color=discord.Color.dark_red()
+            title=f"🗼 معركة الطابق {self.target_floor} ضد {self.monster_name}",
+            description=f"🩸 هجمت وأحدثت ضرر بقيمة `{p_dmg}`!\n🩸 رد الوحش بهجوم وأحدث ضرر بقيمة `{m_dmg}`!\n\n🛡️ **دمك:** `{self.player_hp}/100`\n👹 **دم الوحش:** `{self.monster_hp}`",
+            color=discord.Color.red()
         )
         await interaction.response.edit_message(embed=embed, view=self)
+
+class FloorLobbyView(discord.ui.View):
+    def __init__(self, user_id, current_floor):
+        super().__init__(timeout=180)
+        self.user_id = user_id
+        self.current_floor = current_floor
+
+    @discord.ui.button(label="⚔️ ابدأ المواجهة والصعود", style=discord.ButtonStyle.danger, emoji="🔥")
+    async def start_fight(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ هذه القائمة ليست لك!", ephemeral=True)
+        
+        next_floor = min(500, self.current_floor + 1)
+        monster_names = ["حارس البوابات الظلامي", "عملاق الحمم البركانية", "تنين الأبراج الأسطوري", "سيد الظلال المرعب"]
+        m_name = random.choice(monster_names)
+        m_hp = 100 + (next_floor * 5)
+        
+        embed = discord.Embed(
+            title=f"🗼 المعركة المشتعلة - الطابق {next_floor}",
+            description=f"👹 ظهر **{m_name}** في وجهك!\n\n🛡️ **دمك:** `100/100`\n👹 **دم الوحش:** `{m_hp}/{m_hp}`\n\nاضغط على **هجوم** لتوجيه ضربتك القاضية!",
+            color=discord.Color.dark_red()
+        )
+        view = FloorFightView(self.user_id, next_floor, 100, m_hp, m_name)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    @discord.ui.button(label="المتجر 🛒", style=discord.ButtonStyle.secondary)
+    async def shop_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ هذه القائمة ليست لك!", ephemeral=True)
+        await interaction.response.send_message("🛒 **المتجر العام:** قريباً سيتم توفير الأسلحة والدروع للشراء بالعملات!", ephemeral=True)
+
+    @discord.ui.button(label="تطوير العتاد 🛠️", style=discord.ButtonStyle.secondary)
+    async def upgrade_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ هذه القائمة ليست لك!", ephemeral=True)
+        await interaction.response.send_message("🛠️ **منطقة تطوير العتاد:** استخدم أرباحك لترقية سيوفك ودروعك لتتحمل الطوابق العليا!", ephemeral=True)
+
+    @discord.ui.button(label="الحقيبة 🎒", style=discord.ButtonStyle.secondary)
+    async def inventory_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ هذه القائمة ليست لك!", ephemeral=True)
+        await interaction.response.send_message("🎒 **حقيبتك:** تحتوي على الألماس والمكتسبات الحالية.", ephemeral=True)
 
 class BattleModeSelect(discord.ui.Select):
     def __init__(self):
@@ -248,14 +307,12 @@ class BattleModeSelect(discord.ui.Select):
         choice = self.values[0]
         
         if choice in ["1v1", "2v2", "3v3"]:
-            p1_hp, p2_hp = 100, 100
             embed = discord.Embed(
                 title=f"⚔️ انطلاق معركة {choice}",
-                description=f"🔥 بدأت المواجهة بنجاح داخل الروم!\n\n🔹 **{interaction.user.name} (دمه):** `❤️❤️❤️❤️❤️` (100/100)\n🔸 **الخصم العشوائي (دمه):** `❤️❤️❤️❤️❤️` (100/100)",
+                description=f"🔥 بدأت المواجهة بنجاح داخل الروم بين المشاركين!",
                 color=discord.Color.red()
             )
-            view = ActiveBattleView(p1_hp, p2_hp, interaction.user.name, "الخصم العشوائي")
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
+            await interaction.response.send_message(embed=embed, ephemeral=False)
             
         elif choice == "floors":
             user_id = str(interaction.user.id)
@@ -264,10 +321,11 @@ class BattleModeSelect(discord.ui.Select):
             
             embed = discord.Embed(
                 title="🗼 برج المعارك الأسطوري (إلى طابق 500)",
-                description=f"أهلاً بك في نظام الطوابق التصاعدي.\nأعلى طابق وصلته حالياً: **{current_floor} / 500**\n\nكلما صعدت طابقاً أعلى، زادت قوة الوحوش وضراوة التحدي!",
+                description=f"أهلاً بك في نظام الطوابق التصاعدي.\nأعلى طابق وصلته حالياً: **{current_floor} / 500**\n\nاختر من الأزرار أدناه للبدء بالمواجهة أو استعراض عتادك والمتجر:",
                 color=discord.Color.dark_orange()
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            view = FloorLobbyView(interaction.user.id, current_floor)
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 class BattleMenuView(discord.ui.View):
     def __init__(self):
