@@ -128,7 +128,7 @@ class RegisterModal(discord.ui.Modal, title="التسجيل الإجباري ا�
         db_connection.commit()
 
         await interaction.response.send_message(
-            f"✅ **تم تسجيلك بنجاح يابطل!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك خوض غمار برج الطوابق الألف!",
+            f"✅ **تم تسجيلك بنجاح يابطل!**\n👤 الاسم: `{name}`\n🎂 العمر: `{age}`\n🚻 الجنس: `{gender}`\n\nالآن يمكنك استخدام أمر `/الطوابق`!",
             ephemeral=True,
         )
 
@@ -319,7 +319,37 @@ async def profile_command(
 
 
 # ==========================================
-# 4. نظام برج الطوابق الألف (1 إلى 1000) مع الـ Bosses والجوائز
+# 4. أمر الحقيبة المنفصل
+# ==========================================
+
+
+@bot.tree.command(name="الحقيبة", description="عرض حقيبتك والمعدات والعتاد الحالي")
+async def inventory_command(interaction: discord.Interaction):
+    if not is_registered(interaction.user.id):
+        await interaction.response.send_modal(RegisterModal())
+        return
+
+    cursor.execute(
+        "SELECT equipment_name, equipment_score, balance, floors, max_unlocked_floor FROM user_data WHERE user_id = ?",
+        (interaction.user.id,),
+    )
+    eq_name, eq_score, balance, floors, max_unlocked = cursor.fetchone()
+
+    embed = discord.Embed(
+        title=f"🎒 حقيبة المغامر: {interaction.user.display_name}",
+        description=(
+            f"• 🗡️ **العتاد الحالي:** `{eq_name}`\n"
+            f"• ⚔️ **نقاط قوة العتاد:** `{eq_score}`\n"
+            f"• 💎 **العملات:** `{balance}`\n"
+            f"• 🏢 **الطابق الحالي:** `{floors}` (أقصى طابق متاح: `{max_unlocked}/1000`)"
+        ),
+        color=discord.Color.blue(),
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ==========================================
+# 5. نظام الطوابق الشامل (أمر رئيسي يفتح منيو التفاعل)
 # ==========================================
 
 
@@ -333,14 +363,13 @@ class FloorBattleView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message(
-                "❌ هذه المعركة لا تخصك! ارفع طوابقك الخاصة عبر أمر `/الطوابق`.",
-                ephemeral=True,
+                "❌ هذه المعركة لا تخصك!", ephemeral=True
             )
             return False
         return True
 
     @discord.ui.button(
-        label="⚔️ هاجم زعيم الطابق!",
+        label="⚔️ تنفيذ الهجوم على الزعيم",
         style=discord.ButtonStyle.danger,
         emoji="🔥",
     )
@@ -348,19 +377,15 @@ class FloorBattleView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         user_id = interaction.user.id
-
-        # جلب بيانات اللاعب وقوته
         cursor.execute(
             "SELECT equipment_score, balance, max_unlocked_floor FROM user_data WHERE user_id = ?",
             (user_id,),
         )
         eq_score, balance, max_unlocked = cursor.fetchone()
 
-        # حساب صعوبة البوس بناءً على رقم الطابق (كلما زاد الطابق زادت الصعوبة وقوة البوس)
         boss_power = self.target_floor * 15 + random.randint(50, 200)
         player_total_power = eq_score + random.randint(10, 80)
 
-        # أسماء زعماء عشوائية حسب مراحل الطوابق
         boss_names = [
             "حارس الظل الملعون",
             "ملك الغول الحديدي",
@@ -373,18 +398,14 @@ class FloorBattleView(discord.ui.View):
         ]
 
         if player_total_power >= boss_power or self.target_floor <= max_unlocked:
-            # ربح المعركة
             reward_coins = self.target_floor * 50 + random.randint(100, 500)
             reward_eq_score = self.target_floor * 2 + random.randint(5, 15)
-
-            # أسماء عتاد بسيط ومتقدم يحصل عليه اللاعب
             loot_names = [
                 "سيف برونزي مهترئ",
                 "درع جلدي متين",
                 "خنجر الصياد السريع",
                 "صولجان الحارس القديم",
                 "عباءة الظل الخفية",
-                "رمح الفرسان الملكي",
             ]
             won_loot = random.choice(loot_names) + f" (طابق {self.target_floor})"
 
@@ -393,7 +414,6 @@ class FloorBattleView(discord.ui.View):
                 if self.target_floor == max_unlocked
                 else max_unlocked
             )
-            next_floor = self.target_floor + 1 if new_max > max_unlocked else max_unlocked
 
             cursor.execute(
                 """
@@ -417,92 +437,223 @@ class FloorBattleView(discord.ui.View):
             db_connection.commit()
 
             embed = discord.Embed(
-                title=f"🎉 انتصار ساحق في الطابق {self.target_floor}!",
+                title=f"🎉 انتصار في الطابق {self.target_floor}!",
                 description=(
-                    f"**⚔️ خصمك:** `{boss_title}` (قوة الزعيم: {boss_power})\n"
-                    f"**🛡️ قوتك الإجمالية:** {player_total_power}\n\n"
-                    f"🎁 **الغنائم والجوائز المكتسبة:**\n"
-                    f"• عملات ذهبية: `+{reward_coins}` 💎\n"
-                    f"• نقاط عتاد إضافية: `+{reward_eq_score}` ⚔️\n"
-                    f"• العتاد المكتسب الجديد: **{won_loot}** 🛡️\n\n"
-                    f"🚀 *تم فتح الطريق للصعود إلى الطابق التالي!*"
+                    f"**⚔️ الزعيم المنهزم:** `{boss_title}` (قوة الزعيم: {boss_power})\n"
+                    f"**🛡️ قوتك:** {player_total_power}\n\n"
+                    f"🎁 **الجوائز:**\n"
+                    f"• عملات: `+{reward_coins}` 💎\n"
+                    f"• نقاط عتاد: `+{reward_eq_score}` ⚔️\n"
+                    f"• العتاد الجديد: **{won_loot}**"
                 ),
                 color=discord.Color.green(),
-            )
-            embed.set_image(
-                url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800"
             )
             for child in self.children:
                 child.disabled = True
             await interaction.response.edit_message(embed=embed, view=self)
-
         else:
-            # خسارة المعركة
             embed = discord.Embed(
-                title=f"💀 هزيمة مريرة في الطابق {self.target_floor}!",
+                title=f"💀 هزيمة في الطابق {self.target_floor}!",
                 description=(
-                    f"**⚔️ خصمك الزعيم:** `{boss_title}` (قوة الزعيم: {boss_power})\n"
-                    f"**🛡️ قوتك الإجمالية:** {player_total_power}\n\n"
-                    f"❌ **السبب:** عتادك الحالي أو نقاط قوتك غير كافية لهزيمة هذا الزعيم المرعب في هذا العمق!\n"
-                    f"💡 *نصيحة:* قم بتطوير عتادك عبر المتاجر أو كرر محاولة طوابق أقل لجمع نقاط قوة أعلى قبل العودة."
+                    f"**⚔️ الزعيم:** `{boss_title}` (قوة الزعيم: {boss_power})\n"
+                    f"**🛡️ قوتك:** {player_total_power}\n\n"
+                    f"❌ عتادك ضعيف جداً مقارنة بقوة الزعيم في هذا الطابق! قم بتطوير عتادك أولاً."
                 ),
                 color=discord.Color.dark_red(),
-            )
-            embed.set_image(
-                url="https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800"
             )
             await interaction.response.edit_message(embed=embed, view=self)
 
 
+class SelectFloorDropdown(discord.ui.Select):
+
+    def __init__(self, max_unlocked: int):
+        # توليد خيارات الطوابق المتاحة للاعب
+        options = []
+        # عرض بعض الخيارات المتاحة بناءً على ما فتحه اللاعب
+        start_f = max(1, max_unlocked - 20)
+        end_f = max_unlocked
+        for f in range(end_f, start_f - 1, -1):
+            options.append(
+                discord.SelectOption(
+                    label=f"الطابق رقم {f}",
+                    description=f"دخول معركة زعيم الطابق {f}",
+                    emoji="🏢",
+                    value=str(f),
+                )
+            )
+        super().__init__(
+            placeholder="اختر الطابق الذي تريد خوض معركته...",
+            min_values=1,
+            max_values=1,
+            options=options[:25],
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        floor_num = int(self.values[0])
+        embed = discord.Embed(
+            title=f"🏢 الاستعداد لمعركة الطابق [{floor_num}/1000]",
+            description="اضغط على زر الهجوم بالأسفل لبدء المعركة ضد زعيم الطابق:",
+            color=discord.Color.dark_gold(),
+        )
+        view = FloorBattleView(interaction.user.id, floor_num)
+        await interaction.response.send_message(
+            embed=embed, view=view, ephemeral=True
+        )
+
+
+class FloorMainMenuView(discord.ui.View):
+
+    def __init__(self, user_id: int):
+        super().__init__(timeout=180)
+        self.user_id = user_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "❌ هذه القائمة لا تخصك!", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(
+        label="صعود الطوابق",
+        style=discord.ButtonStyle.primary,
+        emoji="🏢",
+        row=0,
+    )
+    async def choose_floor_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute(
+            "SELECT max_unlocked_floor FROM user_data WHERE user_id = ?",
+            (self.user_id,),
+        )
+        max_unlocked = cursor.fetchone()[0]
+
+        view = discord.ui.View()
+        view.add_item(SelectFloorDropdown(max_unlocked))
+        await interaction.response.send_message(
+            "اختر الطابق الذي ترغب باختراقه من القائمة:",
+            view=view,
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="المتجر العادي",
+        style=discord.ButtonStyle.success,
+        emoji="🛍️",
+        row=0,
+    )
+    async def normal_shop_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        embed = discord.Embed(
+            title="🛍️ المتجر العادي الإمبراطوري",
+            description="استخدم أمر `/المتجر` لعرض الأسلحة أو قم بشرائها مباشرة.",
+            color=discord.Color.gold(),
+        )
+        await interaction.response.send_message(
+            embed=embed, view=NormalShopView(), ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="متجر الظلام",
+        style=discord.ButtonStyle.danger,
+        emoji="🌑",
+        row=0,
+    )
+    async def dark_shop_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        embed = discord.Embed(
+            title="🌑 متجر الظلام السري",
+            description="أسلحة محرمة تمنحك قوة خارقة.",
+            color=discord.Color.dark_red(),
+        )
+        await interaction.response.send_message(
+            embed=embed, view=DarkShopView(), ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="تطوير العتاد",
+        style=discord.ButtonStyle.secondary,
+        emoji="⚒️",
+        row=1,
+    )
+    async def upgrade_eq_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        # خصم مبلغ وتطوير العتاد
+        cursor.execute(
+            "SELECT balance, equipment_score FROM user_data WHERE user_id = ?",
+            (self.user_id,),
+        )
+        bal, eq_sc = cursor.fetchone()
+        cost = 150
+        if bal < cost:
+            await interaction.response.send_message(
+                f"❌ رصيدك غير كافي لتطوير العتاد! تكلفة التطوير `{cost} 💎`.",
+                ephemeral=True,
+            )
+            return
+
+        cursor.execute(
+            "UPDATE user_data SET balance = balance - ?, equipment_score = equipment_score + 25 WHERE user_id = ?",
+            (cost, self.user_id),
+        )
+        db_connection.commit()
+        await interaction.response.send_message(
+            f"⚒️ تم تطوير عتادك بنجاح مقابل `{cost} 💎` وزادت نقاط قوتك بقيمة `+25`!",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="الحقيبة", style=discord.ButtonStyle.secondary, emoji="🎒", row=1
+    )
+    async def bag_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        cursor.execute(
+            "SELECT equipment_name, equipment_score, balance, floors, max_unlocked_floor FROM user_data WHERE user_id = ?",
+            (self.user_id,),
+        )
+        eq_name, eq_score, balance, floors, max_unlocked = cursor.fetchone()
+
+        embed = discord.Embed(
+            title=f"🎒 حقيبة المغامر",
+            description=(
+                f"• 🗡️ **العتاد الحالي:** `{eq_name}`\n"
+                f"• ⚔️ **نقاط قوة العتاد:** `{eq_score}`\n"
+                f"• 💎 **العملات:** `{balance}`\n"
+                f"• 🏢 **الطابق الحالي:** `{floors}` (أقصى طابق: `{max_unlocked}/1000`)"
+            ),
+            color=discord.Color.blue(),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 @bot.tree.command(
-    name="الطوابق", description="اختر واصعد في برج الطوابق الألف (1 إلى 1000) وقاتل الزعماء للحصول على الغنائم"
+    name="الطوابق", description="فتح منيو برج الطوابق الألف والخيارات الرئيسية"
 )
-@app_commands.describe(floor_number="رقم الطابق الذي ترغب في دخوله (من 1 إلى 1000)")
-async def floors_command(
-    interaction: discord.Interaction, floor_number: int = 1
-):
+async def floors_command(interaction: discord.Interaction):
     if not is_registered(interaction.user.id):
         await interaction.response.send_modal(RegisterModal())
         return
 
-    if floor_number < 1 or floor_number > 1000:
-        await interaction.response.send_message(
-            "❌ عذراً، برج الطوابق يتراوح بين الطابق **1** و **1000** كحد أقصى!",
-            ephemeral=True,
-        )
-        return
-
     cursor.execute(
-        "SELECT max_unlocked_floor, equipment_score FROM user_data WHERE user_id = ?",
+        "SELECT max_unlocked_floor, equipment_score, floors FROM user_data WHERE user_id = ?",
         (interaction.user.id,),
     )
-    max_unlocked, eq_score = cursor.fetchone()
-
-    if floor_number > max_unlocked:
-        await interaction.response.send_message(
-            f"❌ لا يمكنك دخول الطابق **{floor_number}** لأن أقصى طابق متاح لك فتحه هو `{max_unlocked}`! اكتسح الطوابق بترتيبها.",
-            ephemeral=True,
-        )
-        return
-
-    # حساب صعوبة الطابق المعروض
-    difficulty_desc = (
-        "سهل 🟢"
-        if floor_number <= 100
-        else (
-            "متوسط 🟡"
-            if floor_number <= 400
-            else "صعب جداً 🔥" if floor_number <= 800 else "مستوى الهلاك الأبدي 💀"
-        )
-    )
+    max_unlocked, eq_score, current_floor = cursor.fetchone()
 
     embed = discord.Embed(
-        title=f"🏢 برج الطوابق الأسطوري - الطابق [{floor_number}/1000]",
+        title="🏢 برج الطوابق الأسطوري (1 إلى 1000)",
         description=(
-            f"مرحباً بك في أعماق الطابق رقم **{floor_number}**.\n"
-            f"• مستوى الصعوبة: **{difficulty_desc}**\n"
-            f"• قوتك الحالية للعتاد: `{eq_score}` ⚔️\n\n"
-            f"⚠️ **تحذير:** ينتظرك زعيم شرس في هذا الطابق. هل أنت مستعد لخوض المعركة وربح العتاد والعملات؟"
+            f"مرحباً بك في بوابة الأبراج الكبرى.\n"
+            f"• طابقك الحالي: `{current_floor}`\n"
+            f"• أعلى طابق متاح: `{max_unlocked}/1000`\n"
+            f"• قوتك الحالية: `{eq_score}` ⚔️\n\n"
+            f"اختر ما تحب من الأزرار بالأسفل للتنقل بين الصعود، المتاجر، تطوير العتاد، أو الحقيبة:"
         ),
         color=discord.Color.dark_gold(),
     )
@@ -510,12 +661,12 @@ async def floors_command(
         url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800"
     )
 
-    view = FloorBattleView(interaction.user.id, floor_number)
+    view = FloorMainMenuView(interaction.user.id)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 # ==========================================
-# 5. الأبطال الأسطوريين
+# 6. الأبطال الأسطوريين
 # ==========================================
 HEROES_DATA = {
     "arthur": {
@@ -523,7 +674,7 @@ HEROES_DATA = {
         "gender": "ذكر",
         "power": 950,
         "defense": 880,
-        "story": "فارس محارب ارتدى درع الملوك الفولاذي، وحمل سيف النور المخضب بالنار ليطهر الأراضي من الوحوش الأسطورية.",
+        "story": "فارس محارب ارتدى درع الملوك الفولاذي، وحمل سيف النور المخضب بالنار ليطهر الأراضي.",
         "image": "https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800",
     },
     "zeus": {
@@ -531,7 +682,7 @@ HEROES_DATA = {
         "gender": "ذكر",
         "power": 990,
         "defense": 750,
-        "story": "سيد العواصف الذي يتسيد القمم العالية، يطلق رعداً يزلزل الجبال ويدمر جيوش الأعداء بلمح البصر.",
+        "story": "سيد العواصف الذي يتسيد القمم العالية، يطلق رعداً يزلزل الجبال.",
         "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800",
     },
 }
@@ -555,7 +706,7 @@ class HeroSelectDropdown(discord.ui.Select):
             ),
         ]
         super().__init__(
-            placeholder="اختر بطلاً أسطورياً لعرض قصته وصورته...",
+            placeholder="اختر بطلاً أسطورياً لعرض قصته...",
             min_values=1,
             max_values=1,
             options=options,
@@ -573,14 +724,13 @@ class HeroSelectDropdown(discord.ui.Select):
         db_connection.commit()
 
         embed = discord.Embed(
-            title=f"🛡️ استعراض البطل الفانتازي: {hero['title']}",
+            title=f"🛡️ البطل: {hero['title']}",
             description=(
-                f"**📖 قصة البطل:**\n{hero['story']}\n\n"
-                f"📊 **معدلات القوة:**\n"
-                f"• قوة الهجوم: `{hero['power']}` ⚔️\n"
-                f"• قوة الدفاع: `{hero['defense']}` 🛡️\n"
-                f"• الجنس: `{hero['gender']}`\n\n"
-                f"✅ *تم تعيين هذا البطل كبطل أساسي لحسابك!*"
+                f"**📖 القصة:**\n{hero['story']}\n\n"
+                f"📊 **المعدلات:**\n"
+                f"• الهجوم: `{hero['power']}` ⚔️\n"
+                f"• الدفاع: `{hero['defense']}` 🛡️\n\n"
+                f"✅ تم تعيينه بطلاً أساسياً!"
             ),
             color=discord.Color.purple(),
         )
@@ -595,44 +745,35 @@ class HeroMenuView(discord.ui.View):
         self.add_item(HeroSelectDropdown())
 
 
-@bot.tree.command(
-    name="الابطال", description="فتح منيو الأبطال الفانتازيا وقصصهم الأسطورية"
-)
+@bot.tree.command(name="الابطال", description="فتح قاعة الأبطال الفانتازيا")
 async def heroes_command(interaction: discord.Interaction):
     if not is_registered(interaction.user.id):
         await interaction.response.send_modal(RegisterModal())
         return
 
     embed = discord.Embed(
-        title="🌟 قاعة الأبطال الفانتازيا الأسطوريين",
-        description="اختر بطلاً من القائمة المنسدلة بالأسفل لاستعراض قصته ومعدلات قوته:",
+        title="🌟 قاعة الأبطال الأسطوريين",
+        description="اختر بطلاً من القائمة لاستعراضه:",
         color=discord.Color.dark_gold(),
-    )
-    embed.set_image(
-        url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800"
     )
     view = HeroMenuView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 # ==========================================
-# 6. المتاجر (المتجر العادي + متجر الظلام)
+# 7. المتاجر (المتجر العادي + متجر الظلام)
 # ==========================================
 
 NORMAL_SHOP_ITEMS = {
     "sword": {
         "title": "سيف اللهب الأبدي",
         "price": "250 💎",
-        "damage": "+50 هجوم",
-        "desc": "سيف مشتعل بنيران التنانين القديمة.",
-        "image": "https://images.unsplash.com/photo-1589241062272-c0a000071dfa?w=800",
+        "desc": "سيف مشتعل بنيران التنانين.",
     },
     "hammer": {
         "title": "مطرقة الرعد الكونية",
         "price": "320 💎",
-        "damage": "+70 تحطيم",
-        "desc": "مطرقة مصممة من نيازك ساطعة.",
-        "image": "https://images.unsplash.com/photo-1601933470077-0afdd71f5424?w=800",
+        "desc": "مطرقة من نيازك ساطعة.",
     },
 }
 
@@ -673,8 +814,7 @@ class NormalShopDropdown(discord.ui.Select):
         db_connection.commit()
 
         await interaction.response.send_message(
-            f"✅ تم شراء وتجهيز `{item['title']}` بنجاح وزادت قوتك!",
-            ephemeral=True,
+            f"✅ تم شراء وتجهيز `{item['title']}` بنجاح!", ephemeral=True
         )
 
 
@@ -693,7 +833,7 @@ async def shop_command(interaction: discord.Interaction):
 
     embed = discord.Embed(
         title="🛍️ المتجر العادي الإمبراطوري",
-        description="اختر سلاحاً لتعزيز قوتك في الطوابق:",
+        description="اختر سلاحاً لتعزيز قوتك:",
         color=discord.Color.gold(),
     )
     view = NormalShopView()
@@ -704,10 +844,8 @@ DARK_SHOP_ITEMS = {
     "dark_blade": {
         "title": "شفرة الموت المظلمة",
         "price": "666 💎",
-        "damage": "+150 هجوم شيطاني",
-        "desc": "شفرة مسحورة تنبعث منها طاقة الهلاك.",
-        "image": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800",
-    },
+        "desc": "شفرة مسحورة بطاقة الهلاك.",
+    }
 }
 
 
@@ -723,7 +861,7 @@ class DarkShopDropdown(discord.ui.Select):
             )
         ]
         super().__init__(
-            placeholder="اختر سلاحاً محرماً من متجر الظلام...",
+            placeholder="اختر سلاحاً من متجر الظلام...",
             min_values=1,
             max_values=1,
             options=options,
@@ -741,8 +879,7 @@ class DarkShopDropdown(discord.ui.Select):
         db_connection.commit()
 
         await interaction.response.send_message(
-            f"💀 عقدت صفقة مظلمة وتم تجهيز `{item['title']}` بنجاح!",
-            ephemeral=True,
+            f"💀 تم شراء وتجهيز `{item['title']}` بنجاح!", ephemeral=True
         )
 
 
@@ -761,7 +898,7 @@ async def dark_shop_command(interaction: discord.Interaction):
 
     embed = discord.Embed(
         title="🌑 متجر الظلام السري",
-        description="أسلحة محرمة تمنحك قوة هائلة لاكتساح الطوابق:",
+        description="أسلحة محرّمة قوية جداً:",
         color=discord.Color.dark_red(),
     )
     view = DarkShopView()
@@ -769,7 +906,7 @@ async def dark_shop_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 7. البنك ولوحة المطورين
+# 8. البنك ولوحة المطورين
 # ==========================================
 
 
@@ -837,8 +974,7 @@ class DevPanelView(discord.ui.View):
         total_users = cursor.fetchone()[0]
 
         embed = discord.Embed(
-            title="⚡ منيو لوحة تحكم المطورين",
-            color=discord.Color.dark_embed(),
+            title="⚡ لوحة تحكم المطورين", color=discord.Color.dark_embed()
         )
         embed.add_field(
             name="👥 المستخدمين المسجلين",
@@ -896,7 +1032,7 @@ async def add_developer(interaction: discord.Interaction, member: discord.Member
 
 
 # ==========================================
-# 8. تشغيل البوت
+# 9. تشغيل البوت
 # ==========================================
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
