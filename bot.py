@@ -190,15 +190,194 @@ class WouldYouRatherLobbyView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=None)
 
 
+# ==================== [اللعبة 3] الروليت الملكي 👑 ====================
+class NumberSelect(discord.ui.Select):
+    def __init__(self, game_view):
+        self.game_view = game_view
+        options = [discord.SelectOption(label=str(i), emoji="🎲") for i in range(1, 21)]
+        super().__init__(placeholder="اختر رقمك المحظوظ من 1 إلى 20...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        chosen_num = int(self.values[0])
+        
+        # التأكد إذا كان الرقم محجوزاً من لاعب آخر
+        for p_id, num in self.game_view.player_numbers.items():
+            if num == chosen_num and p_id != interaction.user.id:
+                await interaction.response.send_message(f"❌ الرقم `{chosen_num}` محجوز من قبل لاعب آخر! اختر رقماً غيره.", ephemeral=True)
+                return
+
+        self.game_view.player_numbers[interaction.user.id] = chosen_num
+        if interaction.user not in self.game_view.players:
+            self.game_view.players.append(interaction.user)
+
+        await interaction.response.send_message(f"✨ تم اختيار الرقم **{chosen_num}** بنجاح في الروليت الملكي!", ephemeral=True)
+        await self.game_view.update_message(interaction)
+
+class RoyalKickSelect(discord.ui.Select):
+    def __init__(self, players, winner, host):
+        self.winner = winner
+        self.host = host
+        options = []
+        for p in players:
+            if p.id != winner.id:
+                options.append(discord.SelectOption(label=p.display_name, value=str(p.id), emoji="👢"))
+        if not options:
+            options.append(discord.SelectOption(label="لا يوجد لاعبان آخرون", value="none", emoji="❌"))
+        super().__init__(placeholder="👑 أيها الملك، اختر لاعباً لطرده...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.winner.id:
+            await interaction.response.send_message("❌ هذا القرار للملك الفائز فقط!", ephemeral=True)
+            return
+
+        val = self.values[0]
+        if val == "none":
+            await interaction.response.send_message("❌ لا يوجد أحد لطرده!", ephemeral=True)
+            return
+
+        target_id = int(val)
+        target_user = interaction.guild.get_member(target_id) or bot.get_user(target_id)
+        target_name = target_user.display_name if target_user else "اللاعب"
+
+        embed = discord.Embed(
+            title="⚡ صدر الحكم الملكي!",
+            description=f"👑 الملك {self.winner.mention} أصدر قراره الحاسم!\n👢 تم طرد **{target_name}** من ساحة الروليت الملكي بنجاح!",
+            color=discord.Color.dark_red()
+        )
+        view = RoyalRouletteNextView(self.host)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+class RoyalKickView(discord.ui.View):
+    def __init__(self, winner: discord.User, players: list, host: discord.User):
+        super().__init__(timeout=30)
+        self.winner = winner
+        self.host = host
+        self.add_item(RoyalKickSelect(players, winner, host))
+
+class RoyalRouletteNextView(discord.ui.View):
+    def __init__(self, host: discord.User):
+        super().__init__(timeout=300)
+        self.host = host
+
+    @discord.ui.button(label="جولة ملكية جديدة 🔄", style=discord.ButtonStyle.success)
+    async def new_round(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.host:
+            await interaction.response.send_message("❌ فقط المنظم يمكنه بدء جولة جديدة!", ephemeral=True)
+            return
+        lobby = RoyalRouletteLobbyView(self.host)
+        embed = lobby.generate_embed()
+        await interaction.response.edit_message(embed=embed, view=lobby)
+
+    @discord.ui.button(label="إيقاف 🛑", style=discord.ButtonStyle.danger)
+    async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
+        if interaction.user != self.host and not is_admin:
+            await interaction.response.send_message("❌ فقط المنظم أو المسؤولين يمكنهم الإيقاف!", ephemeral=True)
+            return
+        embed = discord.Embed(title="🛑 تم إيقاف الروليت الملكي", description=f"قام {interaction.user.mention} بإيقاف اللعبة.", color=discord.Color.red())
+        self.stop()
+        await interaction.response.edit_message(embed=embed, view=None)
+
+class RoyalRouletteLobbyView(discord.ui.View):
+    def __init__(self, host: discord.User):
+        super().__init__(timeout=300)
+        self.host = host
+        self.players = [host]
+        self.player_numbers = {} # {user_id: number}
+        self.add_item(NumberSelect(self))
+
+    def generate_embed(self) -> discord.Embed:
+        desc = "⚜️ **قاعة الروليت الملكي الفخمة**\n\nاختر رقمك المحظوظ من القائمة أدناه (من 1 إلى 20).\nعندما يبدأ الدوران، ستختار العجلة رقماً، ومن يملكه يصبح **الملك** ويختار من يُطرد!\n\n**المنظم:** " + self.host.mention + "\n\n👥 **المشاركون والأرقام المحجوزة:**\n"
+        if self.players:
+            for p in self.players:
+                num = self.player_numbers.get(p.id, "لم يختر رقم بعد ⏳")
+                desc += f"• {p.mention} ➔ الرقم: `{num}`\n"
+        else:
+            desc += "_لا توجد مشاركات بعد_"
+            
+        return discord.Embed(
+            title="👑 الروليت الملكي 👑",
+            description=desc,
+            color=discord.Color.from_rgb(218, 165, 32) # لون ذهبي فخم
+        )
+
+    async def update_message(self, interaction: discord.Interaction):
+        try:
+            await interaction.message.edit(embed=self.generate_embed(), view=self)
+        except Exception:
+            pass
+
+    @discord.ui.button(label="تدوير العجلة الملكية 🎡", style=discord.ButtonStyle.success, row=1)
+    async def spin_wheel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.host:
+            await interaction.response.send_message("❌ فقط المنظم يمكنه تدوير العجلة الملكية!", ephemeral=True)
+            return
+        if not self.player_numbers:
+            await interaction.response.send_message("❌ يجب أن يختار اللاعبون أرقامهم أولاً!", ephemeral=True)
+            return
+
+        # تأثير الحركة والتشويق للعجلة
+        await interaction.response.defer()
+        msg = interaction.message
+
+        anim_embeds = [
+            discord.Embed(title="🎡 جاري تدوير العجلة الملكية...", description="🎲 العجلة الملكية تدور بسرعة البرق...\n`[░░░░░░░░░░] 10%`", color=discord.Color.gold()),
+            discord.Embed(title="🎡 جاري تدوير العجلة الملكية...", description="🎲 تقترب العجلة من الاستقرار...\n`[█████░░░░░] 50%`", color=discord.Color.gold()),
+            discord.Embed(title="🎡 جاري تدوير العجلة الملكية...", description="🎲 العداد يستقر والأرقام تتطاير...\n`[█████████░] 90%`", color=discord.Color.gold())
+        ]
+
+        for emb in anim_embeds:
+            await msg.edit(embed=emb, view=None)
+            await asyncio.sleep(0.7)
+
+        # اختيار رقم عشوائي من 1 لـ 20
+        winning_number = random.randint(1, 20)
+
+        # البحث عن اللاعب الفائز بهذا الرقم
+        winner = None
+        for p_id, num in self.player_numbers.items():
+            if num == winning_number:
+                winner = interaction.guild.get_member(p_id) or bot.get_user(p_id)
+                break
+
+        if winner and winner in self.players:
+            res_embed = discord.Embed(
+                title="👑 نتيجة الروليت الملكي الملكية!",
+                description=f"🎯 استقرت العجلة على الرقم الفائز: **`{winning_number}`**\n\n🏆 **الملك المتوج لهذه الجولة:** {winner.mention}\n\n⏳ أمام الملك 30 ثانية لاختيار شخص ليتم طرده!",
+                color=discord.Color.from_rgb(255, 215, 0)
+            )
+            view = RoyalKickView(winner, self.players, self.host)
+            await msg.edit(embed=res_embed, view=view)
+        else:
+            res_embed = discord.Embed(
+                title="👑 نتيجة الروليت الملكي الملكية!",
+                description=f"🎯 استقرت العجلة على الرقم الفائز: **`{winning_number}`**\n\n❌ عذراً، لم يختار أي لاعب هذا الرقم في هذه الجولة! الحظ غاضب اليوم.",
+                color=discord.Color.red()
+            )
+            view = RoyalRouletteNextView(self.host)
+            await msg.edit(embed=res_embed, view=view)
+
+    @discord.ui.button(label="إيقاف 🛑", style=discord.ButtonStyle.danger, row=1)
+    async def stop_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
+        if interaction.user != self.host and not is_admin:
+            await interaction.response.send_message("❌ فقط المنظم أو المسؤولين يمكنهم الإيقاف!", ephemeral=True)
+            return
+        embed = discord.Embed(title="🛑 تم إيقاف الروليت الملكي", description=f"قام {interaction.user.mention} بإيقاف اللعبة.", color=discord.Color.red())
+        self.stop()
+        await interaction.response.edit_message(embed=embed, view=None)
+
+
 # ==================== منيو الاختيار الرئيسي ====================
 class MainGameSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="لعبة الأسئلة والصراحة", description="3 مستويات: عادي، متوسط، وجريء جداً", emoji="🎯"),
             discord.SelectOption(label="لعبة لو خيروك", description="خيارات صعبة ومواقف مضحكة", emoji="🆚"),
+            discord.SelectOption(label="الروليت الملكي", description="اختر رقماً من 1 لـ 20 ودوّر العجلة الملكية", emoji="👑"),
             discord.SelectOption(label="قريباً...", description="مكان مخصص للعبتك القادمة", emoji="⏳")
         ]
-        super().__init__(placeholder="اختر لعبة من المنيو لتشغيلها...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="اختر لعبة من المنيو الفخم لتشغيلها...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         selected = self.values[0]
@@ -207,6 +386,9 @@ class MainGameSelect(discord.ui.Select):
             await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
         elif "لو خيروك" in selected:
             lobby_view = WouldYouRatherLobbyView(host=interaction.user)
+            await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
+        elif "الروليت الملكي" in selected:
+            lobby_view = RoyalRouletteLobbyView(host=interaction.user)
             await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
         else:
             await interaction.response.send_message("⏳ هذه الخانة مخصصة للعبة القادمة!", ephemeral=True)
@@ -221,7 +403,7 @@ class MainGamesView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
-            await interaction.response.send_message("❌ القائمة ليست لك! اكتب `/العاب` لفتح قائمتك.", ephemeral=True)
+            await interaction.response.send_message("❌ القائمة ليست لك! اكتب `/العاب` لفتح قائمتك الخاصة.", ephemeral=True)
             return False
         return True
 
@@ -233,12 +415,14 @@ class MainGamesView(discord.ui.View):
 
 def generate_main_embed() -> discord.Embed:
     return discord.Embed(
-        title="🎮 قائمة الألعاب المتاحة",
-        description="اختر إحدى الألعاب التالية من المنيو بالأسفل:\n\n"
+        title="🎮 قائمة الألعاب الفخمة",
+        description="اختر إحدى الألعاب الرائعة التالية من المنيو بالأسفل:\n\n"
                     "🎯 **1. لعبة الأسئلة والصراحة**\n"
                     "أسئلة تفاعلية بـ 3 مستويات (عادي، متوسط، جريء جداً 🔥)\n\n"
                     "🆚 **2. لعبة لو خيروك**\n"
-                    "تخيير اللاعبين بين خيارين صعبين ومضحكين!",
+                    "تخيير اللاعبين بين خيارين صعبين ومضحكين!\n\n"
+                    "👑 **3. الروليت الملكي**\n"
+                    "اختر رقماً من 1 إلى 20، دوّر العجلة الملكية، وليكن للملك حق الطرد!",
         color=discord.Color.from_rgb(255, 105, 180)
     )
 
@@ -255,7 +439,7 @@ async def games_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ البوت {bot.user} شغال والألعاب جاهزة!")
+    print(f"✅ البوت {bot.user} شغال وجميع الألعاب جاهزة بنجاح!")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 bot.run(TOKEN)
