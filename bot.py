@@ -143,7 +143,7 @@ class CreateGuildModal(discord.ui.Modal, title="تأسيس نقابة جديدة
             await interaction.response.send_message(
                 f"❌ رصيدك الحالي (`{balance} 💎`) لا يكفي! تأسيس النقابة يكلف `300 💎`.",
                 ephemeral=True,
-            ) خصم
+            )
             return
 
         # التحقق إن كان اسم النقابة مستخدماً مسبقاً
@@ -226,7 +226,7 @@ class DonateCoinsModal(discord.ui.Modal, title="التبرع بالعملات ل
             )
             return
 
-        # خصم العملات من المستخدم وإضافتها لرصيد النقابة وتطوير مستواها (كل 1000 عملة متبرع بها ترفع المستوى بـ 1، وبحد أقصى 500)
+        # خصم العملات من المستخدم وإضافتها لرصيد النقابة وتطوير مستواها
         cursor.execute(
             "UPDATE user_data SET balance = balance - ? WHERE user_id = ?",
             (amount, user_id),
