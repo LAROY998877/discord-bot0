@@ -49,7 +49,7 @@ WOULD_YOU_RATHER = [
     ("تصير مشهور جداً وكل الناس تعرفك 🌟", "تصير غني جداً بس محد يعرفك 💵")
 ]
 
-# ==================== [3] بيانات لعبة المشاهير (عرب وأجانب) ====================
+# ==================== [3] بيانات لعبة المشاهير ====================
 CELEBRITIES = [
     {"names": ["عادل امام", "عادل إمام"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Adel_Emam_2017.jpg/440px-Adel_Emam_2017.jpg"},
     {"names": ["ميسي", "ليونيل ميسي"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Lionel_Messi_20180626.jpg/440px-Lionel_Messi_20180626.jpg"},
@@ -59,6 +59,17 @@ CELEBRITIES = [
     {"names": ["كاظم الساهر"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Kadim_Al_Sahir_2018.jpg/440px-Kadim_Al_Sahir_2018.jpg"},
     {"names": ["توم كروز", "Tom Cruise"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Tom_Cruise_by_Gage_Skidmore_2.jpg/440px-Tom_Cruise_by_Gage_Skidmore_2.jpg"},
     {"names": ["جاكي شان", "Jackie Chan"], "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Jackie_Chan_July_2016.jpg/440px-Jackie_Chan_July_2016.jpg"}
+]
+
+# ==================== [4] بيانات لعبة أسرع (عربية وأجنبية) ====================
+FAST_WORDS = [
+    "قسطنطينية", "موسوعة", "إمبراطورية", "تكنولوجيا", "خوارزمية", 
+    "استثنائي", "ديمقراطية", "ميتافيزيقيا", "سيكولوجية", "أوتوماتيكي", 
+    "فلسفة", "هندسة", "برمجيات", "مجهرية", "جغرافيا", 
+    "الكهروومغناطيسية", "الأنثروبولوجيا", "استراتيجيات", "معالجات", "أتمتة",
+    "Developer", "JavaScript", "Keyboard", "Speedrun", "PlayStation", 
+    "Minecraft", "Algorithm", "Cybersecurity", "Blockchain", "Artificial",
+    "Microscope", "Technology", "Programming", "Database", "Infrastructure"
 ]
 
 
@@ -202,10 +213,9 @@ class WouldYouRatherLobbyView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=None)
 
 
-# ==================== [اللعبة 3] منطق وأزرار لعبة المشاهير ====================
+# ==================== [اللعبة 3] لعبة المشاهير ====================
 async def start_celeb_game_round(interaction: discord.Interaction, host: discord.User):
     celeb = random.choice(CELEBRITIES)
-    
     embed = discord.Embed(
         title="📸 من هو هذا المشهور؟",
         description="💡 **اكتب اسم المشهور في الشات بسرعة!**\n⏰ معك **25 ثانية** للتخمين.",
@@ -218,8 +228,7 @@ async def start_celeb_game_round(interaction: discord.Interaction, host: discord
     message = await interaction.original_response()
 
     def check(m):
-        if m.channel.id != interaction.channel_id or m.author.bot:
-            return False
+        if m.channel.id != interaction.channel_id or m.author.bot: return False
         user_msg = m.content.strip().lower()
         return any(alias.lower() in user_msg for alias in celeb["names"])
 
@@ -233,7 +242,6 @@ async def start_celeb_game_round(interaction: discord.Interaction, host: discord
         win_embed.set_image(url=celeb["image"])
         view = CelebrityNextView(host=host)
         await message.edit(embed=win_embed, view=view)
-
     except asyncio.TimeoutError:
         loss_embed = discord.Embed(
             title="⏰ انتهى الوقت!",
@@ -297,6 +305,96 @@ class CelebrityLobbyView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=None)
 
 
+# ==================== [اللعبة 4] لعبة أسرع ⚡ (15 ثانية) ====================
+async def start_fast_game_round(interaction: discord.Interaction, host: discord.User):
+    word = random.choice(FAST_WORDS)
+    
+    embed = discord.Embed(
+        title="⚡ لعبة أسرع!",
+        description=f"اكتب الكلمة التالية بسرعة قبل الجميع:\n\n# `{word}`\n\n⏰ معك **15 ثانية** فقط!",
+        color=discord.Color.teal()
+    )
+    embed.set_footer(text="لعبة أسرع | اكتب الكلمة بالضبط كما هي!")
+
+    await interaction.response.edit_message(embed=embed, view=None)
+    message = await interaction.original_response()
+
+    def check(m):
+        if m.channel.id != interaction.channel_id or m.author.bot: return False
+        return m.content.strip() == word
+
+    try:
+        winner_msg = await bot.wait_for("message", check=check, timeout=15.0)
+        win_embed = discord.Embed(
+            title="⚡ فوز ساحق!",
+            description=f"🏆 **أسرع شخص:** {winner_msg.author.mention}\n\n📝 **الكلمة:** `{word}`",
+            color=discord.Color.green()
+        )
+        view = FastNextView(host=host)
+        await message.edit(embed=win_embed, view=view)
+
+    except asyncio.TimeoutError:
+        loss_embed = discord.Embed(
+            title="⏰ انتهى الوقت!",
+            description=f"للأسف محد كتب الكلمة بسرعة! 🐢\n\n📝 **الكلمة كانت:** `{word}`",
+            color=discord.Color.red()
+        )
+        view = FastNextView(host=host)
+        await message.edit(embed=loss_embed, view=view)
+
+
+class FastNextView(discord.ui.View):
+    def __init__(self, host: discord.User):
+        super().__init__(timeout=300)
+        self.host = host
+
+    @discord.ui.button(label="جولة تالية 🔄", style=discord.ButtonStyle.success)
+    async def next_round_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await start_fast_game_round(interaction, self.host)
+
+    @discord.ui.button(label="إيقاف 🛑", style=discord.ButtonStyle.danger)
+    async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
+        if interaction.user != self.host and not is_admin:
+            await interaction.response.send_message("❌ فقط المنظم أو المسؤولين يمكنهم الإيقاف!", ephemeral=True)
+            return
+        embed = discord.Embed(title="🛑 تم إيقاف لعبة أسرع", description=f"قام {interaction.user.mention} بالإيقاف.", color=discord.Color.red())
+        self.stop()
+        await interaction.response.edit_message(embed=embed, view=None)
+
+
+class FastLobbyView(discord.ui.View):
+    def __init__(self, host: discord.User):
+        super().__init__(timeout=300)
+        self.host = host
+
+    def generate_embed(self) -> discord.Embed:
+        embed = discord.Embed(
+            title="⚡ لعبة أسرع",
+            description="سيعطيك البوت كلمة صعبة أو طويلة (عربية أو أجنبية).\nأسرع شخص يكتبها بالضبط خلال **15 ثانية** فقط يفوز!\n\n**المنظم:** " + self.host.mention,
+            color=discord.Color.teal()
+        )
+        embed.set_footer(text="اضغط على (بدء 🚀) للبدء!")
+        return embed
+
+    @discord.ui.button(label="بدء 🚀", style=discord.ButtonStyle.primary, row=0)
+    async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.host:
+            await interaction.response.send_message("❌ فقط المنظم يمكنه بدء اللعبة!", ephemeral=True)
+            return
+        await start_fast_game_round(interaction, self.host)
+
+    @discord.ui.button(label="إيقاف 🛑", style=discord.ButtonStyle.danger, row=0)
+    async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
+        if interaction.user != self.host and not is_admin:
+            await interaction.response.send_message("❌ فقط المنظم أو المسؤولين يمكنهم الإيقاف!", ephemeral=True)
+            return
+        embed = discord.Embed(title="🛑 تم إيقاف لعبة أسرع", description=f"قام {interaction.user.mention} بالإيقاف.", color=discord.Color.red())
+        self.stop()
+        await interaction.response.edit_message(embed=embed, view=None)
+
+
 # ==================== منيو الاختيار الرئيسي ====================
 class MainGameSelect(discord.ui.Select):
     def __init__(self):
@@ -304,6 +402,7 @@ class MainGameSelect(discord.ui.Select):
             discord.SelectOption(label="لعبة الأسئلة والصراحة", description="3 مستويات: عادي، متوسط، وجريء جداً", emoji="🎯"),
             discord.SelectOption(label="لعبة لو خيروك", description="خيارات صعبة ومواقف محرمة", emoji="🆚"),
             discord.SelectOption(label="لعبة المشاهير", description="تخمين صورة المشهور (عرب وأجانب)", emoji="📸"),
+            discord.SelectOption(label="لعبة أسرع", description="كتابة الكلمة بأسرع وقت (15 ثانية)", emoji="⚡"),
             discord.SelectOption(label="قريباً...", description="مكان مخصص للعبتك القادمة", emoji="⏳")
         ]
         super().__init__(placeholder="اختر لعبة من المنيو لتشغيلها...", min_values=1, max_values=1, options=options)
@@ -318,6 +417,9 @@ class MainGameSelect(discord.ui.Select):
             await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
         elif "المشاهير" in selected:
             lobby_view = CelebrityLobbyView(host=interaction.user)
+            await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
+        elif "أسرع" in selected:
+            lobby_view = FastLobbyView(host=interaction.user)
             await interaction.response.edit_message(embed=lobby_view.generate_embed(), view=lobby_view)
         else:
             await interaction.response.send_message("⏳ هذه الخانة مخصصة للعبة القادمة!", ephemeral=True)
@@ -351,7 +453,9 @@ def generate_main_embed() -> discord.Embed:
                     "🆚 **2. لعبة لو خيروك**\n"
                     "تخيير اللاعبين بين خيارين صعبين ومضحكين!\n\n"
                     "📸 **3. لعبة المشاهير**\n"
-                    "تخمين اسم المشهور من الصورة بسرعة قبل انتهاء الوقت!",
+                    "تخمين اسم المشهور من الصورة بسرعة قبل انتهاء الوقت!\n\n"
+                    "⚡ **4. لعبة أسرع**\n"
+                    "اختبار السرعة في إعادة كتابة الكلمات العربية والأجنبية خلال 15 ثانية!",
         color=discord.Color.from_rgb(255, 105, 180)
     )
 
@@ -368,7 +472,7 @@ async def games_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ البوت {bot.user} شغال وجاهز بلعبة المشاهير 📸!")
+    print(f"✅ البوت {bot.user} جاهز والشغل تمام!")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 bot.run(TOKEN)
