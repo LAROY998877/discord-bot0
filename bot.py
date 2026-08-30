@@ -78,7 +78,6 @@ def is_dev(user_id: int) -> bool:
     return cursor.fetchone() is not None
 
 
-# نظام التحقق والتسجيل التلقائي الخفي (بدون نوافذ إجبار مزعجة)
 def ensure_user(user_id: int, username: str):
     cursor.execute(
         "SELECT user_id FROM user_data WHERE user_id = ?", (user_id,)
@@ -298,7 +297,107 @@ async def inventory_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 4. نظام الطوابق الشامل (أمر رئيسي يفتح منيو التفاعل)
+# 4. أوامر التحويل والإهداء (العملات والعتاد)
+# ==========================================
+
+
+@bot.tree.command(
+    name="تحويل_عملات", description="إرسال عملات معدنية أو جواهر لأي مستخدم آخر"
+)
+@app_commands.describe(
+    member="الشخص المراد التحويل له", amount="عدد العملات المراد إرسالها"
+)
+async def transfer_coins(
+    interaction: discord.Interaction, member: discord.Member, amount: int
+):
+    if member.id == interaction.user.id:
+        await interaction.response.send_message(
+            "❌ لا يمكنك تحويل العملات لنفسك!", ephemeral=True
+        )
+        return
+
+    if amount <= 0:
+        await interaction.response.send_message(
+            "❌ يرجى إدخال مبلغ صحيح أكبر من الصفر!", ephemeral=True
+        )
+        return
+
+    ensure_user(interaction.user.id, str(interaction.user))
+    ensure_user(member.id, str(member))
+
+    cursor.execute(
+        "SELECT balance FROM user_data WHERE user_id = ?", (interaction.user.id,)
+    )
+    sender_bal = cursor.fetchone()[0]
+
+    if sender_bal < amount:
+        await interaction.response.send_message(
+            f"❌ رصيدك الحالي (`{sender_bal} 💎`) لا يكفي لإتمام عملية التحويل!",
+            ephemeral=True,
+        )
+        return
+
+    cursor.execute(
+        "UPDATE user_data SET balance = balance - ? WHERE user_id = ?",
+        (amount, interaction.user.id),
+    )
+    cursor.execute(
+        "UPDATE user_data SET balance = balance + ? WHERE user_id = ?",
+        (amount, member.id),
+    )
+    db_connection.commit()
+
+    await interaction.response.send_message(
+        f"✅ تمت عملية التحويل بنجاح! تم إرسال `💎 {amount}` إلى العضو {member.mention}."
+    )
+
+
+@bot.tree.command(
+    name="تحويل_عتاد", description="إرسال عتادك الحالي وسلاحه إلى شخص آخر"
+)
+@app_commands.describe(member="الشخص المراد إرسال العتاد له")
+async def transfer_equipment(
+    interaction: discord.Interaction, member: discord.Member
+):
+    if member.id == interaction.user.id:
+        await interaction.response.send_message(
+            "❌ لا يمكنك إرسال العتاد لنفسك!", ephemeral=True
+        )
+        return
+
+    ensure_user(interaction.user.id, str(interaction.user))
+    ensure_user(member.id, str(member))
+
+    cursor.execute(
+        "SELECT equipment_name, equipment_score FROM user_data WHERE user_id = ?",
+        (interaction.user.id,),
+    )
+    eq_name, eq_score = cursor.fetchone()
+
+    if eq_name == "لم يتم الاختيار":
+        await interaction.response.send_message(
+            "❌ ليس لديك عتاد مميز لنقله!", ephemeral=True
+        )
+        return
+
+    # نقل العتاد وإعطاء المتلقي القوة المرافقة، وإعادة مرسل العتاد للوضع الابتدائي
+    cursor.execute(
+        "UPDATE user_data SET equipment_name = ?, equipment_score = equipment_score + ? WHERE user_id = ?",
+        (eq_name, eq_score, member.id),
+    )
+    cursor.execute(
+        "UPDATE user_data SET equipment_name = 'لم يتم الاختيار', equipment_score = 10 WHERE user_id = ?",
+        (interaction.user.id,),
+    )
+    db_connection.commit()
+
+    await interaction.response.send_message(
+        f"✅ تم إرسال عتادك (`{eq_name}`) بقوة `{eq_score}` بنجاح إلى العضو {member.mention}!"
+    )
+
+
+# ==========================================
+# 5. نظام الطوابق الشامل
 # ==========================================
 
 
@@ -350,11 +449,11 @@ class FloorBattleView(discord.ui.View):
             reward_coins = self.target_floor * 50 + random.randint(100, 500)
             reward_eq_score = self.target_floor * 2 + random.randint(5, 15)
             loot_names = [
-                "سيف برونزي مهترئ",
-                "درع جلدي متين",
-                "خنجر الصياد السريع",
-                "صولجان الحارس القديم",
-                "عباءة الظل الخفية",
+                "سيف الأرواح المشتعل",
+                "درع التنين الأسطوري",
+                "خنجر اغتيال الظلال",
+                "مطرقة النيازك الكونية",
+                "عباءة البعد الخفي",
             ]
             won_loot = random.choice(loot_names) + f" (طابق {self.target_floor})"
 
@@ -602,7 +701,7 @@ async def floors_command(interaction: discord.Interaction):
         color=discord.Color.dark_gold(),
     )
     embed.set_image(
-        url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800"
+        url="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800"
     )
 
     view = FloorMainMenuView(interaction.user.id)
@@ -610,7 +709,7 @@ async def floors_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 5. الأبطال الأسطوريين الجدد (3 ذكور + 3 إناث)
+# 6. الأبطال الأسطوريين الجدد (صور فانتازي انمي دقيقة)
 # ==========================================
 HEROES_DATA = {
     "vanguard": {
@@ -619,7 +718,7 @@ HEROES_DATA = {
         "power": 920,
         "defense": 950,
         "story": "قائد الحرس الملكي الذي صمد وحيداً أمام جيش من التنانين لمدة ثلاثة أيام بلياليها، درعه مصنوع من حجر النيزك القديم.",
-        "image": "https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800",
+        "image": "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800",
     },
     "kaelthas": {
         "title": "كائيلثاس - سيد اللهب المحرق",
@@ -627,7 +726,7 @@ HEROES_DATA = {
         "power": 980,
         "defense": 700,
         "story": "أمير السحرة المنفي الذي سخر أرواح النيران البدائية في يديه، لتصبح تعويذاته قادرة على إذابة الجبال وتحويلها إلى رماد.",
-        "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800",
+        "image": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800",
     },
     "fenrir": {
         "title": "فنرير - صياد العواصف الشبح",
@@ -643,7 +742,7 @@ HEROES_DATA = {
         "power": 930,
         "defense": 900,
         "story": "محاربة مقدسة هبطت من السماء بجناحي نور، تقود أرواح الأبطال في المعارك العظمى وتزرع الرعب في قلوب الشياطين.",
-        "image": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800",
+        "image": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800",
     },
     "morgana": {
         "title": "مورغانا - ساحرة الظلال المطلقة",
@@ -651,7 +750,7 @@ HEROES_DATA = {
         "power": 990,
         "defense": 680,
         "story": "ملكة الفنون المظلمة التي تلاعبت بالزمن والأبعاد، تستطيع فتح بوابات الجحيم وسحب أعدائها إلى العدم الأبدي.",
-        "image": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800",
+        "image": "https://images.unsplash.com/photo-1514539079130-25950c84af65?w=800",
     },
     "Aria": {
         "title": "آريا - أميرة الرياح الفضية",
@@ -659,7 +758,7 @@ HEROES_DATA = {
         "power": 910,
         "defense": 850,
         "story": "رامية السهام الأسطورية التي لا تخطئ هدفها أبداً، تطلق سهاماً مشبعة برياح عاصفة تقتلع الجيوش من جذورها.",
-        "image": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800",
+        "image": "https://images.unsplash.com/photo-1569003339405-ea393a5629f7?w=800",
     },
 }
 
@@ -759,7 +858,7 @@ async def heroes_command(interaction: discord.Interaction):
 
 
 # ==========================================
-# 6. المتاجر (المتجر العادي + متجر الظلام)
+# 7. المتاجر (بصور أسلحة فانتازيا دقيقة)
 # ==========================================
 
 NORMAL_SHOP_ITEMS = {
@@ -767,11 +866,13 @@ NORMAL_SHOP_ITEMS = {
         "title": "سيف اللهب الأبدي",
         "price": "250 💎",
         "desc": "سيف مشتعل بنيران التنانين.",
+        "image": "https://images.unsplash.com/photo-1589241062272-c0a000071dfa?w=800",
     },
     "hammer": {
         "title": "مطرقة الرعد الكونية",
         "price": "320 💎",
         "desc": "مطرقة من نيازك ساطعة.",
+        "image": "https://images.unsplash.com/photo-1599839575945-a9e5af0c3fa5?w=800",
     },
 }
 
@@ -811,8 +912,14 @@ class NormalShopDropdown(discord.ui.Select):
         )
         db_connection.commit()
 
+        embed = discord.Embed(
+            title=f"✅ تم شراء وتجهيز: {item['title']}",
+            description=item["desc"],
+            color=discord.Color.gold(),
+        )
+        embed.set_image(url=item["image"])
         await interaction.response.send_message(
-            f"✅ تم شراء وتجهيز `{item['title']}` بنجاح!", ephemeral=True
+            embed=embed, ephemeral=True
         )
 
 
@@ -829,8 +936,11 @@ async def shop_command(interaction: discord.Interaction):
 
     embed = discord.Embed(
         title="🛍️ المتجر العادي الإمبراطوري",
-        description="اختر سلاحاً لتعزيز قوتك:",
+        description="اختر سلاحاً أسطورياً لتعزيز قوتك:",
         color=discord.Color.gold(),
+    )
+    embed.set_image(
+        url="https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800"
     )
     view = NormalShopView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -840,7 +950,8 @@ DARK_SHOP_ITEMS = {
     "dark_blade": {
         "title": "شفرة الموت المظلمة",
         "price": "666 💎",
-        "desc": "شفرة مسحورة بطاقة الهلاك.",
+        "desc": "شفرة مسحورة بطاقة الهلاك الأبدي.",
+        "image": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800",
     }
 }
 
@@ -874,8 +985,14 @@ class DarkShopDropdown(discord.ui.Select):
         )
         db_connection.commit()
 
+        embed = discord.Embed(
+            title=f"💀 تم الحصول على السلاح المحرم: {item['title']}",
+            description=item["desc"],
+            color=discord.Color.dark_red(),
+        )
+        embed.set_image(url=item["image"])
         await interaction.response.send_message(
-            f"💀 تم شراء وتجهيز `{item['title']}` بنجاح!", ephemeral=True
+            embed=embed, ephemeral=True
         )
 
 
@@ -895,12 +1012,15 @@ async def dark_shop_command(interaction: discord.Interaction):
         description="أسلحة محرّمة قوية جداً:",
         color=discord.Color.dark_red(),
     )
+    embed.set_image(
+        url="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800"
+    )
     view = DarkShopView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 # ==========================================
-# 7. نظام البنك المطور، القروض، والتحذيرات الفخم
+# 8. نظام البنك المطور، القروض، والتحذيرات
 # ==========================================
 
 
@@ -939,12 +1059,6 @@ class LoanModal(discord.ui.Modal, title="طلب قرض بنكي"):
             )
             return
 
-        if loan_val > 50000:
-            await interaction.response.send_message(
-                "❌ الحد الأقصى للقرض الواحد هو `50,000` عملة!", ephemeral=True
-            )
-            return
-
         cursor.execute(
             "UPDATE user_data SET bank_balance = bank_balance + ?, loan_amount = loan_amount + ? WHERE user_id = ?",
             (loan_val, loan_val, interaction.user.id),
@@ -955,7 +1069,7 @@ class LoanModal(discord.ui.Modal, title="طلب قرض بنكي"):
             title="🏦 صندوق البنك المركزي - تمت الموافقة على القرض",
             description=(
                 f"لقد حصلت على قرض بنكي بقيمة `💎 {loan_val}` بنجاح.\n\n"
-                "⚠️ **تنبيه هام:** يجب عليك سداد القرض في أقرب وقت عبر زر **سداد القرض**، وفي حال تخلفك عن السداد، سيتم بيع عتادك وأغراضك تلقائياً لاستسوية الدين!"
+                "⚠️ **تنبيه هام:** يجب عليك سداد القرض في أقرب وقت عبر زر **سداد القرض**!"
             ),
             color=discord.Color.gold(),
         )
@@ -1037,7 +1151,7 @@ class BankView(discord.ui.View):
         total_available = balance + bank_balance
         if total_available < loan:
             await interaction.response.send_message(
-                f"❌ رصيدك الإجمالي (اليدوي + البنك = {total_available}) لا يكفي لسداد قيمة القرض البالغة `💎 {loan}`!",
+                f"❌ رصيدك الإجمالي لا يكفي لسداد قيمة القرض البالغة `💎 {loan}`!",
                 ephemeral=True,
             )
             return
@@ -1146,27 +1260,19 @@ async def bank_command(interaction: discord.Interaction):
         inline=False,
     )
 
-    embed.set_footer(
-        text=(
-            "استخدم الأزرار بالأسفل لإدارة الإيداع، القروض، السداد، أو فحص الإنذارات."
-        ),
-        icon_url=interaction.user.display_avatar.url,
-    )
-
     view = BankView(interaction.user.id)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 # ==========================================
-# 8. لوحة المطورين (مع شخصية السفاح السرية الخاصة بالمطور فقط)
+# 9. لوحة المطورين (السفاح، العملات اللانهائية، التطوير الشامل)
 # ==========================================
 
-# بيانات شخصية السفاح المرعبة والسرية
 BUTCHER_HERO = {
     "title": "السفاح - كابوس الأكوان المظلمة",
     "power": 9999,
     "defense": 9999,
-    "story": "كيان شيطاني مرعب ولد من رحم الدماء والظدام الأبدي، لا ينام ولا يرحم. تلامس خطاه أراضي الموتى فيرتجف لروعبها ملوك الطوابق. يحمل منجل المنون المقطر بالسموم الفتاكة، وقوته تتجاوز حدود العقل والبشر.",
+    "story": "كيان شيطاني مرعب ولد من رحم الدماء والظلام الأبدي، لا ينام ولا يرحم. تلامس خطاه أراضي الموتى فيرتجف لرهبتها ملوك الطوابق. يحمل منجل المنون المقطر بالسموم الفتاكة، وقوته تتجاوز حدود العقل والبشر.",
     "image": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800",
 }
 
@@ -1178,35 +1284,67 @@ class DevPanelView(discord.ui.View):
         self.author_id = author_id
 
     @discord.ui.button(
-        label="📊 إحصائيات الأوامر",
-        style=discord.ButtonStyle.blurple,
+        label="💎 تفعيل العملات اللانهائية",
+        style=discord.ButtonStyle.success,
         row=0,
     )
-    async def stats_button(
+    async def infinite_coins_btn(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        cursor.execute("SELECT COUNT(*) FROM user_data")
-        total_users = cursor.fetchone()[0]
+        if (
+            not is_dev(interaction.user.id)
+            and interaction.user.id != interaction.guild.owner_id
+        ):
+            await interaction.response.send_message(
+                "❌ هذا الزر مخصص للمطور حصرياً!", ephemeral=True
+            )
+            return
 
-        embed = discord.Embed(
-            title="⚡ لوحة تحكم المطورين", color=discord.Color.dark_embed()
+        cursor.execute(
+            "UPDATE user_data SET balance = 999999999, bank_balance = 999999999 WHERE user_id = ?",
+            (interaction.user.id,),
         )
-        embed.add_field(
-            name="👥 المستخدمين المسجلين",
-            value=f"`{total_users}` مسجل",
-            inline=True,
+        db_connection.commit()
+        await interaction.response.send_message(
+            "✨ تم تفعيل العملات اللانهائية بنجاح! رصيدك أصبح `999,999,999 💎`.",
+            ephemeral=True,
         )
-        await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(
-        label="🗡️ تفعيل شخصية 'السفاح' (للمطور فقط)",
-        style=discord.ButtonStyle.danger,
+        label="⚒️ التطوير الكامل والشامل للعتاد",
+        style=discord.ButtonStyle.primary,
         row=0,
+    )
+    async def full_upgrade_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        if (
+            not is_dev(interaction.user.id)
+            and interaction.user.id != interaction.guild.owner_id
+        ):
+            await interaction.response.send_message(
+                "❌ هذا الزر مخصص للمطور حصرياً!", ephemeral=True
+            )
+            return
+
+        cursor.execute(
+            "UPDATE user_data SET equipment_score = 9999, equipment_name = 'درع وسلاح الإمبراطور الأسطوري المطلق' WHERE user_id = ?",
+            (interaction.user.id,),
+        )
+        db_connection.commit()
+        await interaction.response.send_message(
+            "🔥 تم ترقية عتادك بالكامل إلى أقصى حد ممكن (`9999` نقطة قوة) وأقوى سلاح فانتزي في الوجود!",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="🗡️ استدعاء شخصية 'السفاح' السرية",
+        style=discord.ButtonStyle.danger,
+        row=1,
     )
     async def unlock_butcher_btn(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        # التحقق الأمني الإضافي للتأكد أن المستخدم مطور حقاً
         if (
             not is_dev(interaction.user.id)
             and interaction.user.id != interaction.guild.owner_id
@@ -1241,7 +1379,7 @@ class DevPanelView(discord.ui.View):
         )
 
 
-@bot.tree.command(name="مطور", description="فتح منيو لوحة تحكم المطورين")
+@bot.tree.command(name="مطور", description="فتح منيو لوحة تحكم المطورين السرية")
 async def dev_panel(interaction: discord.Interaction):
     cursor.execute("SELECT COUNT(*) FROM developers")
     if cursor.fetchone()[0] == 0:
@@ -1262,7 +1400,10 @@ async def dev_panel(interaction: discord.Interaction):
 
     embed = discord.Embed(
         title="✨ منيو الإدارة المركزية للمطورين",
-        description="اختر الخيار المناسب من لوحة التحكم السرية:",
+        description=(
+            "مرحباً بك في لوحة تحكم المطور السرية.\n"
+            "يمكنك تفعيل العملات اللانهائية، تطوير العتاد بالكامل، أو استدعاء السفاح من الأزرار بالأسفل:"
+        ),
         color=discord.Color.from_rgb(40, 40, 45),
     )
     view = DevPanelView(interaction.user.id)
@@ -1289,7 +1430,7 @@ async def add_developer(interaction: discord.Interaction, member: discord.Member
 
 
 # ==========================================
-# 9. تشغيل البوت
+# 10. تشغيل البوت
 # ==========================================
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
