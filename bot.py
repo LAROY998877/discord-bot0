@@ -470,7 +470,6 @@ class DevGiveTitleSelect(discord.ui.Select):
         chosen_title = self.values[0]
         user_id = str(interaction.user.id)
         
-        # التأكد من تسجيل المطور في قاعدة البيانات وفتح اللقب له وتفعيله مباشرة
         user_data = users_col.find_one({"user_id": user_id})
         if not user_data:
             users_col.insert_one({
@@ -490,6 +489,80 @@ class DevGiveTitleView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=180)
         self.add_item(DevGiveTitleSelect())
+
+# ================== نظام إدارة العتاد الذكي للمطورين ==================
+class GearSelect(discord.ui.Select):
+    def __init__(self, target_user_id, action_type, shop_type):
+        self.target_id = target_user_id
+        self.action_type = action_type
+        
+        # أسلحة المتجر المظلم (الأسطورية)
+        if shop_type == "dark":
+            options = [
+                discord.SelectOption(label="سيف التنين الأسطوري", emoji="🔥", value="سيف التنين الأسطوري"),
+                discord.SelectOption(label="درع الظلام", emoji="🌑", value="درع الظلام"),
+                discord.SelectOption(label="خنجر السموم", emoji="🐍", value="خنجر السموم"),
+                discord.SelectOption(label="فأس الجحيم", emoji="🪓", value="فأس الجحيم")
+            ]
+        # أسلحة المتجر العادي
+        else:
+            options = [
+                discord.SelectOption(label="سيف حديدي", emoji="⚔️", value="سيف حديدي"),
+                discord.SelectOption(label="درع فولاذي", emoji="🛡️", value="درع فولاذي"),
+                discord.SelectOption(label="قوس الرماية", emoji="🏹", value="قوس الرماية"),
+                discord.SelectOption(label="خوذة الفرسان", emoji="⛑️", value="خوذة الفرسان")
+            ]
+
+        super().__init__(placeholder="اختر العتاد أو السلاح من القائمة...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        gear = self.values[0]
+        user_data = users_col.find_one({"user_id": self.target_id})
+        
+        if not user_data:
+            return await interaction.response.send_message("❌ هذا المستخدم غير مسجل في قاعدة البيانات!", ephemeral=True)
+        
+        inv = user_data.get("inventory", [])
+        
+        if self.action_type == "add":
+            if gear not in inv:
+                inv.append(gear)
+            users_col.update_one({"user_id": self.target_id}, {"$set": {"inventory": inv}})
+            await interaction.response.edit_message(content=f"⚔️ **تم منح العتاد `{gear}` بنجاح للمقاتل <@{self.target_id}>!**", view=None)
+        else:
+            if gear in inv:
+                inv.remove(gear)
+            users_col.update_one({"user_id": self.target_id}, {"$set": {"inventory": inv}})
+            await interaction.response.edit_message(content=f"🛡️ **تم سحب العتاد `{gear}` من المقاتل <@{self.target_id}> بنجاح!**", view=None)
+
+class ShopActionView(discord.ui.View):
+    def __init__(self, target_user_id):
+        super().__init__(timeout=180)
+        self.target_id = target_user_id
+    
+    @discord.ui.button(label="منح عتاد (متجر عادي) ⚔️", style=discord.ButtonStyle.primary, row=0)
+    async def add_normal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = discord.ui.View()
+        view.add_item(GearSelect(self.target_id, "add", "normal"))
+        await interaction.response.edit_message(content="**اختر العتاد العادي المراد إعطائه للاعب:**", view=view)
+
+    @discord.ui.button(label="منح عتاد (متجر مظلم) 🌑", style=discord.ButtonStyle.danger, row=0)
+    async def add_dark(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = discord.ui.View()
+        view.add_item(GearSelect(self.target_id, "add", "dark"))
+        await interaction.response.edit_message(content="**اختر العتاد المظلم والأسطوري المراد إعطائه للاعب:**", view=view)
+        
+    @discord.ui.button(label="سحب عتاد (عادي) 🗑️", style=discord.ButtonStyle.secondary, row=1)
+    async def rem_normal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = discord.ui.View()
+        view.add_item(GearSelect(self.target_id, "remove", "normal"))
+        await interaction.response.edit_message(content="**اختر العتاد العادي المراد سحبه من اللاعب:**", view=view)
+
+    @discord.ui.button(label="سحب عتاد (مظلم) 🗑️", style=discord.ButtonStyle.secondary, row=1)
+    async def rem_dark(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = discord.ui.View()
+        view.add_item(GearSelect(self.target_id, "remove", "dark"))
+        await interaction.response.edit_message(content="**اختر العتاد المظلم المراد سحبه من اللاعب:**", view=view)
 
 # ================== نظام لوحة المطورين الشاملة والمؤتمتة ==================
 class DeveloperControlView(discord.ui.View):
@@ -586,47 +659,34 @@ class DeveloperControlView(discord.ui.View):
 
     @discord.ui.button(label="إدارة عتاد اللاعب ⚔️", style=discord.ButtonStyle.danger, row=2)
     async def manage_gear_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        class GearModal(discord.ui.Modal, title="منح أو سحب عتاد وسلاح للمقاتل"):
+        class TargetUserModal(discord.ui.Modal, title="إدارة عتاد المقاتل"):
             target = discord.ui.TextInput(label="منشن اللاعب المستهدف", placeholder="مثال: @Username", required=True)
-            gear_name = discord.ui.TextInput(label="اسم العتاد أو السلاح", placeholder="مثال: سيف التنين الأسطوري", required=True)
-            action_type = discord.ui.TextInput(label="العملية (إضافة / سحب)", placeholder="اكتب: إضافة أو سحب", required=True)
             
             async def on_submit(self, interaction: discord.Interaction):
                 try:
                     raw_target = extract_user_id(self.target.value)
-                    gear = self.gear_name.value.strip()
-                    act = self.action_type.value.strip().lower()
                     
                     user_data = users_col.find_one({"user_id": raw_target})
                     if not user_data:
                         return await interaction.response.send_message("❌ هذا المستخدم غير مسجل في قاعدة البيانات!", ephemeral=True)
                     
-                    inv = user_data.get("inventory", [])
-                    if "إضافة" in act or "add" in act:
-                        if gear not in inv:
-                            inv.append(gear)
-                        users_col.update_one({"user_id": raw_target}, {"$set": {"inventory": inv}})
-                        await interaction.response.send_message(f"⚔️ **تم منح العتاد `{gear}` بنجاح للمقاتل <@{raw_target}>!**", ephemeral=True)
-                    elif "سحب" in act or "remove" in act:
-                        if gear in inv:
-                            inv.remove(gear)
-                        users_col.update_one({"user_id": raw_target}, {"$set": {"inventory": inv}})
-                        await interaction.response.send_message(f"🛡️ **تم سحب العتاد `{gear}` من المقاتل <@{raw_target}> بنجاح!**", ephemeral=True)
-                    else:
-                        await interaction.response.send_message("❌ نوع العملية غير صحيح، اكتب (إضافة) أو (سحب).", ephemeral=True)
+                    view = ShopActionView(raw_target)
+                    await interaction.response.send_message(
+                        f"⚙️ **إدارة عتاد اللاعب <@{raw_target}>**\nيرجى اختيار المتجر ونوع العملية من الأزرار بالأسفل:", 
+                        view=view, 
+                        ephemeral=True
+                    )
                 except Exception:
                     await interaction.response.send_message("❌ حدث خطأ، تأكد من منشن العضو بشكل صحيح.", ephemeral=True)
 
-        await interaction.response.send_modal(GearModal())
+        await interaction.response.send_modal(TargetUserModal())
 
 # أمر المطور المخفي (لا يظهر في اقتراحات الأوامر العامة نهائياً إلا لك أو للمطورين المضافين)
 @bot.tree.command(name="المطور", description="لوحة التحكم الإمبراطورية الخاصة بالمطورين وسلطات النظام العليا")
 async def developer_panel(interaction: discord.Interaction):
     if not is_developer(interaction.user.id):
-        # إن لم يكن مطوراً، نظهر له كأن الأمر غير موجود تماماً لضمان السرية المطلقة
         return await interaction.response.send_message("❌ هذا الأمر غير موجود.", ephemeral=True)
     
-    # جلب جميع الأوامر المسجلة تلقائياً في السيرفر لعرضها في اللوحة بشكل مؤتمت وفخم
     registered_commands = [cmd.name for cmd in bot.tree.get_commands()]
     commands_list_str = " • ".join([f"`/{c}`" for c in registered_commands])
     
@@ -640,7 +700,7 @@ async def developer_panel(interaction: discord.Interaction):
             "• ترقية وإضافة مطورين جدد لدعم إدارة النظام بالمنشن الفوري.\n"
             "• إزالة المطورين غير المرغوب بهم من لوحة التحكم بالمنشن.\n"
             "• تحويل الأموال والأرصدة الفورية لأي مقاتل عبر منشنه.\n"
-            "• حقيبة الأسلحة والعتاد: منح أو سحب أي درع أو سلاح أسطوري بالمنشن.\n\n"
+            "• حقيبة الأسلحة والعتاد: اختيار المتجر المظلم أو العادي لمنح وسحب الأسلحة.\n\n"
             f"📋 **قائمة الأوامر الفعالة والمضافة حديثاً في النظام:**\n{commands_list_str}"
         ),
         color=discord.Color.from_rgb(138, 43, 226)
@@ -742,50 +802,4 @@ async def profile_command(interaction: discord.Interaction):
     
     embed.add_field(
         name="👑 الرتبة واللقب الحالي",
-        value=f"```yaml\n{custom_title}\n```",
-        inline=False
-    )
-    embed.add_field(
-        name="💰 الخزينة والثروة الإمبراطورية",
-        value=f"• **العملات النقدية:** `{balance:,}` 🪙\n• **الألماس النادر:** `{diamonds:,}` 💎\n• **الحالة الاقتصادية:** `مستقرة ومزدهرة`",
-        inline=True
-    )
-    embed.add_field(
-        name="⚡ مؤشرات القوة القتالية",
-        value=f"• **مستوى الطاقة:** `{power:,}` ⚡\n• **المعارك المحسومة:** `{battles:,}` ⚔️\n• **عدد الخصوم المقضي عليهم:** `{kills:,}` 💀",
-        inline=True
-    )
-    embed.add_field(
-        name="🗼 إنجازات برج المعارك الأسطوري",
-        value=f"• **أعلى طابق تم اجتيازه:** `{max_floor} / 500` طابق 🗼\n• **نسبة الإنجاز في الأبراج:** `{(max_floor / 500) * 100:.1f}%` 📊",
-        inline=False
-    )
-    
-    titles_display = ", ".join([f"`{t}`" for t in unlocked_titles])
-    embed.add_field(
-        name="✨ الألقاب الأسطورية المفتوحة في سجلك",
-        value=f"{titles_display}\n*استمر في خوض التحديات الكبرى وصعود الطوابق لفتح المزيد من الألقاب السرية الفخمة!*",
-        inline=False
-    )
-    
-    embed.set_footer(text=f"طلب بواسطة البطل: {interaction.user.name} • نظام السجلات الموحد", icon_url=interaction.client.user.display_avatar.url)
-    
-    view = ProfileView(interaction.user.id, unlocked_titles)
-    await interaction.followup.send(embed=embed, view=view, ephemeral=False)
-
-@bot.tree.command(name="بنك", description="فتح الحساب البنكي")
-async def bank_command(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    user_id = str(interaction.user.id)
-    user_data = users_col.find_one({"user_id": user_id})
-    
-    if not user_data:
-        return await interaction.followup.send("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=True)
-        
-    bal = user_data.get("balance", 0)
-    diamonds = user_data.get("diamonds", 0)
-    
-    embed = discord.Embed(title="🏦 البنك المركزي", description=f"رصيدك الحالي: `{bal:,}` 🪙\nالألماس: `{diamonds:,}` 💎", color=discord.Color.gold())
-    await interaction.followup.send(embed=embed, ephemeral=True)
-
-bot.run(DISCORD_TOKEN)
+        value=f"```yaml\n{custom_title}\n
