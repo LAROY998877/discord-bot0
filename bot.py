@@ -13,14 +13,12 @@ db = client["discord_bot_db"]
 users_col = db["users"]
 guilds_col = db["guilds"]
 
-# معرف المطور (ضع آيدي الحساب الخاص بك هنا)
-DEVELOPER_ID = 123456789012345678  # استبدل الرقم بآيدي حسابك
+DEVELOPER_ID = 123456789012345678  # استبدله بآيدي حسابك
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="/", intents=intents)
 
-# دالة مساعدة لجلب أو إنشاء المستخدم
 def get_user(user_id):
     user = users_col.find_one({"userId": str(user_id)})
     if not user:
@@ -123,130 +121,114 @@ class DeveloperPanelView(discord.ui.View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-# ==================== 3. نظام نقابتي ====================
-class GuildView(discord.ui.View):
-    def __init__(self, user_data):
-        super().__init__(timeout=180)
-        self.user_data = user_data
-
-    @discord.ui.button(label="🏗️ إنشاء نقابة (400 عملة)", style=discord.ButtonStyle.primary)
-    async def create_guild(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.user_data["balance"] < 400:
-            return await interaction.response.send_message("❌ لا تملك 400 عملة لإنشاء نقابة!", ephemeral=True)
-        
-        await interaction.response.send_message("✍️ اكتب اسم النقابة الجديدة خلال 30 ثانية في الشات:", ephemeral=True)
-        def check(m):
-            return m.author.id == interaction.user.id and m.channel == interaction.channel
-        
-        try:
-            msg = await bot.wait_for("message", timeout=30.0, check=check)
-            guild_name = msg.content
-            
-            if guilds_col.find_one({"name": guild_name}):
-                return await interaction.followup.send("❌ هذا الاسم مستخدم بالفعل لنقابة أخرى!", ephemeral=True)
-            
-            users_col.update_one({"userId": str(interaction.user.id)}, {"$inc": {"balance": -400}})
-            guild_id = guilds_col.insert_one({
-                "name": guild_name,
-                "leaderId": str(interaction.user.id),
-                "members": [str(interaction.user.id)],
-                "treasury": 0,
-                "warehouse": []
-            }).inserted_id
-            
-            users_col.update_one({"userId": str(interaction.user.id)}, {"$set": {"guildId": str(guild_id)}})
-            await interaction.followup.send(f"🎉 تمت الإمبراطورية بنجاح! تم تأسيس نقابة **{guild_name}**.", ephemeral=True)
-        except asyncio.TimeoutError:
-            await interaction.followup.send("⏳ انتهى الوقت ولم تقم بكتابة اسم النقابة.", ephemeral=True)
-
-
-# ==================== 4. نظام الحقيبة ====================
-class InventoryView(discord.ui.View):
-    def __init__(self, inventory):
-        super().__init__(timeout=180)
-        self.inventory = inventory
-
-    @discord.ui.button(label="🛡️ ارتداء أغراض", style=discord.ButtonStyle.success)
-    async def equip_item(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.inventory:
-            return await interaction.response.send_message("❌ حقيبتك فارغة تماماً!", ephemeral=True)
-        await interaction.response.send_message("✨ ميزة ارتداء الأغراض مفعلة وجاهزة لتجهيز العتاد القوي.", ephemeral=True)
-
-
-# ==================== 5. نظام الأبطال ====================
-class HeroesView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=180)
-
-    @discord.ui.button(label="🌸 إيليا (Ilia)", style=discord.ButtonStyle.primary)
-    async def show_ilia(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="🌸 البطلة الأسطورية: إيليا (Ilia)",
-            description="**القصة:** ولدت وسط عواصف السحر الأبدي، وتتحكم بالرياح والضوء النقي.\n\n✨ **المهارات:** عصف النور الأبدي، درع الرياح المتألقة.\n💪 **المعدلات:** هجوم خارق ورشاقة مطلقة.",
-            color=discord.Color.from_rgb(255, 105, 180)
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-# ==================== 6. البنك الامبراطوري ====================
-class ImperialBankView(discord.ui.View):
-    def __init__(self, user_data):
-        super().__init__(timeout=180)
-        self.user_data = user_data
-
-    @discord.ui.button(label="📜 نظام القروض", style=discord.ButtonStyle.danger)
-    async def take_loan(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.user_data["loan"]["amount"] > 0:
-            return await interaction.response.send_message("⚠️ لديك قرض سابق لم تقم بسداده بعد!", ephemeral=True)
-        
-        due = datetime.utcnow() + timedelta(days=1)
-        users_col.update_one(
-            {"userId": str(interaction.user.id)},
-            {"$set": {"loan.amount": 500, "loan.dueDate": due}, "$inc": {"balance": 500}}
-        )
-        await interaction.response.send_message("🏛️ **تم منحك قرض بقيمة 500 عملة!**\n⚠️ تحذير: إن لم تسدده في موعده، سيقوم البنك ببيع كل معدات وأغراض حقيبتك تلقائياً!", ephemeral=True)
-
-
-# ==================== الأوامر الرئيسية (Slash Commands) ====================
+# ==================== الأوامر الرئيسية مع حماية من تايم أوت ====================
 
 @bot.tree.command(name="تسجيل", description="تسجيل شخصيتك الجديدة في الإمبراطورية")
 async def register_cmd(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     user = get_user(interaction.user.id)
     if user["isRegistered"]:
-        return await interaction.response.send_message("❌ أنت مسجل بالفعل مسبقاً!", ephemeral=True)
-    await interaction.response.send_message("🛡️ اختر وظيفتك لبدء مغامرتك:", view=RegisterView(), ephemeral=True)
+        return await interaction.followup.send("❌ أنت مسجل بالفعل مسبقاً!", ephemeral=True)
+    await interaction.followup.send("🛡️ اختر وظيفتك لبدء مغامرتك:", view=RegisterView(), ephemeral=True)
 
 @bot.tree.command(name="لوحة_المطور", description="لوحة تحكم المطور الحصرية")
 async def dev_panel_cmd(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     if interaction.user.id != DEVELOPER_ID:
-        return await interaction.response.send_message("⛔ هذا الأمر مخصص للمطور حصراً!", ephemeral=True)
+        return await interaction.followup.send("⛔ هذا الأمر مخصص للمطور حصراً!", ephemeral=True)
     embed = discord.Embed(title="⚡ لوحة تحكم المطور السيادية", description="اختر العملية المطلوبة:", color=discord.Color.red())
-    await interaction.response.send_message(embed=embed, view=DeveloperPanelView(), ephemeral=True)
+    await interaction.followup.send(embed=embed, view=DeveloperPanelView(), ephemeral=True)
 
 @bot.tree.command(name="نقابتي", description="إدارة النقابة والمستودع المشترك")
 async def guild_cmd(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     user = get_user(interaction.user.id)
     embed = discord.Embed(title="🏰 نظام النقابة الامبراطورية", description="إدارة الخزانة، التبرعات، والمستودع المشترك.", color=discord.Color.blue())
-    await interaction.response.send_message(embed=embed, view=GuildView(user), ephemeral=True)
+    
+    view = discord.ui.View()
+    async def create_guild_callback(i: discord.Interaction):
+        if user["balance"] < 400:
+            return await i.response.send_message("❌ لا تملك 400 عملة لإنشاء نقابة!", ephemeral=True)
+        await i.response.send_message("✍️ اكتب اسم النقابة الجديدة خلال 30 ثانية في الشات:", ephemeral=True)
+        def check(m):
+            return m.author.id == i.user.id and m.channel == i.channel
+        try:
+            msg = await bot.wait_for("message", timeout=30.0, check=check)
+            guild_name = msg.content
+            if guilds_col.find_one({"name": guild_name}):
+                return await i.followup.send("❌ هذا الاسم مستخدم بالفعل!", ephemeral=True)
+            users_col.update_one({"userId": str(i.user.id)}, {"$inc": {"balance": -400}})
+            g_id = guilds_col.insert_one({"name": guild_name, "leaderId": str(i.user.id), "members": [str(i.user.id)], "treasury": 0, "warehouse": []}).inserted_id
+            users_col.update_one({"userId": str(i.user.id)}, {"$set": {"guildId": str(g_id)}})
+            await i.followup.send(f"🎉 تم تأسيس نقابة **{guild_name}** بنجاح!", ephemeral=True)
+        except asyncio.TimeoutError:
+            await i.followup.send("⏳ انتهى الوقت ولم تكتب اسم النقابة.", ephemeral=True)
+
+    btn = discord.ui.Button(label="🏗️ إنشاء نقابة (400 عملة)", style=discord.ButtonStyle.primary)
+    btn.callback = create_guild_callback
+    view.add_item(btn)
+
+    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 @bot.tree.command(name="الحقيبة", description="عرض حقيبتك ومشترياتك وارتداء العتاد")
 async def inventory_cmd(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     user = get_user(interaction.user.id)
     inv = user.get("inventory", [])
     desc = "\n".join([f"• {item.get('name')}" for item in inv]) if inv else "حقيبتك فارغة تماماً!"
     embed = discord.Embed(title=f"🎒 حقيبة المغامر: {user.get('name', 'غير مسجل')}", description=desc, color=discord.Color.green())
-    await interaction.response.send_message(embed=embed, view=InventoryView(inv), ephemeral=True)
+    
+    view = discord.ui.View()
+    async def equip_callback(i: discord.Interaction):
+        if not inv:
+            return await i.response.send_message("❌ حقيبتك فارغة تماماً!", ephemeral=True)
+        await i.response.send_message("✨ ميزة ارتداء الأغراض مفعلة وجاهزة لتجهيز العتاد القوي.", ephemeral=True)
+    
+    btn = discord.ui.Button(label="🛡️ ارتداء أغراض", style=discord.ButtonStyle.success)
+    btn.callback = equip_callback
+    view.add_item(btn)
+
+    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 @bot.tree.command(name="الابطال", description="قاعة الأبطال وقصصهم ومهاراتهم")
 async def heroes_cmd(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     embed = discord.Embed(title="⚔️ قاعة الأبطال الأسطوريين", description="اختر بطلاً لاستعراض قصته ومهاراته الخارقة (تضم إيليا وباقي الأبطال).", color=discord.Color.purple())
-    await interaction.response.send_message(embed=embed, view=HeroesView(), ephemeral=True)
+    
+    view = discord.ui.View()
+    async def ilia_callback(i: discord.Interaction):
+        ilia_embed = discord.Embed(
+            title="🌸 البطلة الأسطورية: إيليا (Ilia)",
+            description="**القصة:** ولدت وسط عواصف السحر الأبدي، وتتحكم بالرياح والضوء النقي.\n\n✨ **المهارات:** عصف النور الأبدي، درع الرياح المتألقة.\n💪 **المعدلات:** هجوم خارق ورشاقة مطلقة.",
+            color=discord.Color.from_rgb(255, 105, 180)
+        )
+        await i.response.send_message(embed=ilia_embed, ephemeral=True)
+
+    btn = discord.ui.Button(label="🌸 إيليا (Ilia)", style=discord.ButtonStyle.primary)
+    btn.callback = ilia_callback
+    view.add_item(btn)
+
+    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 @bot.tree.command(name="البنك_الامبراطوري", description="البنك المركزي، القروض، وتحويل العملات")
 async def bank_cmd(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     user = get_user(interaction.user.id)
     embed = discord.Embed(title="🏛️ البنك الامبراطوري الفخم", description="خدمات القروض والعقوبات الصارمة وتحويل العملات بين المغامرين.", color=discord.Color.gold())
-    await interaction.response.send_message(embed=embed, view=ImperialBankView(user), ephemeral=True)
+    
+    view = discord.ui.View()
+    async def loan_callback(i: discord.Interaction):
+        if user["loan"]["amount"] > 0:
+            return await i.response.send_message("⚠️ لديك قرض سابق لم تقم بسداده بعد!", ephemeral=True)
+        due = datetime.utcnow() + timedelta(days=1)
+        users_col.update_one({"userId": str(i.user.id)}, {"$set": {"loan.amount": 500, "loan.dueDate": due}, "$inc": {"balance": 500}})
+        await i.response.send_message("🏛️ **تم منحك قرض بقيمة 500 عملة!**\n⚠️ تحذير: إن لم تسدده في موعده، سيقوم البنك ببيع كل معدات وأغراض حقيبتك تلقائياً!", ephemeral=True)
+
+    btn = discord.ui.Button(label="📜 نظام القروض", style=discord.ButtonStyle.danger)
+    btn.callback = loan_callback
+    view.add_item(btn)
+
+    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
 @bot.event
