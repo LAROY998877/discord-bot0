@@ -23,7 +23,7 @@ class BotClient(commands.Bot):
 
     async def setup_hook(self):
         await self.tree.sync()
-        print("✅ تم مزامنة البنك والمتاجر ونظام المعارك بنجاح!")
+        print("✅ تم مزامنة البنك والمتاجر ونظام المعارك والطوابق بنجاح!")
 
 bot = BotClient()
 
@@ -196,6 +196,108 @@ async def dark_shop(interaction: discord.Interaction):
     view = ShopView(interaction.user.id, "dark")
     await interaction.response.send_message("🌌 **المتجر المظلم (سوق الأساطير)**\nمكان العتاد المحرم ورتب (الشيطان، الجحيم، السفاح) - 50 قطعة لكل فئة. اختر القسم بحذر:", view=view)
 
+# ================== نظام الطوابق والمعارك ضد الوحوش والزومبي ==================
+class FloorSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="الطابق 1: مستنقع الزومبي", value="1", description="صعوبة: سهلة | زومبي ومخلوقات ضعيفة", emoji="🟢"),
+            discord.SelectOption(label="الطابق 2: كهف الهياكل العظمية", value="2", description="صعوبة: متوسطة | هياكل عظمية مسلحة", emoji="🟡"),
+            discord.SelectOption(label="الطابق 3: أقبية الموتى المنسية", value="3", description="صعوبة: متوسطة-عالية | قتلة متخفون", emoji="🟠"),
+            discord.SelectOption(label="الطابق 4: قلعة الأرواح الهائمة", value="4", description="صعوبة: صعبة | أشباح ووحوش سحرية", emoji="🔴"),
+            discord.SelectOption(label="الطابق 5: برج سيد الظلام (Boss)", value="5", description="صعوبة: أسطورية | زعيم الطابق الأخير وحاشيته", emoji="💀"),
+        ]
+        super().__init__(placeholder="اختر الطابق المراد استكشافه وقؤاله...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        floor_num = int(self.values[0])
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id}) or {}
+
+        # تحديد طبيعة الخصم بناءً على الطابق
+        if floor_num < 5:
+            enemy_type = "زومبي أو وحوش الحراسة"
+            base_coins = floor_num * 350
+        else:
+            enemy_type = "زعيم الطابق الأسطوري (Boss)"
+            base_coins = floor_num * 1000
+
+        # محاكاة القتال (نسبة نجاح تعتمد على الصعوبة وقوة اللاعب الوهمية، لنجعلها مضمونة بنسبة تفوق 75% مع تنوع الغنائم)
+        won = random.random() < (0.9 - (floor_num * 0.05))  # كل ما زاد الطابق زادت الصعوبة قليلاً
+        if floor_num == 5:
+            won = random.random() < 0.65  # الزعيم أصعب
+
+        if not won:
+            return await interaction.followup.send(
+                f"💀 **للأسف!** واجهت في **الطابق {floor_num}** خصماً قوياً ({enemy_type}) وهزمك شر هزيمة! عتد أدراجك وقوّ عتادك أولاً.",
+                ephemeral=True
+            )
+
+        # حساب المكاسب عشوائياً
+        earned_coins = random.randint(base_coins, base_coins + 500)
+        
+        # احتمالات ضئيلة لعملات نادرة (ألماس) وعتاد ظلام
+        # نسبة الألماس: مثلاً 15% إلى 30% حسب الطابق
+        diamond_chance = 0.10 + (floor_num * 0.04) # من 14% إلى 30%
+        earned_diamonds = random.randint(1, floor_num * 2) if random.random() < diamond_chance else 0
+
+        # نسبة الحصول على عتاد عادي عشوائي (مثلاً 35% فرصة)
+        won_normal_item = None
+        if random.random() < 0.35:
+            random_cat = random.choice(list(NORMAL_SHOP_ITEMS.keys()))
+            won_normal_item = random.choice(NORMAL_SHOP_ITEMS[random_cat])
+
+        # نسبة الحصول على عتاد ظلام أو شيء نادر جداً (ضئيلة جداً: من 2% إلى 7%)
+        dark_item_chance = 0.02 + (floor_num * 0.01) # من 3% إلى 7%
+        won_dark_item = None
+        if random.random() < dark_item_chance:
+            random_dark_cat = random.choice(list(DARK_SHOP_ITEMS.keys()))
+            won_dark_item = random.choice(DARK_SHOP_ITEMS[random_dark_cat])
+
+        # تحديث قاعدة البيانات
+        update_query = {"$inc": {"balance": earned_coins}}
+        if earned_diamonds > 0:
+            update_query["$inc"]["diamonds"] = earned_diamonds
+        
+        items_to_push = []
+        if won_normal_item:
+            items_to_push.append(won_normal_item)
+        if won_dark_item:
+            items_to_push.append(won_dark_item)
+
+        if items_to_push:
+            update_query["$push"] = {"inventory": {"$each": items_to_push}}
+
+        users_col.update_one({"user_id": user_id}, update_query, upsert=True)
+
+        # صياغة رسالة النصر والغنائم
+        reward_desc = f"🪙 **عملات عادية:** `+{earned_coins}`"
+        if earned_diamonds > 0:
+            reward_desc += f"\n💎 **عملات نادرة (ألماس):** `+{earned_diamonds}` (صنفت ضمن النادر جداً!)"
+        if won_normal_item:
+            reward_desc += f"\n🛡️ **قطعة عتاد عادي مكتسبة:** `{won_normal_item['name']}` `[{won_normal_item['tier']}]`"
+        if won_dark_item:
+            reward_desc += f"\n🌌 **قطعة عتاد مظلم أسطورية (نادرة جداً!):** `{won_dark_item['name']}` `[{won_dark_item['tier']}]`"
+
+        embed = discord.Embed(
+            title=f"🎉 انتصار ساحق في الطابق {floor_num}!",
+            description=f"لقد تغلبت على `{enemy_type}` بجدارة واستحقاق!\n\n**الغنائم والجوائز المكتسبة:**\n{reward_desc}",
+            color=discord.Color.gold()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+class FloorView(discord.ui.View):
+    def __init__(self, author_id):
+        super().__init__(timeout=None)
+        self.author_id = author_id
+        self.add_item(FloorSelect())
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ عذراً، هذه القائمة الخاصة بالطوابق تخص صاحب الأمر فقط!", ephemeral=True)
+            return False
+        return True
+
 # ================== نظام المعارك والقتال (أمر /معارك) ==================
 class JoinPvPButton(discord.ui.Button):
     def __init__(self, host_id, mode):
@@ -207,7 +309,6 @@ class JoinPvPButton(discord.ui.Button):
         if interaction.user.id == self.host_id:
             return await interaction.response.send_message("❌ لا يمكنك الانضمام لمعركتك الخاصة كخصم!", ephemeral=True)
         
-        # تحديث صلاحيات الروم لتسمح للخصم بالكتابة
         channel = interaction.channel
         await channel.set_permissions(interaction.user, read_messages=True, send_messages=True)
         
@@ -220,12 +321,13 @@ class JoinPvPButton(discord.ui.Button):
         await channel.send(f"🎮 **انطلاق النزال!** <@{self.host_id}> ضد <@{interaction.user.id}>. المشاهدون يمكنكم متابعة الحماس بصمت!")
 
 class BattleSelect(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, author_id):
+        self.author_id = author_id
         options = [
             discord.SelectOption(label="معركة 1v1", value="1v1", description="تحدي فردي وجهاً لوجه", emoji="⚔️"),
             discord.SelectOption(label="معركة 2v2", value="2v2", description="معركة جماعية ثنائية", emoji="🛡️"),
             discord.SelectOption(label="معركة 3v3", value="3v3", description="حرب الفرق الثلاثية", emoji="⚡"),
-            discord.SelectOption(label="الطوابق", value="floors", description="استكشاف الأبراج وقتال الوحوش", emoji="🗼"),
+            discord.SelectOption(label="الطوابق", value="floors", description="استكشاف الأبراج وقتال الوحوش والزومبي", emoji="🗼"),
             discord.SelectOption(label="المتجر", value="shop", description="الانتقال السريع لأسواق العتاد", emoji="🛒"),
             discord.SelectOption(label="تطوير عتادك", value="upgrade", description="رفع مستوى قطعك الحالية", emoji="⚒️"),
             discord.SelectOption(label="حقيبتك", value="inventory", description="استعراض مقتنياتك وأسلحتك", emoji="🎒")
@@ -239,7 +341,6 @@ class BattleSelect(discord.ui.Select):
         guild = interaction.guild
 
         if choice in ["1v1", "2v2", "3v3"]:
-            # إنشاء روم مخصص للقتال
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=True, send_messages=False),
                 interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)
@@ -259,7 +360,8 @@ class BattleSelect(discord.ui.Select):
             await interaction.response.send_message(f"✅ تم إنشاء روم المعركة الخاص بك بنجاح: {room.mention}!", ephemeral=True)
 
         elif choice == "floors":
-            await interaction.response.send_message("🗼 **نظام الطوابق:** قريباً سيتم تفعيل أبراج الوحوش الطابقية وتحديات البوصات الصعبة!", ephemeral=True)
+            floor_view = FloorView(interaction.user.id)
+            await interaction.response.send_message("🗼 **اختر الطابق الذي ترغب في غزوه وتجاوز مصاعبه:**", view=floor_view, ephemeral=True)
 
         elif choice == "shop":
             view = ShopView(interaction.user.id, "normal")
@@ -278,7 +380,7 @@ class BattleView(discord.ui.View):
     def __init__(self, author_id):
         super().__init__(timeout=None)
         self.author_id = author_id
-        self.add_item(BattleSelect())
+        self.add_item(BattleSelect(author_id))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
