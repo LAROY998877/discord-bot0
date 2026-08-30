@@ -44,7 +44,7 @@ def extract_user_id(text):
     clean = text.strip().replace("<@", "").replace(">", "").replace("!", "")
     return str(int(clean))
 
-# ================== قاعدة بيانات الأبطال (العاديين والمطور) ==================
+# ================== قاعدة بيانات الأبطال ==================
 HEROES_DATA = {
     "zeal": {
         "name": "زيل - كاسر الظلال (Zeal)",
@@ -88,7 +88,7 @@ HEROES_DATA = {
         "power": "الشفاء السريع، القوة البدنية المطلقة، وهالة النور المقدس",
         "story": "قائدة حرس الفجر الأسطوريون. تحمل درعاً مقدساً لا ينكسر وسيفاً يضيء بنور الشمس الأولى، تطهر الأراضي من الوحوش والظلام."
     },
-    # 💀 شخصية السفاح الحصرية للمطور فقط
+    # 💀 شخصية السفاح الحصرية للمطور
     "assassin_dev": {
         "name": "💀 السفاح الأبدي - حاصد الأرواح (The Executioner)",
         "gender": "مطور مطلق",
@@ -103,12 +103,12 @@ HEROES_DATA = {
     }
 }
 
-# قائمة الأبطال العامة (للاعبين العاديين)
+# قائمة الأبطال العامة للاعبين
 class HeroSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label=data["name"], description=f"الجنس: {data['gender']} | القوة: {data['power'][:35]}...", emoji=data["emoji"], value=key)
-            for key, data in HEROES_DATA.items() if key != "assassin_dev" # استثناء شخصية السفاح للعامة
+            for key, data in HEROES_DATA.items() if key != "assassin_dev"
         ]
         super().__init__(placeholder="اختر بطلك الأسطوري لتستعرض قصته وقوته...", min_values=1, max_values=1, options=options)
 
@@ -122,7 +122,6 @@ class HeroSelect(discord.ui.Select):
             color=discord.Color.from_rgb(138, 43, 226)
         )
         embed.set_footer(text=f"تم اختيار البطل بواسطة: {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
-        
         users_col.update_one({"user_id": str(interaction.user.id)}, {"$set": {"selected_hero": hero['name']}}, upsert=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -142,12 +141,36 @@ async def heroes_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
 
-# ================== لوحة المطور وتحكم شخصية السفاح ==================
+# ================== نوافذ الأوامر الخاصة بلوحة المطور (Modals) ==================
+
+class AddBalanceModal(discord.ui.Modal, title="إدارة الأرصدة والعملات"):
+    target = discord.ui.TextInput(label="آيدي المستخدم أو المنشن", placeholder="مثال: 123456789 أو @User", required=True)
+    amount = discord.ui.TextInput(label="المبلغ المضاف", placeholder="مثال: 50000", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            uid = extract_user_id(self.target.value)
+            val = int(self.amount.value)
+            users_col.update_one({"user_id": uid}, {"$inc": {"balance": val}}, upsert=True)
+            await interaction.response.send_message(f"✅ تم إضافة `{val:,}` 🪙 للمستخدم بنجاح!", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ حدث خطأ: تأكد من صحة الآيدي أو الرقم. ({e})", ephemeral=True)
+
+class AddDevModal(discord.ui.Modal, title="إضافة مطور جديد"):
+    target = discord.ui.TextInput(label="آيدي المستخدم الجديد للمطورين", placeholder="أدخل الآيدي هنا...", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        uid = self.target.value.strip()
+        devs_col.update_one({"user_id": uid}, {"$set": {"user_id": uid}}, upsert=True)
+        await interaction.response.send_message(f"✅ تم منح صلاحيات المطور للعضو ذو الآيدي: `{uid}`", ephemeral=True)
+
+
+# ================== لوحة التحكم العليا المتكاملة للمطور ==================
 class DevControlView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=300)
 
-    @discord.ui.button(label="💀 تفعيل شخصية 'السفاح' المطلقة", style=discord.ButtonStyle.danger, emoji="🩸")
+    @discord.ui.button(label="💀 تفعيل شخصية 'السفاح' المطلقة", style=discord.ButtonStyle.danger, emoji="🩸", row=0)
     async def activate_assassin(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_developer(interaction.user.id):
             return await interaction.response.send_message("❌ هذا الزر مخصص للمطورين فقط!", ephemeral=True)
@@ -155,7 +178,6 @@ class DevControlView(discord.ui.View):
         assassin = HEROES_DATA["assassin_dev"]
         user_id = str(interaction.user.id)
         
-        # منح المطور إحصائيات وقوة السفاح الخارقة في قاعدة البيانات مباشرة
         users_col.update_one(
             {"user_id": user_id},
             {
@@ -177,6 +199,18 @@ class DevControlView(discord.ui.View):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @discord.ui.button(label="إضافة رصيد عملات", style=discord.ButtonStyle.success, emoji="🪙", row=0)
+    async def btn_add_balance(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_developer(interaction.user.id):
+            return await interaction.response.send_message("❌ للمطورين فقط!", ephemeral=True)
+        await interaction.response.send_modal(AddBalanceModal())
+
+    @discord.ui.button(label="إضافة مطور جديد", style=discord.ButtonStyle.primary, emoji="🛠️", row=1)
+    async def btn_add_dev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_developer(interaction.user.id):
+            return await interaction.response.send_message("❌ للمطورين فقط!", ephemeral=True)
+        await interaction.response.send_modal(AddDevModal())
+
 @bot.tree.command(name="المطور", description="لوحة التحكم الخاصة بالمطورين وصلاحياتهم المطلقة")
 async def developer_command(interaction: discord.Interaction):
     if not is_developer(interaction.user.id):
@@ -184,11 +218,59 @@ async def developer_command(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title="🛠️ لوحة التحكم العليا للمطورين",
-        description="أهلاً بك أيها المطور. يمكنك من هنا تفعيل شخصية **السفاح** المرعبة لترسانتك القتالية والسيطرة المطلقة:",
+        description="أهلاً بك أيها المطور. يمكنك تفعيل شخصية **السفاح** أو إدارة الأرصدة والصلاحيات من الأزرار أدناه:",
         color=discord.Color.dark_embed()
     )
     view = DevControlView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+# ================== نظام البنك والأموال (Bank System) ==================
+@bot.tree.command(name="البنك", description="إدارة رصيدك البنكي، الإيداع، والسحب")
+@app_commands.describe(
+    action="اختر العملية (عرض، إيداع، سحب)",
+    amount="المبلغ المراد إيداعه أو سحبه"
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name="عرض الرصيد", value="balance"),
+    app_commands.Choice(name="إيداع", value="deposit"),
+    app_commands.Choice(name="سحب", value="withdraw")
+])
+async def bank_command(interaction: discord.Interaction, action: str, amount: int = None):
+    user_id = str(interaction.user.id)
+    user_data = users_col.find_one({"user_id": user_id})
+    
+    if not user_data:
+        return await interaction.response.send_message("❌ أنت غير مسجل في النظام! استخدم `/تسجيل` أولاً.", ephemeral=True)
+    
+    wallet = user_data.get("balance", 0)
+    bank = user_data.get("bank", 0)
+    
+    if action == "balance":
+        embed = discord.Embed(
+            title=f"🏦 البنك المركزي للمقاتل: {interaction.user.display_name}",
+            description=f"💰 **المحفظة النقدية:** `{wallet:,}` 🪙\n💳 **رصيد البنك:** `{bank:,}` 🪙",
+            color=discord.Color.blue()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    elif action == "deposit":
+        if amount is None or amount <= 0:
+            return await interaction.response.send_message("❌ يرجى تحديد مبلغ صحيح للإيداع!", ephemeral=True)
+        if wallet < amount:
+            return await interaction.response.send_message("❌ لا تملك هذا المبلغ في محفظتك النقدية!", ephemeral=True)
+        
+        users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -amount, "bank": amount}})
+        await interaction.response.send_message(f"✅ تم إيداع `{amount:,}` 🪙 بنجاح في البنك!", ephemeral=True)
+        
+    elif action == "withdraw":
+        if amount is None or amount <= 0:
+            return await interaction.response.send_message("❌ يرجى تحديد مبلغ صحيح للسحب!", ephemeral=True)
+        if bank < amount:
+            return await interaction.response.send_message("❌ لا تملك هذا المبلغ في حسابك البنكي!", ephemeral=True)
+        
+        users_col.update_one({"user_id": user_id}, {"$inc": {"balance": amount, "bank": -amount}})
+        await interaction.response.send_message(f"✅ تم سحب `{amount:,}` 🪙 بنجاح إلى محفظتك!", ephemeral=True)
 
 
 # ================== أمر الملف الشخصي الأسطوري ==================
@@ -202,6 +284,7 @@ async def profile_command(interaction: discord.Interaction):
         return await interaction.followup.send("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=False)
     
     balance = user_data.get("balance", 0)
+    bank = user_data.get("bank", 0)
     diamonds = user_data.get("diamonds", 0)
     custom_title = user_data.get("custom_title", "المبتدئ")
     max_floor = user_data.get("max_floor", 0)
@@ -209,7 +292,6 @@ async def profile_command(interaction: discord.Interaction):
     power = user_data.get("power", 100)
     kills = user_data.get("kills", 0)
     
-    # تحديد لون الإطار (إذا كان السفاح فهو أحمر داكن دموي، وللآخرين ذهبي)
     embed_color = discord.Color.dark_red() if "السفاح" in selected_hero else discord.Color.gold()
     
     embed = discord.Embed(
@@ -221,9 +303,9 @@ async def profile_command(interaction: discord.Interaction):
     embed.add_field(name="⚡ مستوى الطاقة", value=f"{power:,}", inline=True)
     embed.add_field(name="🏢 أعلى طابق", value=str(max_floor), inline=True)
     embed.add_field(name="💀 الخصوم المقضي عليهم", value=str(kills), inline=True)
-    embed.add_field(name="💰 الرصيد والجوهرة", value=f"{balance:,} 🪙 | {diamonds:,} 💎", inline=True)
+    embed.add_field(name="💰 المحفظة والبنك", value=f"{balance:,} 🪙 | 💳 {bank:,} 🪙", inline=False)
+    embed.add_field(name="💎 الألماس", value=f"{diamonds:,} 💎", inline=True)
     
-    # إذا كان البطل هو السفاح، نضع نبذة عن قصته وقوته المرعبة في الملف مباشرة!
     if "السفاح" in selected_hero:
         embed.add_field(
             name="🩸 حالة الكيان المرعب",
@@ -245,6 +327,7 @@ async def register_command(interaction: discord.Interaction):
     new_user = {
         "user_id": user_id,
         "balance": 1000,
+        "bank": 0,
         "diamonds": 10,
         "max_floor": 0,
         "kills": 0,
