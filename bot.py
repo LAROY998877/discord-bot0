@@ -168,10 +168,77 @@ BOLD_QUESTIONS = [
 ]
 
 # ==========================================
-# النوافذ التفاعلية ونظام البنك (Modal & Views)
+# نظام التحقق من التسجيل (دالة مساعدة)
 # ==========================================
+def is_registered(user_id: str) -> bool:
+    user = users_col.find_one({"user_id": user_id})
+    return bool(user and user.get("registered", False))
 
-# نافذة تحويل العملات بالمنشن أو الـ ID
+# ==========================================
+# نافذة التسجيل (Modal)
+# ==========================================
+class RegisterModal(Modal, title="تسجيل بيانات المستخدم الجديد"):
+    name_input = TextInput(
+        label="الاسم",
+        placeholder="أدخل اسمك الحقيقي أو المستعار",
+        style=discord.TextStyle.short,
+        required=True
+    )
+    age_input = TextInput(
+        label="العمر",
+        placeholder="أدخل عمرك بالأرقام (مثال: 20)",
+        style=discord.TextStyle.short,
+        required=True
+    )
+    gender_input = TextInput(
+        label="الجنس",
+        placeholder="ذكر / أنثى",
+        style=discord.TextStyle.short,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
+        name = self.name_input.value.strip()
+        raw_age = self.age_input.value.strip()
+        gender = self.gender_input.value.strip()
+
+        try:
+            age = int(raw_age)
+            if age <= 0 or age > 120:
+                raise ValueError()
+        except ValueError:
+            return await interaction.response.send_message("❌ يرجى إدخال عمر صحيح وبمنطقية.", ephemeral=True)
+
+        # حفظ البيانات في قاعدة البيانات وتفعيل حالة التسجيل
+        users_col.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "registered": True,
+                    "name": name,
+                    "age": age,
+                    "gender": gender
+                },
+                "$setOnInsert": {
+                    "balance": 1000  # رصيد ابتدائي عند التسجيل
+                }
+            },
+            upsert=True
+        )
+
+        await interaction.response.send_message(
+            f"✅ **تم تسجيلك بنجاح تام!**\n"
+            f"👤 **الاسم:** {name}\n"
+            f"🎂 **العمر:** {age}\n"
+            f"⚧ **الجنس:** {gender}\n\n"
+            f"يمكنك الآن استخدام أوامر البوت بكل حرية، مثل أمر `/البنك`.",
+            ephemeral=True
+        )
+
+# ==========================================
+# نافذة تحويل العملات الفوري
+# ==========================================
 class TransferModal(Modal, title="تحويل العملات الفوري"):
     target_input = TextInput(
         label="منشن الشخص أو آيدي المستخدم (ID)",
@@ -191,7 +258,6 @@ class TransferModal(Modal, title="تحويل العملات الفوري"):
         raw_target = self.target_input.value.strip()
         raw_amount = self.amount_input.value.strip()
 
-        # استخراج الآيدي من المنشن أو النص
         match_id = re.search(r'\d+', raw_target)
         if not match_id:
             return await interaction.response.send_message("❌ لم يتم التعرف على المستخدم المستهدف بشكل صحيح. يرجى استخدام المنشن أو الآيدي.", ephemeral=True)
@@ -208,14 +274,12 @@ class TransferModal(Modal, title="تحويل العملات الفوري"):
         except ValueError:
             return await interaction.response.send_message("❌ يرجى إدخال مبلغ صحيح وموجب.", ephemeral=True)
 
-        # التحقق من رصيد المرسل في قاعدة البيانات
         sender_data = users_col.find_one({"user_id": sender_id})
         sender_balance = sender_data.get("balance", 0) if sender_data else 0
 
         if sender_balance < amount:
             return await interaction.response.send_message(f"❌ رصيدك غير كافٍ! رصيدك الحالي هو: `{sender_balance}` عملة.", ephemeral=True)
 
-        # خصم المبلغ من المرسل وإضافته للمستقبل
         users_col.update_one({"user_id": sender_id}, {"$inc": {"balance": -amount}}, upsert=True)
         users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount}}, upsert=True)
 
@@ -251,14 +315,17 @@ class BankSelect(Select):
         super().__init__(placeholder="✨ اختر الخدمة المصرفية المطلوبة من هنا...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        choice = self.values[0]
         user_id = str(interaction.user.id)
         
+        # حماية إضافية: التأكد من أنه مسجل حتى داخل القائمة
+        if not is_registered(user_id):
+            return await interaction.response.send_message("❌ يجب عليك التسجيل أولاً باستخدام الأمر `/تسجيل` لتتمكن من استخدام الخدمات المصرفية.", ephemeral=True)
+
+        choice = self.values[0]
+        
         if choice == "bank_daily":
-            # التحقق من الراتب اليومي عبر قاعدة البيانات
             user_data = users_col.find_one({"user_id": user_id})
             now = datetime.now(timezone.utc)
-            
             last_claim = user_data.get("last_daily") if user_data else None
             
             if last_claim and now - last_claim < timedelta(hours=24):
@@ -270,7 +337,6 @@ class BankSelect(Select):
                     ephemeral=True
                 )
 
-            # منح الراتب (مثلاً 5000 عملة) وتحديث الوقت
             daily_amount = 5000
             users_col.update_one(
                 {"user_id": user_id},
@@ -302,7 +368,6 @@ class BankSelect(Select):
 
                 @discord.ui.button(label="تقديم طلب قرض", style=discord.ButtonStyle.danger, emoji="⚖️", custom_id="request_loan_btn")
                 async def request_loan(self, interaction: discord.Interaction, button: Button):
-                    # تسجيل القرض أو منح رصيد القرض مؤقتاً مع وقت انتهاء
                     loan_due = datetime.now(timezone.utc) + timedelta(days=3)
                     users_col.update_one(
                         {"user_id": str(interaction.user.id)},
@@ -318,7 +383,6 @@ class BankSelect(Select):
             return await interaction.response.send_message(embed=embed, view=LoanView(), ephemeral=True)
         
         elif choice == "bank_transfer":
-            # فتح نافذة إدخال التحويل (Modal)
             return await interaction.response.send_modal(TransferModal())
 
 class BankView(View):
@@ -327,10 +391,38 @@ class BankView(View):
         self.add_item(BankSelect())
 
 # ==========================================
-# أمر البنك الرئيسي (Slash Command)
+# أمر التسجيل (Slash Command)
 # ==========================================
-@bot.tree.command(name="bank", description="النظام المصرفي الفاخر لإدارة الأموال، القروض، والتحويلات")
+@bot.tree.command(name="تسجيل", description="تسجيل بياناتك الشخصية (الاسم، العمر، الجنس) لتتمكن من استخدام البوت")
+async def register(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    if is_registered(user_id):
+        user_data = users_col.find_one({"user_id": user_id})
+        return await interaction.response.send_message(
+            f"ℹ️ أنت مسجل مسبقاً بالفعل:\n"
+            f"👤 **الاسم:** {user_data.get('name')}\n"
+            f"🎂 **العمر:** {user_data.get('age')}\n"
+            f"⚧ **الجنس:** {user_data.get('gender')}",
+            ephemeral=True
+        )
+    
+    await interaction.response.send_modal(RegisterModal())
+
+# ==========================================
+# أمر البنك الرئيسي باللغة العربية (Slash Command)
+# ==========================================
+@bot.tree.command(name="البنك", description="النظام المصرفي الفاخر لإدارة الأموال، القروض، والتحويلات")
 async def bank(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    
+    # شرط أساسي: منع استخدام البنك إذا لم يكن مسجلاً
+    if not is_registered(user_id):
+        return await interaction.response.send_message(
+            "❌ **عذراً، لا يمكنك استخدام البنك!**\n"
+            "يجب عليك التسجيل أولاً باستخدام الأمر `/تسجيل` لفتح حساب بنكي وتفعيل عضويتك.",
+            ephemeral=True
+        )
+
     bank_embed = discord.Embed(
         title="🏛️ | البنك المركزي الملكي - Royal Bank",
         description=(
