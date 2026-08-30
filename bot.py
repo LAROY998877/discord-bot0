@@ -86,7 +86,7 @@ HEROES_DATA = {
     }
 }
 
-# توليد 25 قطعة لكل فئة في المتجر العادي والمظلم برمجيًا لإعطاء ضخامة حقيقية
+# توليد 25 قطعة لكل فئة في المتجر العادي والمظلم برمجيًا
 CATEGORIES = ["خوذة", "درع", "بنطال", "حذاء", "سيف", "مطرقة", "خنجر", "عصا سحرية"]
 
 def generate_normal_shop_items():
@@ -189,7 +189,7 @@ class NormalShopView(discord.ui.View):
     async def enter_dark_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
             title="🩸 تحذير: أنت على وشك دخول سوق الظلال الملعون!",
-            description="هنا حيث تسود الشياطين وتُباع أسلحة الرتب الثلاث المرعبة:\n• **الشيطان الأبدي** 👑\n• **الجحيم القاتل** 🔥\n• **السفاح القرمزي** 🔴",
+            description="هنا حيث تسود الشياطين وتُباع أسلحة الرتب الثلاث المرعبة.",
             color=discord.Color.dark_embed()
         )
         await interaction.response.edit_message(embed=embed, view=DarkShopView())
@@ -223,16 +223,16 @@ class DarkShopView(discord.ui.View):
 async def shop_command(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🏛️ متجر الإمبراطورية المركزي",
-        description="أهلاً بك أيها المقاتل في السوق الرئيسي الآمن.",
+        description="أهلاً بك أيها المقاتل. الإمبراطورية ترحب بك في السوق الرئيسي الآمن.",
         color=discord.Color.gold()
     )
+    embed.add_field(name="⚔️ الأقسام المتوفرة", value="• خوذة | درع | بنطال | حذاء\n• سيف | مطرقة | خنجر | عصا سحرية", inline=False)
     await interaction.response.send_message(embed=embed, view=NormalShopView(), ephemeral=True)
 
-# ================== قائمة تفاعل الأبطال (أمر الابطال) ==================
+# ================== نظام استعراض الأبطال (/الابطال) ==================
 
 class HeroesSelect(discord.ui.Select):
     def __init__(self):
-        # استخراج الأبطال الستة فقط (استثناء السفاح الأبدي الخاص بالمطور إذا أردت أو إظهاره)
         heroes_list = {k: v for k, v in HEROES_DATA.items() if k != "assassin_dev"}
         options = [
             discord.SelectOption(
@@ -272,11 +272,112 @@ class HeroesView(discord.ui.View):
 async def command_heroes(interaction: discord.Interaction):
     embed = discord.Embed(
         title="⚔️ سجل الأبطال الأسطوريين",
-        description="اختر أحد الأبطال من القائمة أدناه للاطلاع على قصته الخيالية وقوته ومعدلاته القتالية:",
+        description="اختر أحد الأبطال من القائمة أدناه للاطلاع على قصته وقوته ومعدلاته القتالية:",
         color=discord.Color.gold()
     )
     view = HeroesView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+# ================== أمر البنك (الإيداع والسحب) ==================
+@bot.tree.command(name="البنك", description="إدارة أموالك في البنك الإمبراطوري (إيداع / سحب)")
+@app_commands.describe(operation="اختر العملية (إيداع أو سحب)", amount="المبلغ المراد تحويله أو كتابة 'الكل'")
+@app_commands.choices(operation=[
+    app_commands.Choice(name="إيداع", value="deposit"),
+    app_commands.Choice(name="سحب", value="withdraw")
+])
+async def bank_command(interaction: discord.Interaction, operation: str, amount: str):
+    await interaction.response.defer(ephemeral=True)
+    user_id = str(interaction.user.id)
+    user_data = users_col.find_one({"user_id": user_id})
+    
+    if not user_data:
+        return await interaction.followup.send("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=True)
+    
+    balance = user_data.get("balance", 0)
+    bank = user_data.get("bank", 0)
+    
+    if operation == "deposit":
+        if amount.lower() in ["الكل", "all"]:
+            val = balance
+        else:
+            try:
+                val = int(amount)
+            except ValueError:
+                return await interaction.followup.send("❌ يرجى إدخال رقم صحيح للمبلغ أو كتابة 'الكل'.", ephemeral=True)
+        
+        if val <= 0:
+            return await interaction.followup.send("❌ لا يمكنك إيداع مبلغ صفري أو سالب!", ephemeral=True)
+        if balance < val:
+            return await interaction.followup.send(f"❌ رصيدك الحالي (`{balance:,}`) لا يكفي لإيداع هذا المبلغ!", ephemeral=True)
+        
+        users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -val, "bank": val}})
+        await interaction.followup.send(f"✅ تم إيداع `{val:,}` 🪙 بنجاح في البنك الإمبراطوري!", ephemeral=True)
+        
+    elif operation == "withdraw":
+        if amount.lower() in ["الكل", "all"]:
+            val = bank
+        else:
+            try:
+                val = int(amount)
+            except ValueError:
+                return await interaction.followup.send("❌ يرجى إدخال رقم صحيح للمبلغ أو كتابة 'الكل'.", ephemeral=True)
+        
+        if val <= 0:
+            return await interaction.followup.send("❌ لا يمكنك سحب مبلغ صفري أو سالب!", ephemeral=True)
+        if bank < val:
+            return await interaction.followup.send(f"❌ رصيدك البنكي الحالي (`{bank:,}`) لا يكفي لسحب هذا المبلغ!", ephemeral=True)
+        
+        users_col.update_one({"user_id": user_id}, {"$inc": {"balance": val, "bank": -val}})
+        await interaction.followup.send(f"✅ تم سحب `{val:,}` 🪙 بنجاح من البنك إلى محفظتك!", ephemeral=True)
+
+# ================== أمر صعود الطوابق / المغامرة ==================
+@bot.tree.command(name="المغامرة", description="صعود طوابق البرج القتالي وقتال الوحوش لزيادة الطابق والجوائز")
+async def adventure_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=False)
+    user_id = str(interaction.user.id)
+    user_data = users_col.find_one({"user_id": user_id})
+    
+    if not user_data:
+        return await interaction.followup.send("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=False)
+    
+    current_max_floor = user_data.get("max_floor", 0)
+    power = user_data.get("power", 100)
+    
+    # محاكاة نتيجة المعركة بالاعتماد على الطاقة وقليل من الحظ
+    target_floor = current_max_floor + 1
+    required_power = target_floor * 50
+    
+    # فرصة نجاح تعتمد على القوة
+    success_chance = min(90, max(30, int((power / (required_power + 1)) * 50)))
+    roll = random.randint(1, 100)
+    
+    if roll <= success_chance or power >= required_power:
+        reward_gold = target_floor * 300
+        reward_kills = 1
+        users_col.update_one(
+            {"user_id": user_id},
+            {
+                "$max": {"max_floor": target_floor},
+                "$inc": {"kills": reward_kills, "balance": reward_gold}
+            }
+        )
+        embed = discord.Embed(
+            title=f"🎉 انتصار مظفر في الطابق #{target_floor}!",
+            description=f"لقد قاتلت ضواري البرج بشراسة وتمكنت من اجتياز الطابق بنجاح!",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="💰 الغنائم المكتسبة", value=f"`+{reward_gold:,}` 🪙 عملة ذهبية", inline=True)
+        embed.add_field(name="🏢 الطابق الجديد", value=str(target_floor), inline=True)
+    else:
+        embed = discord.Embed(
+            title=f"💀 هزيمة قاسية في الطابق #{target_floor}!",
+            description=f"كان الخصوم أقوياء جداً هذه المرة، قُم بترقية عتادك وزيادة قوتك قبل المحاولة مجدداً.",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="⚡ طاقتك الحالية", value=f"{power:,}", inline=True)
+        embed.add_field(name="🎯 الطاقة المطلوبة تقريباً", value=f"{required_power:,}", inline=True)
+
+    await interaction.followup.send(embed=embed, ephemeral=False)
 
 # ================== قوائم اختيار الأعضاء للمطورين ==================
 
