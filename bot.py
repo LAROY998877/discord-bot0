@@ -1,5 +1,6 @@
 import os
 import random
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -205,40 +206,7 @@ async def games_command(interaction: discord.Interaction):
     view = GamesMenuView(interaction.user.id)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
-# ================== نظام معارك اللاعبين (1v1, 2v2, 3v3 مع زر الانضمام) ==================
-class PvPActiveBattleView(discord.ui.View):
-    def __init__(self, team1, team2):
-        super().__init__(timeout=120)
-        self.team1 = team1 # قائمة الأيدي للاعبين
-        self.team2 = team2
-        self.t1_hp = 100
-        self.t2_hp = 100
-
-    @discord.ui.button(label="⚔️ هجوم الفريق الأول", style=discord.ButtonStyle.danger)
-    async def attack_team1(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id not in self.team1 and interaction.user.id not in self.team2:
-            return await interaction.response.send_message("❌ أنت لست مشاركاً في هذه المعركة!", ephemeral=True)
-        
-        dmg = random.randint(15, 30)
-        if interaction.user.id in self.team1:
-            self.t2_hp = max(0, self.t2_hp - dmg)
-            attacker_team = "الفريق الأول"
-        else:
-            self.t1_hp = max(0, self.t1_hp - dmg)
-            attacker_team = "الفريق الثاني"
-
-        if self.t1_hp <= 0 or self.t2_hp <= 0:
-            winner = "الفريق الأول 🏆" if self.t2_hp <= 0 else "الفريق الثاني 🏆"
-            embed = discord.Embed(title="⚔️ نهاية المعركة الحماسية!", description=f"انتهت المعركة بفوز **{winner}** بجدارة واستحقاق!", color=discord.Color.gold())
-            return await interaction.response.edit_message(embed=embed, view=None)
-
-        embed = discord.Embed(
-            title="⚔️ معركة اللاعبين المشتعلة",
-            description=f"💥 قام لاعب من **{attacker_team}** بتوجيه ضربة بقيمة `{dmg}`!\n\n🛡️ **دم الفريق الأول:** `{self.t1_hp}/100`\n🛡️ **دم الفريق الثاني:** `{self.t2_hp}/100`",
-            color=discord.Color.red()
-        )
-        await interaction.response.edit_message(embed=embed, view=self)
-
+# ================== نظام معارك اللاعبين (قريب وخاص وتلقائي بالكامل) ==================
 class PvPLobbyView(discord.ui.View):
     def __init__(self, mode, author_id):
         super().__init__(timeout=180)
@@ -246,7 +214,6 @@ class PvPLobbyView(discord.ui.View):
         self.author_id = author_id
         self.players = [author_id]
         
-        # تحديد العدد المطلوب حسب النمط
         if mode == "1v1":
             self.required_players = 2
         elif mode == "2v2":
@@ -274,12 +241,43 @@ class PvPLobbyView(discord.ui.View):
             t2_str = ", ".join([f"<@{p}>" for p in team2])
             
             embed = discord.Embed(
-                title=f"🔥 اكتمل العدد! انطلاق معركة {self.mode}",
-                description=f"**الفريق الأول:** {t1_str}\nVS\n**الفريق الثاني:** {t2_str}\n\nاضغط على زر الهجوم أدناه لبدء القتال!",
+                title=f"🔥 اكتمل العدد! انطلاق معركة {self.mode} التلقائية",
+                description=f"**الفريق الأول:** {t1_str}\nVS\n**الفريق الثاني:** {t2_str}\n\n⚔️ **تبدأ المعركة تلقائياً الآن... استعدوا!**",
                 color=discord.Color.dark_red()
             )
-            view = PvPActiveBattleView(team1, team2)
-            return await interaction.response.edit_message(embed=embed, view=view)
+            await interaction.response.edit_message(embed=embed, view=None)
+            
+            # بدء المعركة تلقائياً بالدور
+            msg = interaction.message
+            t1_hp, t2_hp = 100, 100
+            
+            while t1_hp > 0 and t2_hp > 0:
+                await asyncio.sleep(3)
+                # ضربة الفريق الأول
+                dmg1 = random.randint(15, 30)
+                t2_hp = max(0, t2_hp - dmg1)
+                
+                embed.description = f"**الفريق الأول:** {t1_str} (دمه: {t1_hp})\nVS\n**الفريق الثاني:** {t2_str} (دمه: {t2_hp})\n\n💥 **هجوم الفريق الأول!** أحدث ضرر بقيمة `{dmg1}`."
+                await msg.edit(embed=embed)
+                
+                if t2_hp <= 0:
+                    break
+                    
+                await asyncio.sleep(3)
+                # ضربة الفريق الثاني
+                dmg2 = random.randint(15, 30)
+                t1_hp = max(0, t1_hp - dmg2)
+                
+                embed.description = f"**الفريق الأول:** {t1_str} (دمه: {t1_hp})\nVS\n**الفريق الثاني:** {t2_str} (دمه: {t2_hp})\n\n💥 **رد الفريق الثاني!** أحدث ضرر بقيمة `{dmg2}`."
+                await msg.edit(embed=embed)
+            
+            winner = "الفريق الأول 🏆" if t2_hp <= 0 else "الفريق الثاني 🏆"
+            final_embed = discord.Embed(
+                title="🏆 انتهت المعركة التلقائية!",
+                description=f"لقد انتهت المواجهة بفوز **{winner}** بعد تبادل الضربات بقوة!\n\n👑 الف مبروك للفائزين!",
+                color=discord.Color.gold()
+            )
+            return await msg.edit(embed=final_embed)
 
         embed = discord.Embed(
             title=f"🛡️ غرفة انتظار معركة {self.mode}",
