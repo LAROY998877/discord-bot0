@@ -109,6 +109,9 @@ class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل 
 
     async def on_submit(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
+        if is_user_registered(user_id):
+            return await interaction.response.send_message("❌ أنت مسجل بالفعل في الإمبراطورية!", ephemeral=True)
+
         try:
             age = int(self.age_input.value.strip())
         except ValueError:
@@ -554,11 +557,6 @@ class TowerMainView(discord.ui.View):
 
 # ================== ⚔️ 7. نظام المعارك المباشرة PvP ==================
 
-PVP_BANTER = [
-    ("سأعلمك اليوم كيف تحترم أباطرة الإمبراطورية!", "كلامك كثير وحقيبتك فارغة، أرني ما لديك!"),
-    ("سيفي لا يرحم الضعفاء في الميدان!", "دفاعي الصلب سيحطم سيفك إلى شظايا!")
-]
-
 class BattleLobbyView(discord.ui.View):
     def __init__(self, mode: str, host_user: discord.User):
         super().__init__(timeout=300)
@@ -705,7 +703,6 @@ class LeaderboardSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         category = self.values[0]
         
-        # 1. ترتيب أغنى شخص
         if category == "rich":
             all_users = list(users_col.find())
             all_users.sort(key=lambda u: u.get("balance", 0) + u.get("bank", 0), reverse=True)
@@ -723,7 +720,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{user.get('name', 'مقاتل')}** — 🪙 `{total:,}` ذهب\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 2. ترتيب الأقوى دائماً
         elif category == "power":
             top_users = list(users_col.find().sort([("power", -1)]).limit(10))
             embed = discord.Embed(
@@ -739,7 +735,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{user.get('name', 'مقاتل')}** `[{title}]` — ⚡ `{pwr:,}` طاقة\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 3. ترتيب غزو الطوابق
         elif category == "floors":
             top_users = list(users_col.find().sort([("max_floor", -1)]).limit(10))
             embed = discord.Embed(
@@ -754,7 +749,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{user.get('name', 'مقاتل')}** — 🏢 الطابق `{floor:,}` 🏰\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 4. ترتيب قاهر اللاعبين
         elif category == "kills":
             top_users = list(users_col.find().sort([("kills", -1)]).limit(10))
             embed = discord.Embed(
@@ -769,7 +763,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{user.get('name', 'مقاتل')}** — 💀 `{kills:,}` قتلة\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 5. ترتيب أقوى العتاد العادي
         elif category == "normal_gear":
             all_users = list(users_col.find())
             scored_users = []
@@ -790,7 +783,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{name}** — ⚔️ `{norm_count:,}` قطعة عتاد عادي\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 6. ترتيب أقوى العتاد المحرم
         elif category == "dark_gear":
             all_users = list(users_col.find())
             scored_users = []
@@ -811,7 +803,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{name}** — 💀 `{count:,}` سلاح محرم\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 7. ترتيب جامع الألقاب
         elif category == "titles_collector":
             all_users = list(users_col.find())
             scored_users = []
@@ -909,7 +900,7 @@ class DevUserSelectMenu(discord.ui.UserSelect):
     async def callback(self, interaction: discord.Interaction):
         self.view.target_user = self.values[0]
         await interaction.response.send_message(
-            f"🎯 **تم تحديد اللاعب المستهدف:** {self.values[0].mention}\nالان اختر الإجراء المطلوب من القائمة المنسدلة للأسفل.",
+            f"🎯 **تم تحديد اللاعب المستهدف:** {self.values[0].mention}\nالآن اختر الإجراء المطلوب من القائمة المنسدلة.",
             ephemeral=True
         )
 
@@ -932,7 +923,6 @@ class DevActionSelectMenu(discord.ui.Select):
         target_user = getattr(self.view, "target_user", interaction.user)
         action = self.values[0]
 
-        # 1. عملات لا نهائية
         if action == "infinite_coins":
             if not is_user_registered(str(target_user.id)):
                 return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
@@ -948,19 +938,16 @@ class DevActionSelectMenu(discord.ui.Select):
             )
             await interaction.response.send_message(embed=embed, ephemeral=False)
 
-        # 2. تحويل عملات مطور
         elif action == "transfer_coins":
             if not is_user_registered(str(target_user.id)):
                 return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
             await interaction.response.send_modal(DevTransferCoinsModal(target_user))
 
-        # 3. إهداء عتاد
         elif action == "gift_gear":
             if not is_user_registered(str(target_user.id)):
                 return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
             await interaction.response.send_modal(DevGiftGearModal(target_user))
 
-        # 4. إضافة مطور
         elif action == "add_dev":
             user_id = str(target_user.id)
             if is_dev(user_id):
@@ -970,7 +957,6 @@ class DevActionSelectMenu(discord.ui.Select):
             users_col.update_one({"user_id": user_id}, {"$set": {"is_dev": True}})
             await interaction.response.send_message(f"👑 تم منح {target_user.mention} صلاحيات المطور بنجاح!", ephemeral=False)
 
-        # 5. حذف مطور
         elif action == "remove_dev":
             user_id = str(target_user.id)
             if user_id == MAIN_DEV_ID:
@@ -980,12 +966,11 @@ class DevActionSelectMenu(discord.ui.Select):
             users_col.update_one({"user_id": user_id}, {"$set": {"is_dev": False}})
             await interaction.response.send_message(f"🚫 تم سحب صلاحية المطور من {target_user.mention}!", ephemeral=False)
 
-        # 6. شخصية السفاح
         elif action == "activate_assassin":
             user_id = str(interaction.user.id)
             
             if user_id != MAIN_DEV_ID and not is_dev(user_id):
-                return await interaction.response.send_message("❌ تفعيل شخصية السفاح الخارقة مخصص للمطور الرئيسي والأعلى فقط!", ephemeral=True)
+                return await interaction.response.send_message("❌ تفعيل شخصية السفاح الخارقة مخصص للمطورين فقط!", ephemeral=True)
 
             if not is_user_registered(user_id):
                 return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
@@ -1009,18 +994,75 @@ class DevActionSelectMenu(discord.ui.Select):
                 }
             )
 
-            story_lines = [
-                "✨ **القصة الملحمية والميلاد المحرّم:**",
-                "ولد السفاح في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، من أطياف الدماء المظلمة والأرواح النادمة.",
-                "كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه سيف الدم الأزلي الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.",
-                "",
-                "عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السماء رماداً، حيث تتعدى قوته حدود العوالم والمليارات.. إنه سيد الظلمات الحقيقي والمسيطر مطلق القوة!",
-                "",
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                "⚡ **تم تفعيل القدرات الخارقة لشخصيتك فوراً:**",
-                "• 👑 **اللقب المجهز:** `🩸 السفاح الخالد - حاكم الظلمات والعوالم`",
-                "• 🗡️" 
-    ". ⚔️",
-    ". 👑",
-    ". 🗡️"
-]
+            story_text = (
+                "✨ **القصة الملحمية والميلاد المحرّم:**\n"
+                "ولد السفاح في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، من أطياف الدماء المظلمة والأرواح النادمة.\n"
+                "كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه سيف الدم الأزلي الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.\n\n"
+                "عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السماء رماداً، حيث تتعدى قوته حدود العوالم والمليارات.. إنه سيد الظلمات الحقيقي والمسيطر مطلق القوة!\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "⚡ **تم تفعيل القدرات الخارقة لشخصيتك فوراً:**\n"
+                "• 👑 **اللقب المجهز:** `🩸 السفاح الخالد - حاكم الظلمات والعوالم`\n"
+                "• 🗡️ **السلاح أسطوري:** `🩸 سيف السفاح محطم العوالم والأرواح 💀`"
+            )
+
+            embed = discord.Embed(
+                title="🩸 القوة المطلقة — تفعيل شخصية السفاح الخالد",
+                description=story_text,
+                color=discord.Color.dark_purple()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=False)
+
+class DevView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.target_user = None
+        self.add_item(DevUserSelectMenu())
+        self.add_item(DevActionSelectMenu())
+
+# ================== ⚡ 10. تسجيل أوامر السلاش (Slash Commands) ==================
+
+@bot.tree.command(name="تسجيل", description="📜 التسجيل في الإمبراطورية وإنشاء هويتك القتالية")
+async def register_cmd(interaction: discord.Interaction):
+    if is_user_registered(str(interaction.user.id)):
+        return await interaction.response.send_message("❌ أنت مسجل بالفعل في قاعدة البيانات!", ephemeral=True)
+    await interaction.response.send_modal(RegisterModal())
+
+@bot.tree.command(name="البرج", description="🏰 فتح واجهة برج الطوابق والمغامرة")
+async def tower_cmd(interaction: discord.Interaction):
+    if not is_user_registered(str(interaction.user.id)):
+        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+    embed = discord.Embed(title="🏰 برج الإمبراطورية العظيم", description="اختر الإجراء من القائمة المنسدلة للأسفل:", color=discord.Color.gold())
+    await interaction.response.send_message(embed=embed, view=TowerMainView())
+
+@bot.tree.command(name="معركة", description="⚔️ فتح حلبة الصراع المباشر بين اللاعبين (PvP)")
+async def battle_cmd(interaction: discord.Interaction):
+    if not is_user_registered(str(interaction.user.id)):
+        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+    embed = discord.Embed(title="⚔️ حلبة الصراع المباشر (PvP)", description="اختر نمط القتال:", color=discord.Color.red())
+    await interaction.response.send_message(embed=embed, view=BattleMainView())
+
+@bot.tree.command(name="الترتيب", description="🏆 عرض تصنيف وليدربورد العظماء والأقوياء")
+async def leaderboard_cmd(interaction: discord.Interaction):
+    embed = discord.Embed(title="🏆 قائمة الشرف والترتيب العام", description="اختر التصنيف المطلوب من القائمة:", color=discord.Color.gold())
+    await interaction.response.send_message(embed=embed, view=LeaderboardView())
+
+@bot.tree.command(name="لوحة_المطور", description="👑 فتح لوحة تحكم المطورين الإدارية")
+async def dev_panel_cmd(interaction: discord.Interaction):
+    if not is_dev(str(interaction.user.id)):
+        return await interaction.response.send_message("❌ **عذراً!** هذا الأمر مخصص للمطورين فقط!", ephemeral=True)
+    embed = discord.Embed(title="⚙️ لوحة تحكم المطورين", description="حدد اللاعب ثم اختر الإجراء المطلوب:", color=discord.Color.purple())
+    await interaction.response.send_message(embed=embed, view=DevView(), ephemeral=True)
+
+# ================== 🚀 حدث البدء وتحديث الأوامر ==================
+
+@bot.event
+async def on_ready():
+    print(f"✅ تم تسجيل الدخول بنجاح باسم: {bot.user} (ID: {bot.user.id})")
+    try:
+        synced = await bot.tree.sync()
+        print(f"✨ تم مزامنة {len(synced)} أمر slash بنجاح مع ديسكورد!")
+    except Exception as e:
+        print(f"❌ فشل مزامنة الأوامر: {e}")
+
+if __name__ == "__main__":
+    bot.run(DISCORD_TOKEN)
