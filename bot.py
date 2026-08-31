@@ -14,7 +14,7 @@ client = MongoClient(MONGO_URI)
 db = client["discord_bot_db"]
 users_col = db["users"]
 devs_col = db["devs"]
-guilds_col = db["guilds"]  # مجموعة بيانات النقابات
+guilds_col = db["guilds"]
 
 class BotClient(commands.Bot):
     def __init__(self):
@@ -40,7 +40,7 @@ def is_developer(user_id):
         return True
     return devs_col.find_one({"user_id": str(user_id)}) is not None
 
-# ================== قاعدة بيانات الأبطال والعتاد الضخم ==================
+# ================== قاعدة بيانات الأبطال والعتاد ==================
 HEROES_DATA = {
     "assassin_dev": {"name": "💀 السفاح الأبدي - حاصد الأرواح (The Executioner)", "emoji": "🩸", "power_boost": 999999},
     "arthur": {
@@ -168,7 +168,6 @@ class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو")
         except:
             await interaction.followup.send("❌ يرجى إدخال رقم صحيح للمبلغ!", ephemeral=True)
 
-# موديل إنشاء النقابة
 class CreateGuildModal(discord.ui.Modal, title="🏰 تأسيس نقابة إمبراطورية جديدة"):
     guild_name = discord.ui.TextInput(label="اسم النقابة الأسطوري", placeholder="مثال: فرسان الظلام الأبدي", required=True, max_length=50)
     guild_desc = discord.ui.TextInput(label="شعار أو وصف النقابة المختصر", placeholder="قوة، شجاعة، ولاء مطلق للإمبراطورية...", style=discord.TextStyle.paragraph, required=True, max_length=200)
@@ -219,7 +218,6 @@ class CreateGuildModal(discord.ui.Modal, title="🏰 تأسيس نقابة إم�
         
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-# موديل التبرع بالعملات
 class GuildDonateCoinsModal(discord.ui.Modal, title="💰 صندوق خزينة النقابة - التبرع بالعملات"):
     amount_str = discord.ui.TextInput(label="العملات الذهبية المراد التبرع بها", placeholder="مثال: 1500", required=True)
 
@@ -273,7 +271,6 @@ class GuildDonateCoinsModal(discord.ui.Modal, title="💰 صندوق خزينة 
         
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-# موديل التبرع بالعتاد للمستودع
 class GuildDonateGearModal(discord.ui.Modal, title="⚔️ مستودع النقابة - التبرع بالعتاد"):
     gear_name = discord.ui.TextInput(label="اسم قطعة العتاد أو السلاح من حقيبتك", placeholder="مثال: سيف التنين الاسطوري أو خوذة إمبراطوري #5", required=True)
 
@@ -312,7 +309,7 @@ class GuildDonateGearModal(discord.ui.Modal, title="⚔️ مستودع النق
         
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-# ================== واجهات المتاجر (Views) ==================
+# ================== واجهات المتاجر ==================
 
 class NormalShopView(discord.ui.View):
     def __init__(self):
@@ -361,8 +358,6 @@ class DarkShopView(discord.ui.View):
         )
         await interaction.response.edit_message(embed=embed, view=NormalShopView())
 
-# ================== أوامر المتاجر الرئيسية ==================
-
 @bot.tree.command(name="المتجر", description="فتح بوابة المتاجر (العادي والمظلم)")
 async def shop_command(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -373,7 +368,7 @@ async def shop_command(interaction: discord.Interaction):
     embed.add_field(name="⚔️ الأقسام المتوفرة", value="• خوذة | درع | بنطال | حذاء\n• سيف | مطرقة | خنجر | عصا سحرية", inline=False)
     await interaction.response.send_message(embed=embed, view=NormalShopView(), ephemeral=True)
 
-# ================== نظام استعراض الأبطال (/الابطال) ==================
+# ================== نظام الأبطال ==================
 
 class HeroesSelect(discord.ui.Select):
     def __init__(self):
@@ -422,7 +417,7 @@ async def command_heroes(interaction: discord.Interaction):
     view = HeroesView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-# ================== أمر البنك (الإيداع والسحب) ==================
+# ================== أمر البنك ==================
 @bot.tree.command(name="البنك", description="إدارة أموالك في البنك الإمبراطوري (إيداع / سحب)")
 @app_commands.describe(operation="اختر العملية (إيداع أو سحب)", amount="المبلغ المراد تحويله أو كتابة 'الكل'")
 @app_commands.choices(operation=[
@@ -474,7 +469,7 @@ async def bank_command(interaction: discord.Interaction, operation: str, amount:
         users_col.update_one({"user_id": user_id}, {"$inc": {"balance": val, "bank": -val}})
         await interaction.followup.send(f"✅ تم سحب `{val:,}` 🪙 بنجاح من البنك إلى محفظتك!", ephemeral=True)
 
-# ================== أمر الترتيب / ليدربورد (Leaderboard) المطلق ==================
+# ================== أمر الترتيب ==================
 @bot.tree.command(name="ترتيب", description="عرض لوحة صدارة أقوى المقاتلين وأعلاهم ثروة في الإمبراطورية")
 @app_commands.describe(category="اختر فئة الترتيب المطلوبة")
 @app_commands.choices(category=[
@@ -529,7 +524,7 @@ async def leaderboard_command(interaction: discord.Interaction, category: str = 
     embed.set_footer(text=f"تم استعراض الصدارة بواسطة {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
     await interaction.followup.send(embed=embed, ephemeral=False)
 
-# ================== أمر صعود الطوابق / المغامرة ==================
+# ================== أمر المغامرة ==================
 @bot.tree.command(name="المغامرة", description="صعود طوابق البرج القتالي وقتال الوحوش لزيادة الطابق والجوائز")
 async def adventure_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=False)
@@ -576,17 +571,16 @@ async def adventure_command(interaction: discord.Interaction):
 
     await interaction.followup.send(embed=embed, ephemeral=False)
 
-# ================== نظام النقابات الجديد ==================
+# ================== نظام النقابات ==================
 
 @bot.tree.command(name="انشاء_نقابه", description="تأسيس صرح نقابة إمبراطوري خاص بك بتكلفة 300 عملة ذهبية عادية")
 async def create_guild_command(interaction: discord.Interaction):
     await interaction.response.send_modal(CreateGuildModal())
 
-# قائمة اختيار الانضمام للنقابات عبر أمر /النقابات
 class JoinGuildSelect(discord.ui.Select):
     def __init__(self, guilds_list):
         options = []
-        for g in guilds_list[:25]: # الحد الأقصى 25 خيار للقائمة المنسدلة
+        for g in guilds_list[:25]:
             lock_status = "🔒 مغلقة" if g.get("is_locked", False) else "🔓 متاح الانضمام"
             options.append(
                 discord.SelectOption(
@@ -617,7 +611,6 @@ class JoinGuildSelect(discord.ui.Select):
         if guild_data.get("is_locked", False):
             return await interaction.followup.send(f"❌ بوابات نقابة **{guild_data['name']}** مغلقة حالياً ولا تقبل أعضاء جدد!", ephemeral=True)
             
-        # إتمام الانضمام
         guilds_col.update_one({"guild_id": chosen_guild_id}, {"$push": {"members": user_id}})
         users_col.update_one({"user_id": user_id}, {"$set": {"guild_id": chosen_guild_id}})
         
@@ -641,7 +634,6 @@ class JoinGuildSelectView(discord.ui.View):
 async def guilds_leaderboard_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=False)
     
-    # جلب جميع النقابات مرتبة حسب المستوى والخزينة تنازلياً
     all_guilds = list(guilds_col.find().sort([("level", -1), ("treasury", -1)]).limit(10))
     
     if not all_guilds:
@@ -845,7 +837,7 @@ async def my_guild_command(interaction: discord.Interaction):
     view = GuildManagementView(guild_id=guild_id, is_leader=is_leader, is_locked=is_locked)
     await interaction.followup.send(embed=embed, view=view, ephemeral=False)
 
-# ================== قوائم اختيار الأعضاء للمطورين ==================
+# ================== المطورين ==================
 
 class DevAddUserSelect(discord.ui.UserSelect):
     def __init__(self):
@@ -889,7 +881,6 @@ class DevBalanceUserSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.add_item(DevBalanceUserSelect())
 
-# ================== لوحة أزرار المطور الرئيسية ==================
 class DevControlView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=300)
@@ -967,7 +958,7 @@ async def developer_command(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed, view=DevControlView(), ephemeral=True)
 
-# ================== أمر الملف والتسجيل ==================
+# ================== الملف والتسجيل ==================
 @bot.tree.command(name="الملف", description="عرض السجل الأسطوري والمعدلات القتالية الشاملة")
 async def profile_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=False)
@@ -1030,4 +1021,19 @@ async def register_command(interaction: discord.Interaction):
     
     new_user = {
         "user_id": user_id,
-        "
+        "balance": 1000,
+        "bank": 0,
+        "diamonds": 10,
+        "max_floor": 0,
+        "kills": 0,
+        "battles_played": 0,
+        "power": 100,
+        "custom_title": "المبتدئ",
+        "unlocked_titles": ["المبتدئ"],
+        "selected_hero": "لم يتم اختيار بطل بعد",
+        "inventory": [],
+        "aim": 10, "evasion": 10, "attack": 10, "accuracy": 10,
+        "defense": 10, "critical": 10, "magic": 10, "intelligence": 10
+    }
+    users_col.insert_one(new_user)
+    await interaction.response.send_message("🎉 **تم تسجيلك
