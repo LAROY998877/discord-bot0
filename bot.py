@@ -1,7 +1,33 @@
+import os
+import random
 import discord
 from discord import app_commands
 from discord.ext import commands
-import random
+from pymongo import MongoClient
+
+# ================== ⚙️ إعدادات الاتصال والبوت ==================
+# قراءة رابط قاعدة البيانات و الـ Token من متغيرات البيئة (Railway / Replit / الخ)
+MONGO_URL = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+db_client = MongoClient(MONGO_URL)
+db = db_client["empire_bot"]
+users_col = db["users"]
+
+intents = discord.Intents.all()
+client = commands.Bot(command_prefix="!", intents=intents)
+
+def is_user_registered(user_id):
+    """التحقق مما إذا كان المستخدم مسجلاً مسبقاً"""
+    return users_col.find_one({"user_id": str(user_id)}) is not None
+
+@client.event
+async def on_ready():
+    try:
+        synced = await client.tree.sync()
+        print(f"✅ تم تسجيل دخول البوت بنجاح باسم: {client.user}")
+        print(f"🔗 تم مزامنة {len(synced)} أمر (Slash Commands) بنجاح.")
+    except Exception as e:
+        print(f"❌ خطأ أثناء المزامنة: {e}")
+
 
 # ================== 🛒 نظام المتجر العادي والمقاييس الملكية ==================
 
@@ -130,7 +156,6 @@ class NormalShopItemView(discord.ui.View):
         super().__init__()
         self.add_item(NormalShopItemSelect(category, items))
         
-        # زر العودة للقائمة الرئيسية للمتجر
         back_btn = discord.ui.Button(label="🔙 عودة للفئات", style=discord.ButtonStyle.secondary)
         async def back_callback(interaction: discord.Interaction):
             await interaction.response.edit_message(
@@ -144,8 +169,7 @@ class NormalShopItemView(discord.ui.View):
         back_btn.callback = back_callback
         self.add_item(back_btn)
 
-
-@bot.tree.command(name="متجر", description="🛒 فتح متجر الإمبراطورية العام لشراء العتاد بالذهب")
+@client.tree.command(name="متجر", description="🛒 فتح متجر الإمبراطورية العام لشراء العتاد بالذهب")
 async def normal_shop_command(interaction: discord.Interaction):
     if not is_user_registered(interaction.user.id):
         return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
@@ -160,8 +184,6 @@ async def normal_shop_command(interaction: discord.Interaction):
 
 
 # ================== 🌑 المتجر المظلم السري والمعدات الأسطورية الخارقة ==================
-
-DARK_RANKS = ["الشيطان الأبدي", "الجحيم القاتل", "السفاح القرمزي"]
 
 DARK_GEAR_CATEGORIES = {
     "خوذة": [
@@ -182,7 +204,7 @@ DARK_GEAR_CATEGORIES = {
     "حذاء": [
         {"name": "🩸 حذاء خطوات الجحيم", "power": 20000, "price_diamonds": 85, "rank": "الشيطان الأبدي"},
         {"name": "💀 حذاء البرق الأسود", "power": 15000, "price_diamonds": 55, "rank": "الجحيم القاتل"},
-        {"name": "🗡️ حذاء الانققاض السريع", "power": 10000, "price_diamonds": 35, "rank": "السفاح القرمزي"}
+        {"name": "🗡️ حذاء الانقضاض السريع", "power": 10000, "price_diamonds": 35, "rank": "السفاح القرمزي"}
     ],
     "سيف": [
         {"name": "🩸 سيف عذاب الأرواح الأبدي", "power": 50000, "price_diamonds": 250, "rank": "الشيطان الأبدي"},
@@ -301,8 +323,7 @@ class DarkShopItemView(discord.ui.View):
         back_btn.callback = back_callback
         self.add_item(back_btn)
 
-
-@bot.tree.command(name="المتجر_المظلم", description="🌑 فتح المتجر المظلم السري لشراء العتاد الأسطوري بالألماس")
+@client.tree.command(name="المتجر_المظلم", description="🌑 فتح المتجر المظلم السري لشراء العتاد الأسطوري بالألماس")
 async def dark_shop_command(interaction: discord.Interaction):
     if not is_user_registered(interaction.user.id):
         return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
@@ -317,3 +338,132 @@ async def dark_shop_command(interaction: discord.Interaction):
     )
     embed.set_thumbnail(url=interaction.user.display_avatar.url)
     await interaction.response.send_message(embed=embed, view=DarkShopView(), ephemeral=True)
+
+
+# ================== ⚡ نظام تطوير المعدلات المطلقة (بلا حدود) ==================
+
+STATS_CONFIG = {
+    "aim": {"name": "التصويب", "emoji": "🎯", "desc": "دقة إصابة الأهداف البعيدة بدقة متناهية"},
+    "dodge": {"name": "المراوغة", "emoji": "💨", "desc": "القدرة الاحترافية على تفادي الضربات القاتلة"},
+    "attack": {"name": "الهجوم", "emoji": "⚔️", "desc": "قوة الضربات الجسدية المباشرة والمدمرة"},
+    "precision": {"name": "الدقة", "emoji": "🎯", "desc": "إصابة نقاط الضعف الخفية للخصوم"},
+    "critical": {"name": "الضربة القاتلة", "emoji": "☠️", "desc": "مضاعفة ضرر الإصابات الحرجة والمهلكة"},
+    "magic": {"name": "السحر", "emoji": "🔮", "desc": "السيطرة المطلقة على تدفق الطاقات المحرمة"},
+    "intelligence": {"name": "الذكاء", "emoji": "🧠", "desc": "سرعة البديهة واستراتيجيات القتال العميقة"},
+    "defense": {"name": "الدفاع", "emoji": "🛡️", "desc": "امتصاص وتخفيف أعتى أضرار الهجمات القادمة"}
+}
+
+class StatsUpgradeModal(discord.ui.Modal, title="⚡ هيكلة وتطوير المعدلات المطلقة بلا حدود"):
+    points_input = discord.ui.TextInput(
+        label="عدد النقاط المراد إضافتها للمعدل",
+        placeholder="مثال: 1000 أو 500000000",
+        min_length=1,
+        required=True
+    )
+
+    def __init__(self, stat_key: str):
+        super().__init__()
+        self.stat_key = stat_key
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            points_to_add = int(self.points_input.value.strip().replace(",", ""))
+            if points_to_add <= 0:
+                return await interaction.response.send_message("❌ يجب أن يكون عدد النقاط أكبر من الصفر!", ephemeral=True)
+        except ValueError:
+            return await interaction.response.send_message("❌ يرجى إدخال رقم صحيح وصريح!", ephemeral=True)
+
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id})
+        if not user_data:
+            return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+
+        cost_per_point = 1000
+        total_cost = points_to_add * cost_per_point
+
+        current_gold = user_data.get("balance", 0)
+        if current_gold < total_cost:
+            return await interaction.response.send_message(
+                f"❌ رصيدك من الذهب لا يكفي لتنفيذ هذا التطوير الجبار!\n"
+                f"• التكلفة المطلوبة: `{total_cost:,}` 🪙\n"
+                f"• رصيدك الحالي: `{current_gold:,}` 🪙",
+                ephemeral=True
+            )
+
+        stat_info = STATS_CONFIG[self.stat_key]
+
+        users_col.update_one(
+            {"user_id": user_id},
+            {
+                "$inc": {
+                    "balance": -total_cost,
+                    f"stats.{self.stat_key}": points_to_add,
+                    "power": points_to_add
+                }
+            }
+        )
+
+        embed = discord.Embed(
+            title="🔥 تم صقل وهندسة المعدلات الإمبراطورية بنجاح!",
+            description=f"لقد قمت برفع معدل **{stat_info['emoji']} {stat_info['name']}** إلى مستويات مرعبة!\n\n"
+                        f"• **النقاط المضافة:** `+{points_to_add:,}`\n"
+                        f"• **التكلفة المستقطعة:** `{total_cost:,}` 🪙 ذهب\n"
+                        f"• **الارتقاء بالقوة الكلية:** `+{points_to_add:,}` ⚡",
+            color=discord.Color.dark_gold()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class StatsSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(
+                label=info["name"],
+                value=key,
+                description=info["desc"][:50],
+                emoji=info["emoji"]
+            ) for key, info in STATS_CONFIG.items()
+        ]
+        super().__init__(placeholder="⚡ اختر المعدل المراد تطويره بلا حدود...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        stat_key = self.values[0]
+        await interaction.response.send_modal(StatsUpgradeModal(stat_key))
+
+class StatsView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(StatsSelect())
+
+@client.tree.command(name="المعدلات", description="⚡ قاعة صقل وتطوير المعدلات القتالية المطلقة بلا حدود")
+async def stats_command(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    user_data = users_col.find_one({"user_id": user_id})
+    if not user_data:
+        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+
+    stats = user_data.get("stats", {})
+    
+    desc_lines = []
+    for key, info in STATS_CONFIG.items():
+        val = stats.get(key, 0)
+        desc_lines.append(f"{info['emoji']} **{info['name']}:** `{val:,}`")
+
+    embed = discord.Embed(
+        title="⚡ معبد القدرات المطلقة — Stat Sanctuary",
+        description="أهلاً بك في مقدّس الصقل الإمبراطوروي.\n"
+                    "هنا تتجاوز حدود البشر، وترفع معدلاتك العسكرية إلى آفاق لا نهائية حتى وإن وصلت لمليارات النقاط!\n"
+                    "• **سعر النقطة الواحدة:** `1,000` 🪙 ذهب.\n\n"
+                    "📊 **معدلاتك الحالية:**\n" + "\n".join(desc_lines),
+        color=discord.Color.from_rgb(15, 25, 45)
+    )
+    embed.set_thumbnail(url=interaction.user.display_avatar.url)
+    embed.set_footer(text="⚡ التطوير مفتوح بلا سقف أو قيود إمبراطورية")
+    await interaction.response.send_message(embed=embed, view=StatsView(), ephemeral=True)
+
+
+# ================== 🚀 تشغيل البوت ==================
+TOKEN = os.getenv("DISCORD_TOKEN")
+if TOKEN:
+    client.run(TOKEN)
+else:
+    print("❌ خطأ: يرجى وضع التوكن الخاص بالبوت في متغير البيئة DISCORD_TOKEN.")
