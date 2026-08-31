@@ -10,8 +10,6 @@ from datetime import datetime, timezone
 # ================== إعدادات الاتصال وقاعدة البيانات ==================
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
-
-# الآيدي الخاص بالمطور الرئيسي والمالك للأمبراطورية
 MAIN_DEV_ID = "1103985971638325269"
 
 client = pymongo.MongoClient(MONGO_URI)
@@ -29,7 +27,6 @@ def is_user_registered(user_id: str) -> bool:
     return users_col.find_one({"user_id": str(user_id)}) is not None
 
 def is_dev(user_id: str) -> bool:
-    """فحص ما إذا كان المستخدم مطوراً (المطور الرئيسي أو مطور مضاف)"""
     str_id = str(user_id)
     if str_id == MAIN_DEV_ID:
         return True
@@ -48,56 +45,25 @@ ALL_DARK_ITEMS = []
 
 for cat in CATEGORIES:
     GEAR_DATA[cat] = []
-    
-    # 25 قطعة للمتجر العام
     for i in range(1, 26):
-        if i <= 5:
-            rank, emoji = "مبتدئ", "🟢"
-        elif i <= 10:
-            rank, emoji = "فولاذي", "🪙"
-        elif i <= 15:
-            rank, emoji = "ملكي", "👑"
-        elif i <= 20:
-            rank, emoji = "أسطوري", "🌟"
-        else:
-            rank, emoji = "إمبراطوري", "🐉"
+        if i <= 5: rank, emoji = "مبتدئ", "🟢"
+        elif i <= 10: rank, emoji = "فولاذي", "🪙"
+        elif i <= 15: rank, emoji = "ملكي", "👑"
+        elif i <= 20: rank, emoji = "أسطوري", "🌟"
+        else: rank, emoji = "إمبراطوري", "🐉"
 
-        item = {
-            "id": f"gen_{cat}_{i}",
-            "name": f"{emoji} {cat} [{rank}] T{i}",
-            "rank": rank,
-            "emoji": emoji,
-            "power": i * 50,
-            "price": i * 400,
-            "currency": "gold",
-            "store": "general"
-        }
+        item = {"id": f"gen_{cat}_{i}", "name": f"{emoji} {cat} [{rank}] T{i}", "rank": rank, "emoji": emoji, "power": i * 50, "price": i * 400, "currency": "gold", "store": "general"}
         GEAR_DATA[cat].append(item)
         ALL_GENERAL_ITEMS.append(item)
 
-    # 25 قطعة للمتجر المظلم
     for i in range(1, 26):
-        if i <= 5:
-            rank, emoji = "مشعوذ الظلال", "🌑"
-        elif i <= 10:
-            rank, emoji = "السفاح القرمزي", "🩸"
-        elif i <= 15:
-            rank, emoji = "الجحيم القاتل", "🔥"
-        elif i <= 20:
-            rank, emoji = "الشيطان الأبدي", "😈"
-        else:
-            rank, emoji = "حاكم الظلمات", "☠️"
+        if i <= 5: rank, emoji = "مشعوذ الظلال", "🌑"
+        elif i <= 10: rank, emoji = "السفاح القرمزي", "🩸"
+        elif i <= 15: rank, emoji = "الجحيم القاتل", "🔥"
+        elif i <= 20: rank, emoji = "الشيطان الأبدي", "😈"
+        else: rank, emoji = "حاكم الظلمات", "☠️"
 
-        item = {
-            "id": f"dark_{cat}_{i}",
-            "name": f"💀 {cat} [{rank}] T{i}",
-            "rank": rank,
-            "emoji": emoji,
-            "power": i * 250,
-            "price": i * 8,
-            "currency": "diamonds",
-            "store": "dark"
-        }
+        item = {"id": f"dark_{cat}_{i}", "name": f"💀 {cat} [{rank}] T{i}", "rank": rank, "emoji": emoji, "power": i * 250, "price": i * 8, "currency": "diamonds", "store": "dark"}
         GEAR_DATA[cat].append(item)
         ALL_DARK_ITEMS.append(item)
 
@@ -122,33 +88,16 @@ class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل 
             return await interaction.response.send_message("❌ يرجى كتابة كلمة ذكر أو أنثى فقط!", ephemeral=True)
 
         is_dev_user = (user_id == MAIN_DEV_ID)
-
         new_user = {
-            "user_id": user_id,
-            "name": self.name_input.value.strip(),
-            "age": age,
-            "gender": gender,
-            "created_at": datetime.now(timezone.utc),
-            "balance": 5000,
-            "bank": 0,
-            "diamonds": 20,
-            "power": 100,
-            "kills": 0,
-            "max_floor": 1,
-            "inventory": [],
-            "titles": ["المبتدئ الأسطوري"],
-            "custom_title": "المبتدئ الأسطوري",
-            "is_dev": is_dev_user,
-            "aim": 10, "evasion": 10, "attack": 10, "accuracy": 10,
-            "critical": 10, "magic": 10, "intelligence": 10, "defense": 10
+            "user_id": user_id, "name": self.name_input.value.strip(), "age": age, "gender": gender,
+            "created_at": datetime.now(timezone.utc), "balance": 5000, "bank": 0, "diamonds": 20,
+            "power": 100, "kills": 0, "max_floor": 1, "inventory": [], "titles": ["المبتدئ الأسطوري"],
+            "custom_title": "المبتدئ الأسطوري", "is_dev": is_dev_user,
+            "aim": 10, "evasion": 10, "attack": 10, "accuracy": 10, "critical": 10, "magic": 10, "intelligence": 10, "defense": 10
         }
         users_col.insert_one(new_user)
 
-        embed_success = discord.Embed(
-            title="👑 أهلاً بك في عرش الإمبراطورية!",
-            description="تمت معالجة وثيقة هويتك بنجاح.",
-            color=discord.Color.gold()
-        )
+        embed_success = discord.Embed(title="👑 أهلاً بك في عرش الإمبراطورية!", description="تمت معالجة وثيقة هويتك بنجاح.", color=discord.Color.gold())
         embed_success.add_field(name="🪪 الاسم", value=f"`{self.name_input.value.strip()}`", inline=True)
         embed_success.add_field(name="⏳ العمر", value=f"`{age}` سنة", inline=True)
         embed_success.add_field(name="👤 الجنس", value=f"`{gender}`", inline=True)
@@ -160,14 +109,7 @@ class GeneralItemSelect(discord.ui.Select):
     def __init__(self, category: str):
         self.category = category
         items = [item for item in GEAR_DATA[category] if item["store"] == "general"][:25]
-        options = [
-            discord.SelectOption(
-                label=item["name"],
-                value=item["id"],
-                description=f"الرتبة: {item['rank']} | ⚡ +{item['power']:,} | 🪙 {item['price']:,}",
-                emoji=item["emoji"]
-            ) for item in items
-        ]
+        options = [discord.SelectOption(label=item["name"], value=item["id"], description=f"الرتبة: {item['rank']} | ⚡ +{item['power']:,} | 🪙 {item['price']:,}", emoji=item["emoji"]) for item in items]
         super().__init__(placeholder=f"⚔️ تصفح عتاد [{category}] (25 قطعة)...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -179,20 +121,10 @@ class GeneralItemSelect(discord.ui.Select):
         if user_data.get("balance", 0) < selected_item["price"]:
             return await interaction.response.send_message(f"❌ رصيدك الذهبي لا يكفي! تحتاج `{selected_item['price']:,}` 🪙", ephemeral=True)
         
-        users_col.update_one(
-            {"user_id": user_id},
-            {
-                "$inc": {"balance": -selected_item["price"], "power": selected_item["power"]},
-                "$push": {"inventory": selected_item["name"]}
-            }
-        )
+        users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -selected_item["price"], "power": selected_item["power"]}, "$push": {"inventory": selected_item["name"]}})
         
         desc_text = f"مبروك! حصلت على **{selected_item['name']}**\n• ⚡ **القوة المضافة:** `+{selected_item['power']:,}`\n• 🪙 **المبلغ المدفوع:** `{selected_item['price']:,}` ذهبة"
-        embed_bought = discord.Embed(
-            title="🛍️ صفقة ناجحة — المتجر الإمبراطوري",
-            description=desc_text,
-            color=discord.Color.gold()
-        )
+        embed_bought = discord.Embed(title="🛍️ صفقة ناجحة — المتجر الإمبراطوري", description=desc_text, color=discord.Color.gold())
         await interaction.response.send_message(embed=embed_bought, ephemeral=True)
 
 class GeneralCategorySelect(discord.ui.Select):
@@ -206,11 +138,7 @@ class GeneralCategorySelect(discord.ui.Select):
         view.add_item(GeneralCategorySelect())
         view.add_item(GeneralItemSelect(cat))
         
-        embed = discord.Embed(
-            title=f"🏛️ المتجر الإمبراطوري العام — قسم [{cat}]",
-            description="✨ **اختر المعدات المطلوبة للشراء بالعملات الذهبية (25 مستوى لكل فئة)**",
-            color=discord.Color.gold()
-        )
+        embed = discord.Embed(title=f"🏛️ المتجر الإمبراطوري العام — قسم [{cat}]", description="✨ **اختر المعدات المطلوبة للشراء بالعملات الذهبية (25 مستوى لكل فئة)**", color=discord.Color.gold())
         await interaction.response.edit_message(embed=embed, view=view)
 
 class GeneralStoreView(discord.ui.View):
@@ -223,14 +151,7 @@ class DarkItemSelect(discord.ui.Select):
     def __init__(self, category: str):
         self.category = category
         items = [item for item in GEAR_DATA[category] if item["store"] == "dark"][:25]
-        options = [
-            discord.SelectOption(
-                label=item["name"],
-                value=item["id"],
-                description=f"الرتبة: {item['rank']} | ⚡ +{item['power']:,} | 💎 {item['price']:,}",
-                emoji=item["emoji"]
-            ) for item in items
-        ]
+        options = [discord.SelectOption(label=item["name"], value=item["id"], description=f"الرتبة: {item['rank']} | ⚡ +{item['power']:,} | 💎 {item['price']:,}", emoji=item["emoji"]) for item in items]
         super().__init__(placeholder=f"🔮 عتاد الظلال المحرم [{category}] (25 قطعة)...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -242,18 +163,8 @@ class DarkItemSelect(discord.ui.Select):
         if user_data.get("diamonds", 0) < selected_item["price"]:
             return await interaction.response.send_message(f"❌ ألماس غير كافٍ! تحتاج إلى `{selected_item['price']:,}` 💎 ألماس.", ephemeral=True)
         
-        users_col.update_one(
-            {"user_id": user_id},
-            {
-                "$inc": {"diamonds": -selected_item["price"], "power": selected_item["power"]},
-                "$push": {"inventory": selected_item["name"]}
-            }
-        )
-        embed_buy = discord.Embed(
-            title="⚡ امتلاك عتاد محرم أسطوري!",
-            description=f"لقد حصلت على **{selected_item['name']}** برتبة **[{selected_item['rank']}]**!",
-            color=discord.Color.dark_purple()
-        )
+        users_col.update_one({"user_id": user_id}, {"$inc": {"diamonds": -selected_item["price"], "power": selected_item["power"]}, "$push": {"inventory": selected_item["name"]}})
+        embed_buy = discord.Embed(title="⚡ امتلاك عتاد محرم أسطوري!", description=f"لقد حصلت على **{selected_item['name']}** برتبة **[{selected_item['rank']}]**!", color=discord.Color.dark_purple())
         await interaction.response.send_message(embed_buy, ephemeral=True)
 
 class DarkCategorySelect(discord.ui.Select):
@@ -267,11 +178,7 @@ class DarkCategorySelect(discord.ui.Select):
         view.add_item(DarkCategorySelect())
         view.add_item(DarkItemSelect(cat))
         
-        embed = discord.Embed(
-            title=f"🖤 خزنة الظلال المحرمة — [{cat}]",
-            description="⚠️ **سوق الأسلحة والعتاد المحرم (تتطلب 💎 الألماس فقط)**",
-            color=discord.Color.from_rgb(45, 0, 60)
-        )
+        embed = discord.Embed(title=f"🖤 خزنة الظلال المحرمة — [{cat}]", description="⚠️ **سوق الأسلحة والعتاد المحرم (تتطلب 💎 الألماس فقط)**", color=discord.Color.from_rgb(45, 0, 60))
         await interaction.response.edit_message(embed=embed, view=view)
 
 class DarkStoreView(discord.ui.View):
@@ -296,12 +203,7 @@ class StatUpgradeModal(discord.ui.Modal):
         super().__init__(title=f"🚀 ترقية معدل: {stat_info['name']}")
         self.stat_key = stat_key
         self.stat_info = stat_info
-
-        self.amount_input = discord.ui.TextInput(
-            label=f"عدد النقاط (سعر النقطة: {stat_info['cost']} 🪙)",
-            placeholder="أدخل عدد النقاط...",
-            min_length=1, max_length=20, required=True
-        )
+        self.amount_input = discord.ui.TextInput(label=f"عدد النقاط (سعر النقطة: {stat_info['cost']} 🪙)", placeholder="أدخل عدد النقاط...", min_length=1, max_length=20, required=True)
         self.add_item(self.amount_input)
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -320,24 +222,13 @@ class StatUpgradeModal(discord.ui.Modal):
         if user_data.get("balance", 0) < total_cost:
             return await interaction.response.send_message(f"❌ لا تملك ذهبًا كافيًا! التكلفة: `{total_cost:,}` 🪙", ephemeral=True)
 
-        users_col.update_one(
-            {"user_id": user_id},
-            {"$inc": {"balance": -total_cost, self.stat_key: points, "power": points * 10}}
-        )
-
-        embed_success = discord.Embed(
-            title=f"🔥 انطلاق القوة القتالية! — {self.stat_info['name']}",
-            description=f"تم زيادة **{self.stat_info['emoji']} {self.stat_info['name']}** بـ `+{points:,}` نقطة!",
-            color=discord.Color.red()
-        )
+        users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -total_cost, self.stat_key: points, "power": points * 10}})
+        embed_success = discord.Embed(title=f"🔥 انطلاق القوة القتالية! — {self.stat_info['name']}", description=f"تم زيادة **{self.stat_info['emoji']} {self.stat_info['name']}** بـ `+{points:,}` نقطة!", color=discord.Color.red())
         await interaction.response.send_message(embed_success, ephemeral=False)
 
 class StatSelect(discord.ui.Select):
     def __init__(self):
-        options = [
-            discord.SelectOption(label=info["name"], value=key, description=f"تكلفة النقطة: {info['cost']} 🪙", emoji=info["emoji"])
-            for key, info in STATS_CONFIG.items()
-        ]
+        options = [discord.SelectOption(label=info["name"], value=key, description=f"تكلفة النقطة: {info['cost']} 🪙", emoji=info["emoji"]) for key, info in STATS_CONFIG.items()]
         super().__init__(placeholder="🔥 اختر المعدل لتطويره...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -366,34 +257,19 @@ def get_floor_enemy_info(floor_num: int) -> dict:
         quotes = ["لن تتخطى هذا الطابق حياً يا حشرة!", "دماؤك ستكون قرباناً لعرش الظلام!"]
         p_quotes = ["سيف الإمبراطورية سيشق جمجمتك اليوم!", "قوتي ستسحق عرشك المظلم!"]
         name = f"👑 [BOSS الطابق {floor_num}] {random.choice(names)}"
-        hp = 500 + (floor_num * 350)
-        atk = 40 + (floor_num * 30)
-        dfs = 10 + (floor_num * 15)
-        color = discord.Color.purple()
+        hp, atk, dfs, color = 500 + (floor_num * 350), 40 + (floor_num * 30), 10 + (floor_num * 15), discord.Color.purple()
     elif is_miniboss:
         names = ["👹 قائد جيش الزومبي", "🧟‍♂️ زومبي الدماء المتجمدة", "🩸 السفاح الهائج"]
-        quotes = ["اخترقت طوابق كثيرة... لكن هنا نهايتك!"]
-        p_quotes = ["أنت مجرد عقبة صغيرة في طريق قمتي!"]
+        quotes, p_quotes = ["اخترقت طوابق كثيرة... لكن هنا نهايتك!"], ["أنت مجرد عقبة صغيرة في طريق قمتي!"]
         name = f"👹 [زعيم مصغر] {random.choice(names)}"
-        hp = 300 + (floor_num * 200)
-        atk = 25 + (floor_num * 20)
-        dfs = 5 + (floor_num * 10)
-        color = discord.Color.dark_red()
+        hp, atk, dfs, color = 300 + (floor_num * 200), 25 + (floor_num * 20), 5 + (floor_num * 10), discord.Color.dark_red()
     else:
         names = ["🧟 زومبي مستنقع الأرواح", "🧟‍♀️ زومبي الظلال المظلمة"]
-        quotes = ["غغغغ... دماء جديدة!"]
-        p_quotes = ["ابتعد عن طريقي أيها الزومبي!"]
+        quotes, p_quotes = ["غغغغ... دماء جديدة!"], ["ابتعد عن طريقي أيها الزومبي!"]
         name = f"🧟 [طابق {floor_num}] {random.choice(names)}"
-        hp = 150 + (floor_num * 100)
-        atk = 15 + (floor_num * 12)
-        dfs = 2 + (floor_num * 5)
-        color = discord.Color.dark_green()
+        hp, atk, dfs, color = 150 + (floor_num * 100), 15 + (floor_num * 12), 2 + (floor_num * 5), discord.Color.dark_green()
 
-    return {
-        "name": name, "is_boss": is_boss, "is_miniboss": is_miniboss,
-        "hp": hp, "max_hp": hp, "atk": atk, "dfs": dfs,
-        "enemy_quote": random.choice(quotes), "player_quote": random.choice(p_quotes), "color": color
-    }
+    return {"name": name, "is_boss": is_boss, "is_miniboss": is_miniboss, "hp": hp, "max_hp": hp, "atk": atk, "dfs": dfs, "enemy_quote": random.choice(quotes), "player_quote": random.choice(p_quotes), "color": color}
 
 async def process_floor_battle(interaction: discord.Interaction, floor_num: int, is_boss_only: bool = False):
     user_id = str(interaction.user.id)
@@ -412,11 +288,7 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
     e_name = enemy["name"]
     desc_str = f"⚔️ **تواجَه الآن ضد:** `{e_name}`\n💬 **الخصم:** \"{enemy['enemy_quote']}\"\n🗣️ **{p_name}:** \"{enemy['player_quote']}\"\n"
 
-    embed = discord.Embed(
-        title=f"⚔️ ساحة معركة البرج — الطابق [{floor_num}/500]",
-        description=desc_str,
-        color=enemy["color"]
-    )
+    embed = discord.Embed(title=f"⚔️ ساحة معركة البرج — الطابق [{floor_num}/500]", description=desc_str, color=enemy["color"])
     embed.add_field(name=f"👤 {p_name}", value=render_hp_bar(int(p_hp), int(p_max_hp)), inline=True)
     embed.add_field(name=f"👾 {e_name}", value=render_hp_bar(int(enemy['hp']), int(enemy['max_hp'])), inline=True)
 
@@ -465,10 +337,7 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
             dropped_gear = random.choice(ALL_GENERAL_ITEMS)
             gear_msg = f"🗡️ **عتاد إمبراطوري:** `{dropped_gear['name']}`"
 
-        update_doc = {
-            "$inc": {"balance": gold_reward, "diamonds": diamond_reward, "kills": 1, "power": 30},
-            "$set": {"max_floor": floor_num + 1}
-        }
+        update_doc = {"$inc": {"balance": gold_reward, "diamonds": diamond_reward, "kills": 1, "power": 30}, "$set": {"max_floor": floor_num + 1}}
         if dropped_gear:
             update_doc["$push"] = {"inventory": dropped_gear["name"]}
             update_doc["$inc"]["power"] += dropped_gear["power"]
@@ -476,11 +345,7 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
         users_col.update_one({"user_id": user_id}, update_doc)
 
         win_desc = f"👑 **تم سحق {enemy['name']} بنجاح!**\n🎁 **المكافآت:** 🪙 `{gold_reward:,}` | 💎 `{diamond_reward}` | {gear_msg}\n"
-        embed_win = discord.Embed(
-            title=f"🎉 **انتصار ساحق في الطابق [{floor_num}]!**",
-            description=win_desc,
-            color=discord.Color.gold()
-        )
+        embed_win = discord.Embed(title=f"🎉 **انتصار ساحق في الطابق [{floor_num}]!**", description=win_desc, color=discord.Color.gold())
         embed_win.add_field(name="📜 سجل القتال النهائي", value="\n".join(logs[-4:]), inline=False)
         
         view = discord.ui.View()
@@ -575,7 +440,6 @@ class BattleLobbyView(discord.ui.View):
     def get_embed(self) -> discord.Embed:
         red_names = "\n".join([f"• 🔴 **{u.display_name}**" for u in self.team_red]) if self.team_red else "بانتظار المقاتلين..."
         blue_names = "\n".join([f"• 🔵 **{u.display_name}**" for u in self.team_blue]) if self.team_blue else "بانتظار المقاتلين..."
-        
         embed = discord.Embed(title=f"⚔️ حلبة الصراع — معركة [{self.mode}]", color=discord.Color.dark_gold())
         embed.add_field(name=f"🔴 الفريق الأحمر ({len(self.team_red)}/{self.team_size})", value=red_names, inline=True)
         embed.add_field(name=f"🔵 الفريق الأزرق ({len(self.team_blue)}/{self.team_size})", value=blue_names, inline=True)
@@ -656,11 +520,7 @@ class BattleLobbyView(discord.ui.View):
         for u in winners:
             users_col.update_one({"user_id": str(u.id)}, {"$inc": {"balance": gold_reward, "power": 50, "kills": 1}})
 
-        embed_final = discord.Embed(
-            title=f"👑 انتصار {win_title}!",
-            description=f"🎁 **المكافأة:** `{gold_reward:,}` 🪙 ذهب لكل بطل!",
-            color=discord.Color.gold()
-        )
+        embed_final = discord.Embed(title=f"👑 انتصار {win_title}!", description=f"🎁 **المكافأة:** `{gold_reward:,}` 🪙 ذهب لكل بطل!", color=discord.Color.gold())
         embed_final.add_field(name="📜 سجل القتال", value="\n".join(logs[-4:]), inline=False)
         await message.edit(embed=embed_final)
 
@@ -710,120 +570,47 @@ class LeaderboardSelect(discord.ui.Select):
             all_users = list(users_col.find())
             all_users.sort(key=lambda u: u.get("balance", 0) + u.get("bank", 0), reverse=True)
             top_users = all_users[:10]
-            
-            embed = discord.Embed(
-                title="🪙 ترتيب أغنى شخص — ثروة الإمبراطورية",
-                description="✨ **أثرى الشخصيات بالذهب والعملات (تحديث تلقائي):**\n" + "━"*32,
-                color=discord.Color.gold()
-            )
-            text = ""
-            for idx, user in enumerate(top_users, 1):
-                badge = get_prestigious_badge(idx)
-                total = user.get("balance", 0) + user.get("bank", 0)
-                text += f"{badge} **{user.get('name', 'مقاتل')}** — 🪙 `{total:,}` ذهب\n"
+            embed = discord.Embed(title="🪙 ترتيب أغنى شخص — ثروة الإمبراطورية", description="✨ **أثرى الشخصيات بالذهب والعملات (تحديث تلقائي):**\n" + "━"*32, color=discord.Color.gold())
+            text = "".join([f"{get_prestigious_badge(i)} **{u.get('name', 'مقاتل')}** — 🪙 `{u.get('balance',0)+u.get('bank',0):,}` ذهب\n" for i, u in enumerate(top_users, 1)])
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
         elif category == "power":
             top_users = list(users_col.find().sort([("power", -1)]).limit(10))
-            embed = discord.Embed(
-                title="⚡ ترتيب الأقوى دائماً — عرش القوة القتالية",
-                description="✨ **أعتى مقاتلي الإمبراطورية طاقة وقوة (تحديث تلقائي):**\n" + "━"*32,
-                color=discord.Color.red()
-            )
-            text = ""
-            for idx, user in enumerate(top_users, 1):
-                badge = get_prestigious_badge(idx)
-                pwr = user.get("power", 0)
-                title = user.get("custom_title", "المبتدئ الأسطوري")
-                text += f"{badge} **{user.get('name', 'مقاتل')}** `[{title}]` — ⚡ `{pwr:,}` طاقة\n"
+            embed = discord.Embed(title="⚡ ترتيب الأقوى دائماً — عرش القوة القتالية", description="✨ **أعتى مقاتلي الإمبراطورية طاقة وقوة (تحديث تلقائي):**\n" + "━"*32, color=discord.Color.red())
+            text = "".join([f"{get_prestigious_badge(i)} **{u.get('name', 'مقاتل')}** `[{u.get('custom_title', 'المبتدئ الأسطوري')}]` — ⚡ `{u.get('power',0):,}` طاقة\n" for i, u in enumerate(top_users, 1)])
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
         elif category == "floors":
             top_users = list(users_col.find().sort([("max_floor", -1)]).limit(10))
-            embed = discord.Embed(
-                title="🏰 ترتيب غزو الطوابق — فاتحو البرج العظيم",
-                description="✨ **أعلى الفاتحين تسلقاً لطوابق البرج الـ 500 (تحديث تلقائي):**\n" + "━"*32,
-                color=discord.Color.dark_green()
-            )
-            text = ""
-            for idx, user in enumerate(top_users, 1):
-                badge = get_prestigious_badge(idx)
-                floor = user.get("max_floor", 1)
-                text += f"{badge} **{user.get('name', 'مقاتل')}** — 🏢 الطابق `{floor:,}` 🏰\n"
+            embed = discord.Embed(title="🏰 ترتيب غزو الطوابق — فاتحو البرج العظيم", description="✨ **أعلى الفاتحين تسلقاً لطوابق البرج الـ 500 (تحديث تلقائي):**\n" + "━"*32, color=discord.Color.dark_green())
+            text = "".join([f"{get_prestigious_badge(i)} **{u.get('name', 'مقاتل')}** — 🏢 الطابق `{u.get('max_floor',1):,}` 🏰\n" for i, u in enumerate(top_users, 1)])
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
         elif category == "kills":
             top_users = list(users_col.find().sort([("kills", -1)]).limit(10))
-            embed = discord.Embed(
-                title="💀 ترتيب قاهر اللاعبين — سجل الإبادة والضحايا",
-                description="✨ **أكثر المقاتلين سحقاً وإبادة للخصوم (تحديث تلقائي):**\n" + "━"*32,
-                color=discord.Color.dark_red()
-            )
-            text = ""
-            for idx, user in enumerate(top_users, 1):
-                badge = get_prestigious_badge(idx)
-                kills = user.get("kills", 0)
-                text += f"{badge} **{user.get('name', 'مقاتل')}** — 💀 `{kills:,}` قتلة\n"
+            embed = discord.Embed(title="💀 ترتيب قاهر اللاعبين — سجل الإبادة والضحايا", description="✨ **أكثر المقاتلين سحقاً وإبادة للخصوم (تحديث تلقائي):**\n" + "━"*32, color=discord.Color.dark_red())
+            text = "".join([f"{get_prestigious_badge(i)} **{u.get('name', 'مقاتل')}** — 💀 `{u.get('kills',0):,}` قتلة\n" for i, u in enumerate(top_users, 1)])
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
         elif category == "normal_gear":
             all_users = list(users_col.find())
-            scored_users = []
-            for u in all_users:
-                inv = u.get("inventory", [])
-                norm_count = sum(1 for item in inv if not any(rk in item for rk in DARK_RANKS))
-                scored_users.append((u.get("name", "مقاتل"), norm_count))
-            scored_users.sort(key=lambda x: x[1], reverse=True)
-            
-            embed = discord.Embed(
-                title="🛡️ ترتيب أقوى العتاد العادي — ترسانة العتاد الملكي",
-                description="✨ **أكثر المالكين للعتاد والأسلحة العامة (تحديث تلقائي):**\n" + "━"*32,
-                color=discord.Color.blue()
-            )
-            text = ""
-            for idx, (name, norm_count) in enumerate(scored_users[:10], 1):
-                badge = get_prestigious_badge(idx)
-                text += f"{badge} **{name}** — ⚔️ `{norm_count:,}` قطعة عتاد عادي\n"
+            scored = sorted([(u.get("name", "مقاتل"), sum(1 for item in u.get("inventory", []) if not any(rk in item for rk in DARK_RANKS))) for u in all_users], key=lambda x: x[1], reverse=True)[:10]
+            embed = discord.Embed(title="🛡️ ترتيب أقوى العتاد العادي — ترسانة العتاد الملكي", description="✨ **أكثر المالكين للعتاد والأسلحة العامة (تحديث تلقائي):**\n" + "━"*32, color=discord.Color.blue())
+            text = "".join([f"{get_prestigious_badge(i)} **{name}** — ⚔️ `{cnt:,}` قطعة عتاد عادي\n" for i, (name, cnt) in enumerate(scored, 1)])
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
         elif category == "dark_gear":
             all_users = list(users_col.find())
-            scored_users = []
-            for u in all_users:
-                inv = u.get("inventory", [])
-                dark_count = sum(1 for item in inv if any(rk in item for rk in DARK_RANKS))
-                scored_users.append((u.get("name", "مقاتل"), dark_count))
-            scored_users.sort(key=lambda x: x[1], reverse=True)
-
-            embed = discord.Embed(
-                title="🔮 ترتيب أقوى العتاد المحرم — أسياد سوق الظلال",
-                description="✨ **أكثر المالكين للأسلحة والعتاد المحرم الأسطوري (تحديث تلقائي):**\n" + "━"*32,
-                color=discord.Color.from_rgb(85, 0, 110)
-            )
-            text = ""
-            for idx, (name, count) in enumerate(scored_users[:10], 1):
-                badge = get_prestigious_badge(idx)
-                text += f"{badge} **{name}** — 💀 `{count:,}` سلاح محرم\n"
+            scored = sorted([(u.get("name", "مقاتل"), sum(1 for item in u.get("inventory", []) if any(rk in item for rk in DARK_RANKS))) for u in all_users], key=lambda x: x[1], reverse=True)[:10]
+            embed = discord.Embed(title="🔮 ترتيب أقوى العتاد المحرم — أسياد سوق الظلال", description="✨ **أكثر المالكين للأسلحة والعتاد المحرم الأسطوري (تحديث تلقائي):**\n" + "━"*32, color=discord.Color.from_rgb(85, 0, 110))
+            text = "".join([f"{get_prestigious_badge(i)} **{name}** — 💀 `{cnt:,}` سلاح محرم\n" for i, (name, cnt) in enumerate(scored, 1)])
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
         elif category == "titles_collector":
             all_users = list(users_col.find())
-            scored_users = []
-            for u in all_users:
-                titles_list = u.get("titles", ["المبتدئ الأسطوري"])
-                active_t = u.get("custom_title", "المبتدئ الأسطوري")
-                scored_users.append((u.get("name", "مقاتل"), len(titles_list), active_t))
-            scored_users.sort(key=lambda x: x[1], reverse=True)
-
-            embed = discord.Embed(
-                title="👑 ترتيب جامع الألقاب — قاعة الشرف والألقاب",
-                description="✨ **أكثر المقاتلين حاصدي الألقاب والرتب (تحديث تلقائي):**\n" + "━"*32,
-                color=discord.Color.purple()
-            )
-            text = ""
-            for idx, (name, count, active_t) in enumerate(scored_users[:10], 1):
-                badge = get_prestigious_badge(idx)
-                text += f"{badge} **{name}** — 👑 `{count:,}` ألقاب `[{active_t}]`\n"
+            scored = sorted([(u.get("name", "مقاتل"), len(u.get("titles", ["المبتدئ الأسطوري"])), u.get("custom_title", "المبتدئ الأسطوري")) for u in all_users], key=lambda x: x[1], reverse=True)[:10]
+            embed = discord.Embed(title="👑 ترتيب جامع الألقاب — قاعة الشرف والألقاب", description="✨ **أكثر المقاتلين حاصدي الألقاب والرتب (تحديث تلقائي):**\n" + "━"*32, color=discord.Color.purple())
+            text = "".join([f"{get_prestigious_badge(i)} **{name}** — 👑 `{cnt:,}` ألقاب `[{active_t}]`\n" for i, (name, cnt, active_t) in enumerate(scored, 1)])
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
         embed.set_footer(text="👑 يتم التحديث التلقائي لجميع المراكز حسب إنجازات اللاعبين في قاعدة البيانات")
@@ -853,17 +640,9 @@ class DevTransferCoinsModal(discord.ui.Modal, title="🪙 تحويل عملات 
         except ValueError:
             return await interaction.response.send_message("❌ يرجى كتابة أرقام صحيحة!", ephemeral=True)
 
-        users_col.update_one(
-            {"user_id": str(self.target_user.id)},
-            {"$inc": {"balance": max(0, gold), "diamonds": max(0, diamonds)}}
-        )
-
+        users_col.update_one({"user_id": str(self.target_user.id)}, {"$inc": {"balance": max(0, gold), "diamonds": max(0, diamonds)}})
         desc_text = f"تم إضافة الرصيد لحساب {self.target_user.mention}:\n• 🪙 **ذهب مضاف:** `+{gold:,}`\n• 💎 **ألماس مضاف:** `+{diamonds:,}`"
-        embed = discord.Embed(
-            title="🎁 تحويل إداري ناجح!",
-            description=desc_text,
-            color=discord.Color.green()
-        )
+        embed = discord.Embed(title="🎁 تحويل إداري ناجح!", description=desc_text, color=discord.Color.green())
         await interaction.response.send_message(embed=embed, ephemeral=False)
 
 class DevGiftGearModal(discord.ui.Modal, title="🎁 إهداء عتاد وسلاح أسطوري"):
@@ -881,21 +660,9 @@ class DevGiftGearModal(discord.ui.Modal, title="🎁 إهداء عتاد وسل�
             return await interaction.response.send_message("❌ يرجى كتابة رقم صحيحة للطاقة!", ephemeral=True)
 
         gear_name = self.gear_name_input.value.strip()
-
-        users_col.update_one(
-            {"user_id": str(self.target_user.id)},
-            {
-                "$push": {"inventory": gear_name},
-                "$inc": {"power": power_boost}
-            }
-        )
-
+        users_col.update_one({"user_id": str(self.target_user.id)}, {"$push": {"inventory": gear_name}, "$inc": {"power": power_boost}})
         desc_text = f"تم إهداء العتاد للاعب {self.target_user.mention}:\n• 🗡️ **العتاد:** `{gear_name}`\n• ⚡ **مكافأة الطاقة:** `+{power_boost:,}`"
-        embed = discord.Embed(
-            title="🎁 إهداء عتاد إداري أسطوري!",
-            description=desc_text,
-            color=discord.Color.blue()
-        )
+        embed = discord.Embed(title="🎁 إهداء عتاد إداري أسطوري!", description=desc_text, color=discord.Color.blue())
         await interaction.response.send_message(embed=embed, ephemeral=False)
 
 class DevUserSelectMenu(discord.ui.UserSelect):
@@ -930,15 +697,8 @@ class DevActionSelectMenu(discord.ui.Select):
             if not is_user_registered(str(target_user.id)):
                 return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
 
-            users_col.update_one(
-                {"user_id": str(target_user.id)},
-                {"$set": {"balance": 999999999999, "diamonds": 999999999}}
-            )
-            embed = discord.Embed(
-                title="♾️ شحن العملات اللانهائية!",
-                description=f"تم منح {target_user.mention} ثروة غير محدودة:\n• 🪙 **ذهب:** `999,999,999,999`\n• 💎 **ألماس:** `999,999,999`",
-                color=discord.Color.gold()
-            )
+            users_col.update_one({"user_id": str(target_user.id)}, {"$set": {"balance": 999999999999, "diamonds": 999999999}})
+            embed = discord.Embed(title="♾️ شحن العملات اللانهائية!", description=f"تم منح {target_user.mention} ثروة غير محدودة:\n• 🪙 **ذهب:** `999,999,999,999`\n• 💎 **ألماس:** `999,999,999`", color=discord.Color.gold())
             await interaction.response.send_message(embed=embed, ephemeral=False)
 
         elif action == "transfer_coins":
@@ -971,7 +731,6 @@ class DevActionSelectMenu(discord.ui.Select):
 
         elif action == "activate_assassin":
             user_id = str(interaction.user.id)
-            
             if user_id != MAIN_DEV_ID and not is_dev(user_id):
                 return await interaction.response.send_message("❌ تفعيل شخصية السفاح الخارقة مخصص للمطور الرئيسي والأعلى فقط!", ephemeral=True)
 
@@ -985,39 +744,73 @@ class DevActionSelectMenu(discord.ui.Select):
                 "critical": 100, "accuracy": 999999999, "evasion": 999999999,
                 "intelligence": 999999999, "aim": 999999999
             }
+            users_col.update_one({"user_id": user_id}, {"$set": assassin_stats, "$addToSet": {"titles": "🩸 السفاح الخالد - حاكم الظلمات والعوالم", "inventory": "🩸 سيف السفاح محطم العوالم والأرواح 💀"}})
 
-            users_col.update_one(
-                {"user_id": user_id},
-                {
-                    "$set": assassin_stats,
-                    "$addToSet": {
-                        "titles": "🩸 السفاح الخالد - حاكم الظلمات والعوالم",
-                        "inventory": "🩸 سيف السفاح محطم العوالم والأرواح 💀"
-                    }
-                }
-            )
-
-            story_desc = """✨ **القصة الملحمية والميلاد المحرّم:**
-في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، ولد 'السفاح' من أطياف الدماء المظلمة والأرواح النادمة. كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه سيف الدم الأزلي الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.
-
-عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السماء رماداً، حيث تتعدى قوته حدود العوالم والمليارات.. إنه سيد الظلمات الحقيقي والمسيطر مطلق القوة!
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **تم تفعيل القدرات الخارقة لشخصيتك فوراً:**
-• 👑 **اللقب المجهز:** `🩸 السفاح الخالد - حاكم الظلمات والعوالم`
-• 🗡️ **سلاح العرش:** `🩸 سيف السفاح محطم العوالم والأرواح 💀`
-• 💥 **جميع الإحصائيات:** `999,999,999` (خارقة)
-• ⚡ **إجمالي الطاقة القتالية:** `999,999,999,999` ⚡"""
-
-            story_embed = discord.Embed(
-                title="🩸 ظُهور شخصية [السـفّـاح الخـالـد] — العرش الخارِق",
-                description=story_desc,
-                color=discord.Color.from_rgb(120, 0, 0)
-            )
+            story_desc = "✨ **القصة الملحمية والميلاد المحرّم:**\nولد السفاح في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية من أطياف الدماء المظلمة والأرواح النادمة.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ **تم تفعيل القدرات الخارقة لشخصيتك فوراً:**\n• 👑 **اللقب المجهز:** `🩸 السفاح الخالد - حاكم الظلمات والعوالم`\n• 🗡️ **سلاح العرش:** `🩸 سيف السفاح محطم العوالم والأرواح 💀`\n• 💥 **جميع الإحصائيات:** `999,999,999` (خارقة)\n• ⚡ **إجمالي الطاقة القتالية:** `999,999,999,999` ⚡"
+            story_embed = discord.Embed(title="🩸 ظُهور شخصية [السـفّـاح الخـالـد] — العرش الخارِق", description=story_desc, color=discord.Color.from_rgb(120, 0, 0))
             await interaction.response.send_message(embed=story_embed, ephemeral=False)
 
 class DevPanelView(discord.ui.View):
     def __init__(self):
         super().__init__()
         self.target_user = None
-        self.add_item(
+        self.add_item(DevUserSelectMenu())
+        self.add_item(DevActionSelectMenu())
+
+@bot.tree.command(name="لوحة_المطور", description="👑 فتح لوحة التحكم الرئيسية والدمج التفاعلي لمطوري البوت")
+async def dev_panel_command(interaction: discord.Interaction):
+    if not is_dev(str(interaction.user.id)):
+        return await interaction.response.send_message("❌ **عذراً!** هذا الأمر مخصص لمطوري البوت والإمبراطورية فقط.", ephemeral=True)
+
+    desc_panel = "✨ **مرحباً بك في مجلس الإدارة الموحد!**\nاختر اللاعب المستهدف أولاً من قائمة تحديد الأعضاء بالأسفل، ثم اختر الإجراء المطلوب تنفيذه من قائمة الإدارة."
+    embed = discord.Embed(title="👑 لوحة الإدارة العليا والتحكم التفاعلي المدمج", description=desc_panel, color=discord.Color.purple())
+    await interaction.response.send_message(embed=embed, view=DevPanelView(), ephemeral=True)
+
+# ================== 🔟 تسجيل الأوامر وحدث تشغيل البوت ==================
+
+@bot.event
+async def on_ready():
+    try:
+        synced = await bot.tree.sync()
+        print(f"✨ تم مزامنة {len(synced)} أمر بنجاح!")
+    except Exception as e:
+        print(f"❌ خطأ أثناء المزامنة: {e}")
+    print(f"👑 البوت يعمل الآن باسم: {bot.user}")
+
+@bot.tree.command(name="تسجيل", description="📜 فتح استمارة التسجيل في الإمبراطورية")
+async def register_command(interaction: discord.Interaction):
+    if is_user_registered(interaction.user.id):
+        return await interaction.response.send_message("⚠️ أنت مسجل بالفعل!", ephemeral=True)
+    await interaction.response.send_modal(RegisterModal())
+
+@bot.tree.command(name="المتجر_العام", description="🏛️ فتح متجر الإمبراطورية العام لشراء العتاد بالذهب")
+async def general_store(interaction: discord.Interaction):
+    if not is_user_registered(interaction.user.id):
+        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+    await interaction.response.send_message(embed=discord.Embed(title="🏛️ متجر الإمبراطورية الملكي العام", color=discord.Color.gold()), view=GeneralStoreView(), ephemeral=False)
+
+@bot.tree.command(name="المتجر_المظلم", description="👁️ دخول سوق الظلال السري لشراء العتاد الأسطوري بالألماس")
+async def dark_store(interaction: discord.Interaction):
+    if not is_user_registered(interaction.user.id):
+        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+    await interaction.response.send_message(embed=discord.Embed(title="🔮 المتجر المظلم المحرم — Dark Sanctuary", color=discord.Color.from_rgb(20, 0, 35)), view=DarkStoreView(), ephemeral=False)
+
+@bot.tree.command(name="تطوير_المعدلات", description="⚡ فتح مذبح تطوير المعدلات القتالية")
+async def upgrade_stats_command(interaction: discord.Interaction):
+    if not is_user_registered(interaction.user.id):
+        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+    await interaction.response.send_message(embed=discord.Embed(title="✨ مذبح الصقل وتطوير القوى الإمبراطورية", color=discord.Color.red()), view=StatsUpgradeView(), ephemeral=False)
+
+@bot.tree.command(name="الطوابق", description="🏰 فتح بوابات برج الـ 500 طابق والبدء بالمغامرة التلقائية")
+async def tower_floors_command(interaction: discord.Interaction):
+    if not is_user_registered(interaction.user.id):
+        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+    user_data = users_col.find_one({"user_id": str(interaction.user.id)}) or {}
+    floor_desc = f"• 🏢 **الطابق الحالي:** `[{user_data.get('max_floor', 1)}/500]`\n• ⚡ **الطاقة:** `{user_data.get('power', 0):,}` ⚡"
+    embed = discord.Embed(title="🏰 عرش البرج العظيم — بوابات الـ 500 طابق", description=floor_desc, color=discord.Color.dark_green())
+    await interaction.response.send_message(embed=embed, view=TowerMainView(), ephemeral=False)
+
+@bot.tree.command(name="المعارك", description="⚔️ فتح حلبة الصراع والمواجهات التفاعلية (1v1, 2v2, 3v3)")
+async def pvp_battles_command(interaction: discord.Interaction):
+    if not is_user_registered(interaction.user.id):
+        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!"
