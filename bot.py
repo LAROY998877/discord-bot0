@@ -21,7 +21,7 @@ try:
     guilds_col = db["guilds"]
     devs_col = db["devs"]
 except Exception as e:
-    print(f"❌ خطأ في تهيئة قاعدة البيانات: {e}")
+    print(f"❌ Database connection error: {e}")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -32,14 +32,14 @@ def db_get_user(user_id: str) -> dict:
     try:
         return users_col.find_one({"user_id": str(user_id)}) or {}
     except Exception as e:
-        print(f"❌ خطأ DB (get_user): {e}")
+        print(f"❌ DB Error (get_user): {e}")
         return {}
 
 def db_is_registered(user_id: str) -> bool:
     try:
         return users_col.find_one({"user_id": str(user_id)}) is not None
     except Exception as e:
-        print(f"❌ خطأ DB (is_registered): {e}")
+        print(f"❌ DB Error (is_registered): {e}")
         return False
 
 def db_is_dev(user_id: str) -> bool:
@@ -52,38 +52,47 @@ def db_is_dev(user_id: str) -> bool:
             return True
         return devs_col.find_one({"user_id": str_id}) is not None
     except Exception as e:
-        print(f"❌ خطأ DB (is_dev): {e}")
+        print(f"❌ DB Error (is_dev): {e}")
         return str(user_id) == MAIN_DEV_ID
 
 def db_update_user(user_id: str, update_doc: dict):
     try:
         users_col.update_one({"user_id": str(user_id)}, update_doc)
     except Exception as e:
-        print(f"❌ خطأ DB (update_user): {e}")
+        print(f"❌ DB Error (update_user): {e}")
 
 def db_insert_user(user_doc: dict):
     try:
         users_col.insert_one(user_doc)
     except Exception as e:
-        print(f"❌ خطأ DB (insert_user): {e}")
+        print(f"❌ DB Error (insert_user): {e}")
 
 def db_add_dev(user_id: str, added_by: str):
     try:
         devs_col.update_one(
             {"user_id": str(user_id)},
-            {"$set": {"added_by": str(added_by), "added_at": datetime.now(timezone.utc)}},
+            {"$set": {
+                "added_by": str(added_by),
+                "added_at": datetime.now(timezone.utc)
+            }},
             upsert=True
         )
-        users_col.update_one({"user_id": str(user_id)}, {"$set": {"is_dev": True}})
+        users_col.update_one(
+            {"user_id": str(user_id)},
+            {"$set": {"is_dev": True}}
+        )
     except Exception as e:
-        print(f"❌ خطأ DB (add_dev): {e}")
+        print(f"❌ DB Error (add_dev): {e}")
 
 def db_remove_dev(user_id: str):
     try:
         devs_col.delete_one({"user_id": str(user_id)})
-        users_col.update_one({"user_id": str(user_id)}, {"$set": {"is_dev": False}})
+        users_col.update_one(
+            {"user_id": str(user_id)},
+            {"$set": {"is_dev": False}}
+        )
     except Exception as e:
-        print(f"❌ خطأ DB (remove_dev): {e}")
+        print(f"❌ DB Error (remove_dev): {e}")
 
 # ================== 🏰 قاعدة بيانات المتاجر المحدثة ==================
 CATEGORIES = ["خوذة", "درع", "بنطال", "حذاء", "سيف", "مطرقة", "خنجر", "عصا سحرية"]
@@ -150,27 +159,57 @@ for cat in CATEGORIES:
 
 # ================== 1. نافذة منيو التسجيل (Modal) ==================
 class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل في الإمبراطورية"):
-    name_input = discord.ui.TextInput(label="الاسم الخاص بك", placeholder="أدخل اسم شخصيتك...", min_length=2, max_length=30, required=True)
-    age_input = discord.ui.TextInput(label="العمر (أرقام فقط كحد أقصى 3000)", placeholder="مثال: 25", min_length=1, max_length=4, required=True)
-    gender_input = discord.ui.TextInput(label="الجنس (اكتب: ذكر أو أنثى)", placeholder="ذكر / أنثى", min_length=3, max_length=4, required=True)
+    name_input = discord.ui.TextInput(
+        label="الاسم الخاص بك",
+        placeholder="أدخل اسم شخصيتك...",
+        min_length=2,
+        max_length=30,
+        required=True
+    )
+    age_input = discord.ui.TextInput(
+        label="العمر (أرقام فقط كحد أقصى 3000)",
+        placeholder="مثال: 25",
+        min_length=1,
+        max_length=4,
+        required=True
+    )
+    gender_input = discord.ui.TextInput(
+        label="الجنس (اكتب: ذكر أو أنثى)",
+        placeholder="ذكر / أنثى",
+        min_length=3,
+        max_length=4,
+        required=True
+    )
 
     async def on_submit(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
         registered = await asyncio.to_thread(db_is_registered, user_id)
         if registered:
-            return await interaction.response.send_message("❌ أنت مسجل بالفعل في الإمبراطورية!", ephemeral=True)
+            return await interaction.response.send_message(
+                "❌ أنت مسجل بالفعل في الإمبراطورية!",
+                ephemeral=True
+            )
 
         try:
             age = int(self.age_input.value.strip())
         except ValueError:
-            return await interaction.response.send_message("❌ يرجى كتابة العمر كأرقام فقط!", ephemeral=True)
+            return await interaction.response.send_message(
+                "❌ يرجى كتابة العمر كأرقام فقط!",
+                ephemeral=True
+            )
 
         if age < 1 or age > 3000:
-            return await interaction.response.send_message("❌ يجب أن يكون العمر بين 1 و 3000 سنة!", ephemeral=True)
+            return await interaction.response.send_message(
+                "❌ يجب أن يكون العمر بين 1 و 3000 سنة!",
+                ephemeral=True
+            )
 
         gender = self.gender_input.value.strip()
         if gender not in ["ذكر", "أنثى"]:
-            return await interaction.response.send_message("❌ يرجى كتابة كلمة ذكر أو أنثى فقط!", ephemeral=True)
+            return await interaction.response.send_message(
+                "❌ يرجى كتابة كلمة ذكر أو أنثى فقط!",
+                ephemeral=True
+            )
 
         is_dev_user = (user_id == MAIN_DEV_ID)
 
@@ -196,7 +235,11 @@ class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل 
         
         await asyncio.to_thread(db_insert_user, new_user)
 
-        embed_success = discord.Embed(title="👑 أهلاً بك في عرش الإمبراطورية!", description="تمت معالجة وثيقة هويتك بنجاح.", color=discord.Color.gold())
+        embed_success = discord.Embed(
+            title="👑 أهلاً بك في عرش الإمبراطورية!",
+            description="تمت معالجة وثيقة هويتك بنجاح.",
+            color=discord.Color.gold()
+        )
         embed_success.add_field(name="🪪 الاسم", value=f"`{self.name_input.value.strip()}`", inline=True)
         embed_success.add_field(name="⏳ العمر", value=f"`{age}` سنة", inline=True)
         embed_success.add_field(name="👤 الجنس", value=f"`{gender}`", inline=True)
@@ -216,7 +259,12 @@ class GeneralItemSelect(discord.ui.Select):
                 emoji=item["emoji"]
             ) for item in items
         ]
-        super().__init__(placeholder=f"⚔️ تصفح عتاد [{category}] (25 قطعة)...", min_values=1, max_values=1, options=options)
+        super().__init__(
+            placeholder=f"⚔️ تصفح عتاد [{category}] (25 قطعة)...",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
 
     async def callback(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
@@ -225,7 +273,10 @@ class GeneralItemSelect(discord.ui.Select):
         
         user_data = await asyncio.to_thread(db_get_user, user_id)
         if user_data.get("balance", 0) < selected_item["price"]:
-            return await interaction.response.send_message(f"❌ رصيدك الذهبي لا يكفي! تحتاج `{selected_item['price']:,}` 🪙", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ رصيدك الذهبي لا يكفي! تحتاج `{selected_item['price']:,}` 🪙",
+                ephemeral=True
+            )
         
         update_doc = {
             "$inc": {"balance": -selected_item["price"], "power": selected_item["power"]},
@@ -276,7 +327,12 @@ class DarkItemSelect(discord.ui.Select):
                 emoji=item["emoji"]
             ) for item in items
         ]
-        super().__init__(placeholder=f"🔮 عتاد الظلال المحرم [{category}] (25 قطعة)...", min_values=1, max_values=1, options=options)
+        super().__init__(
+            placeholder=f"🔮 عتاد الظلال المحرم [{category}] (25 قطعة)...",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
 
     async def callback(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
@@ -285,7 +341,10 @@ class DarkItemSelect(discord.ui.Select):
         
         user_data = await asyncio.to_thread(db_get_user, user_id)
         if user_data.get("diamonds", 0) < selected_item["price"]:
-            return await interaction.response.send_message(f"❌ ألماس غير كافٍ! تحتاج إلى `{selected_item['price']:,}` 💎 ألماس.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ ألماس غير كافٍ! تحتاج إلى `{selected_item['price']:,}` 💎 ألماس.",
+                ephemeral=True
+            )
         
         update_doc = {
             "$inc": {"diamonds": -selected_item["price"], "power": selected_item["power"]},
@@ -344,7 +403,9 @@ class StatUpgradeModal(discord.ui.Modal):
         self.amount_input = discord.ui.TextInput(
             label=f"عدد النقاط (سعر النقطة: {stat_info['cost']} 🪙)",
             placeholder="أدخل عدد النقاط...",
-            min_length=1, max_length=20, required=True
+            min_length=1,
+            max_length=20,
+            required=True
         )
         self.add_item(self.amount_input)
 
@@ -362,7 +423,10 @@ class StatUpgradeModal(discord.ui.Modal):
         user_data = await asyncio.to_thread(db_get_user, user_id)
 
         if user_data.get("balance", 0) < total_cost:
-            return await interaction.response.send_message(f"❌ لا تملك ذهبًا كافيًا! التكلفة: `{total_cost:,}` 🪙", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ لا تملك ذهبًا كافيًا! التكلفة: `{total_cost:,}` 🪙",
+                ephemeral=True
+            )
 
         update_doc = {"$inc": {"balance": -total_cost, self.stat_key: points, "power": points * 10}}
         await asyncio.to_thread(db_update_user, user_id, update_doc)
@@ -377,8 +441,12 @@ class StatUpgradeModal(discord.ui.Modal):
 class StatSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label=info["name"], value=key, description=f"تكلفة النقطة: {info['cost']} 🪙", emoji=info["emoji"])
-            for key, info in STATS_CONFIG.items()
+            discord.SelectOption(
+                label=info["name"],
+                value=key,
+                description=f"تكلفة النقطة: {info['cost']} 🪙",
+                emoji=info["emoji"]
+            ) for key, info in STATS_CONFIG.items()
         ]
         super().__init__(placeholder="🔥 اختر المعدل لتطويره...", min_values=1, max_values=1, options=options)
 
@@ -442,10 +510,11 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
     user_data = await asyncio.to_thread(db_get_user, user_id)
 
     if floor_num > 500:
+        msg = "🏆 **تهانينا العظيمة!** لقد أتممت فتح جميع الـ 500 طابق بالكامل!"
         if not interaction.response.is_done():
-            return await interaction.response.send_message("🏆 **تهانينا العظيمة!** لقد أتممت فتح جميع الـ 500 طابق بالكامل!", ephemeral=True)
+            return await interaction.response.send_message(msg, ephemeral=True)
         else:
-            return await interaction.followup.send("🏆 **تهانينا العظيمة!** لقد أتممت فتح جميع الـ 500 طابق بالكامل!", ephemeral=True)
+            return await interaction.followup.send(msg, ephemeral=True)
 
     enemy = get_floor_enemy_info(floor_num)
     p_attack = user_data.get("attack", 10) * 12 + user_data.get("power", 100) * 1.2
@@ -532,7 +601,11 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
         embed_win.add_field(name="📜 سجل القتال النهائي", value="\n".join(logs[-4:]), inline=False)
         
         view = discord.ui.View()
-        next_btn = discord.ui.Button(label=f"➡️ خوض القتال في الطابق [{floor_num + 1}] فوراً", style=discord.ButtonStyle.success, emoji="⚔️")
+        next_btn = discord.ui.Button(
+            label=f"➡️ خوض القتال في الطابق [{floor_num + 1}] فوراً",
+            style=discord.ButtonStyle.success,
+            emoji="⚔️"
+        )
         
         async def next_floor_callback(btn_inter: discord.Interaction):
             if str(btn_inter.user.id) != user_id:
@@ -543,11 +616,14 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
         view.add_item(next_btn)
         await message.edit(embed=embed_win, view=view)
     else:
-        embed_lose = discord.Embed(title=f"💀 **هزيمة في الطابق [{floor_num}]!**", description=f"لم تستطع الصمود بوجه `{enemy['name']}`.", color=discord.Color.red())
+        embed_lose = discord.Embed(
+            title=f"💀 **هزيمة في الطابق [{floor_num}]!**",
+            description=f"لم تستطع الصمود بوجه `{enemy['name']}`.",
+            color=discord.Color.red()
+        )
         embed_lose.add_field(name="📜 مجريات اللحظات الأخيرة", value="\n".join(logs[-4:]), inline=False)
         await message.edit(embed=embed_lose)
 
-# ================== 🎒 view الحقيبة ==================
 class InventoryView(discord.ui.View):
     def __init__(self, user_data: dict):
         super().__init__()
@@ -555,18 +631,24 @@ class InventoryView(discord.ui.View):
         if not inv:
             self.add_item(discord.ui.Button(label="الحقيبة فارغة حالياً", disabled=True))
         else:
-            options = [discord.SelectOption(label=item[:25], value=f"{idx}_{item}", emoji="🎒") for idx, item in enumerate(inv[:25])]
+            options = [
+                discord.SelectOption(label=item[:25], value=f"{idx}_{item}", emoji="🎒")
+                for idx, item in enumerate(inv[:25])
+            ]
             select = discord.ui.Select(placeholder="🎒 اختر قطعة عتاد لمعاينتها...", options=options)
             
             async def inv_callback(interaction: discord.Interaction):
                 item_name = select.values[0].split("_", 1)[1]
-                embed = discord.Embed(title="🔍 معاينة قطعة العتاد", description=f"القطعة: **{item_name}**", color=discord.Color.blue())
+                embed = discord.Embed(
+                    title="🔍 معاينة قطعة العتاد",
+                    description=f"القطعة: **{item_name}**",
+                    color=discord.Color.blue()
+                )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
 
             select.callback = inv_callback
             self.add_item(select)
 
-# ================== 🏰 6. القائمة الرئيسية لأمر /الطوابق ==================
 class TowerMainSelect(discord.ui.Select):
     def __init__(self):
         options = [
@@ -591,14 +673,22 @@ class TowerMainSelect(discord.ui.Select):
             boss_f = cf if cf % 10 == 0 else ((cf // 10 + 1) * 10)
             await process_floor_battle(interaction, boss_f, is_boss_only=True)
         elif val == "gen_store":
-            await interaction.response.send_message(embed=discord.Embed(title="🏛️ متجر الإمبراطورية الملكي العام", color=discord.Color.gold()), view=GeneralStoreView(), ephemeral=True)
+            embed = discord.Embed(title="🏛️ متجر الإمبراطورية الملكي العام", color=discord.Color.gold())
+            await interaction.response.send_message(embed=embed, view=GeneralStoreView(), ephemeral=True)
         elif val == "dark_store":
-            await interaction.response.send_message(embed=discord.Embed(title="🔮 المتجر المظلم المحرم — Dark Sanctuary", color=discord.Color.from_rgb(20, 0, 35)), view=DarkStoreView(), ephemeral=True)
+            embed = discord.Embed(title="🔮 المتجر المظلم المحرم — Dark Sanctuary", color=discord.Color.from_rgb(20, 0, 35))
+            await interaction.response.send_message(embed=embed, view=DarkStoreView(), ephemeral=True)
         elif val == "upgrade_stats":
-            await interaction.response.send_message(embed=discord.Embed(title="✨ مذبح الصقل وتطوير القوى الإمبراطورية", color=discord.Color.red()), view=StatsUpgradeView(), ephemeral=True)
+            embed = discord.Embed(title="✨ مذبح الصقل وتطوير القوى الإمبراطورية", color=discord.Color.red())
+            await interaction.response.send_message(embed=embed, view=StatsUpgradeView(), ephemeral=True)
         elif val == "my_inventory":
             inv = user_data.get("inventory", [])
-            embed = discord.Embed(title=f"🎒 حقيبة المقاتل [{user_data.get('name', 'المقاتل')}]", description="\n".join([f"• {i}" for i in inv[-10:]]) if inv else "الحقيبة فارغة.", color=discord.Color.blue())
+            desc = "\n".join([f"• {i}" for i in inv[-10:]]) if inv else "الحقيبة فارغة."
+            embed = discord.Embed(
+                title=f"🎒 حقيبة المقاتل [{user_data.get('name', 'المقاتل')}]",
+                description=desc,
+                color=discord.Color.blue()
+            )
             await interaction.response.send_message(embed=embed, view=InventoryView(user_data), ephemeral=True)
 
 class TowerMainView(discord.ui.View):
@@ -744,7 +834,12 @@ class BattleMainView(discord.ui.View):
 # ================== 🏆 8. نظام الليدربورد والترتيب التلقائي ==================
 
 def get_prestigious_badge(rank_num: int) -> str:
-    badges = {1: "👑 **[الملك - المركز الأول]**", 2: "🥇 **[المركز الثاني]**", 3: "🥈 **[المركز الثالث]**", 4: "🥉 **[المركز الرابع]**"}
+    badges = {
+        1: "👑 **[الملك - المركز الأول]**",
+        2: "🥇 **[المركز الثاني]**",
+        3: "🥈 **[المركز الثالث]**",
+        4: "🥉 **[المركز الرابع]**"
+    }
     return badges.get(rank_num, f"🔹 `#{rank_num}`")
 
 class LeaderboardSelect(discord.ui.Select):
@@ -917,8 +1012,22 @@ class LeaderboardView(discord.ui.View):
 # ================== 👑 9. لوحة المطورين المدمجة التفاعلية (Dev Panel) ==================
 
 class DevTransferCoinsModal(discord.ui.Modal, title="🪙 تحويل عملات إداري للاعب"):
-    gold_input = discord.ui.TextInput(label="كمية الذهب 🪙", placeholder="مثال: 500000", min_length=1, max_length=15, required=False, default="0")
-    diamonds_input = discord.ui.TextInput(label="كمية الألماس 💎", placeholder="مثال: 100", min_length=1, max_length=10, required=False, default="0")
+    gold_input = discord.ui.TextInput(
+        label="كمية الذهب 🪙",
+        placeholder="مثال: 500000",
+        min_length=1,
+        max_length=15,
+        required=False,
+        default="0"
+    )
+    diamonds_input = discord.ui.TextInput(
+        label="كمية الألماس 💎",
+        placeholder="مثال: 100",
+        min_length=1,
+        max_length=10,
+        required=False,
+        default="0"
+    )
 
     def __init__(self, target_user: discord.User):
         super().__init__()
@@ -942,8 +1051,21 @@ class DevTransferCoinsModal(discord.ui.Modal, title="🪙 تحويل عملات 
         await interaction.response.send_message(embed=embed, ephemeral=False)
 
 class DevGiftGearModal(discord.ui.Modal, title="🎁 إهداء عتاد وسلاح أسطوري"):
-    gear_name_input = discord.ui.TextInput(label="اسم العتاد والسلاح", placeholder="مثال: ⚔️ سيف التنين المظلم الأسطوري", min_length=2, max_length=50, required=True)
-    power_input = discord.ui.TextInput(label="مقدار زيادة الطاقة ⚡", placeholder="مثال: 10000", min_length=1, max_length=10, required=True, default="5000")
+    gear_name_input = discord.ui.TextInput(
+        label="اسم العتاد والسلاح",
+        placeholder="مثال: ⚔️ سيف التنين المظلم الأسطوري",
+        min_length=2,
+        max_length=50,
+        required=True
+    )
+    power_input = discord.ui.TextInput(
+        label="مقدار زيادة الطاقة ⚡",
+        placeholder="مثال: 10000",
+        min_length=1,
+        max_length=10,
+        required=True,
+        default="5000"
+    )
 
     def __init__(self, target_user: discord.User):
         super().__init__()
@@ -975,10 +1097,8 @@ class DevUserSelectMenu(discord.ui.UserSelect):
 
     async def callback(self, interaction: discord.Interaction):
         self.view.target_user = self.values[0]
-        await interaction.response.send_message(
-            f"🎯 **تم تحديد اللاعب المستهدف:** {self.values[0].mention}\nالآن اختر الإجراء المطلوب من القائمة المنسدلة.",
-            ephemeral=True
-        )
+        msg = f"🎯 **تم تحديد اللاعب المستهدف:** {self.values[0].mention}\nالآن اختر الإجراء المطلوب من القائمة المنسدلة."
+        await interaction.response.send_message(msg, ephemeral=True)
 
 class DevActionSelectMenu(discord.ui.Select):
     def __init__(self):
@@ -1011,25 +1131,4 @@ class DevActionSelectMenu(discord.ui.Select):
 
                 embed = discord.Embed(
                     title="♾️ شحن العملات اللانهائية!",
-                    description=f"تم منح {target_user.mention} ثروة غير محدودة:\n• 🪙 **ذهب:** `999,999,999,999`\n• 💎 **ألماس:** `999,999,999`",
-                    color=discord.Color.gold()
-                )
-                await interaction.response.send_message(embed=embed, ephemeral=False)
-
-            elif action == "transfer_coins":
-                reg_check = await asyncio.to_thread(db_is_registered, str(target_user.id))
-                if not reg_check:
-                    return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
-                await interaction.response.send_modal(DevTransferCoinsModal(target_user))
-
-            elif action == "gift_gear":
-                reg_check = await asyncio.to_thread(db_is_registered, str(target_user.id))
-                if not reg_check:
-                    return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
-                await interaction.response.send_modal(DevGiftGearModal(target_user))
-
-            elif action == "add_dev":
-                user_id = str(target_user.id)
-                target_is_dev = await asyncio.to_thread(db_is_dev, user_id)
-                if target_is_dev:
-                    return await interaction.re
+                    descr
