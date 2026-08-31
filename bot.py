@@ -917,152 +917,94 @@ class DevActionSelectMenu(discord.ui.Select):
         super().__init__(placeholder="⚙️ اختر الإجراء المطلوب تنفيذه من لوحة التحكم...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        if not is_dev(str(interaction.user.id)):
-            return await interaction.response.send_message("❌ **عذراً!** لا تملك صلاحية مطور!", ephemeral=True)
+        try:
+            if not is_dev(str(interaction.user.id)):
+                return await interaction.response.send_message("❌ **عذراً!** لا تملك صلاحية مطور!", ephemeral=True)
 
-        target_user = getattr(self.view, "target_user", interaction.user)
-        action = self.values[0]
+            target_user = getattr(self.view, "target_user", None) or interaction.user
+            action = self.values[0]
 
-        if action == "infinite_coins":
-            if not is_user_registered(str(target_user.id)):
-                return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
+            if action == "infinite_coins":
+                if not is_user_registered(str(target_user.id)):
+                    return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
 
-            users_col.update_one(
-                {"user_id": str(target_user.id)},
-                {"$set": {"balance": 999999999999, "diamonds": 999999999}}
-            )
-            embed = discord.Embed(
-                title="♾️ شحن العملات اللانهائية!",
-                description=f"تم منح {target_user.mention} ثروة غير محدودة:\n• 🪙 **ذهب:** `999,999,999,999`\n• 💎 **ألماس:** `999,999,999`",
-                color=discord.Color.gold()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=False)
+                users_col.update_one(
+                    {"user_id": str(target_user.id)},
+                    {"$set": {"balance": 999999999999, "diamonds": 999999999}}
+                )
+                embed = discord.Embed(
+                    title="♾️ شحن العملات اللانهائية!",
+                    description=f"تم منح {target_user.mention} ثروة غير محدودة:\n• 🪙 **ذهب:** `999,999,999,999`\n• 💎 **ألماس:** `999,999,999`",
+                    color=discord.Color.gold()
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=False)
 
-        elif action == "transfer_coins":
-            if not is_user_registered(str(target_user.id)):
-                return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
-            await interaction.response.send_modal(DevTransferCoinsModal(target_user))
+            elif action == "transfer_coins":
+                if not is_user_registered(str(target_user.id)):
+                    return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
+                await interaction.response.send_modal(DevTransferCoinsModal(target_user))
 
-        elif action == "gift_gear":
-            if not is_user_registered(str(target_user.id)):
-                return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
-            await interaction.response.send_modal(DevGiftGearModal(target_user))
+            elif action == "gift_gear":
+                if not is_user_registered(str(target_user.id)):
+                    return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
+                await interaction.response.send_modal(DevGiftGearModal(target_user))
 
-        elif action == "add_dev":
-            user_id = str(target_user.id)
-            if is_dev(user_id):
-                return await interaction.response.send_message(f"⚠️ {target_user.mention} مطور بالفعل!", ephemeral=True)
+            elif action == "add_dev":
+                user_id = str(target_user.id)
+                if is_dev(user_id):
+                    return await interaction.response.send_message(f"⚠️ {target_user.mention} مطور بالفعل!", ephemeral=True)
 
-            devs_col.update_one({"user_id": user_id}, {"$set": {"added_by": str(interaction.user.id), "added_at": datetime.utcnow()}}, upsert=True)
-            users_col.update_one({"user_id": user_id}, {"$set": {"is_dev": True}})
-            await interaction.response.send_message(f"👑 تم منح {target_user.mention} صلاحيات المطور بنجاح!", ephemeral=False)
+                devs_col.update_one({"user_id": user_id}, {"$set": {"added_by": str(interaction.user.id), "added_at": datetime.utcnow()}}, upsert=True)
+                users_col.update_one({"user_id": user_id}, {"$set": {"is_dev": True}})
+                await interaction.response.send_message(f"👑 تم منح {target_user.mention} صلاحيات المطور بنجاح!", ephemeral=False)
 
-        elif action == "remove_dev":
-            user_id = str(target_user.id)
-            if user_id == MAIN_DEV_ID:
-                return await interaction.response.send_message("❌ لا يمكنك حذف المطور الرئيسي والمالك للبوت!", ephemeral=True)
+            elif action == "remove_dev":
+                user_id = str(target_user.id)
+                if user_id == MAIN_DEV_ID:
+                    return await interaction.response.send_message("❌ لا يمكنك حذف المطور الرئيسي والمالك للبوت!", ephemeral=True)
 
-            devs_col.delete_one({"user_id": user_id})
-            users_col.update_one({"user_id": user_id}, {"$set": {"is_dev": False}})
-            await interaction.response.send_message(f"🚫 تم سحب صلاحية المطور من {target_user.mention}!", ephemeral=False)
+                devs_col.delete_one({"user_id": user_id})
+                users_col.update_one({"user_id": user_id}, {"$set": {"is_dev": False}})
+                await interaction.response.send_message(f"🚫 تم سحب صلاحية المطور من {target_user.mention}!", ephemeral=False)
 
-        elif action == "activate_assassin":
-            user_id = str(interaction.user.id)
-            
-            if user_id != MAIN_DEV_ID and not is_dev(user_id):
-                return await interaction.response.send_message("❌ تفعيل شخصية السفاح الخارقة مخصص للمطورين فقط!", ephemeral=True)
+            elif action == "activate_assassin":
+                user_id = str(interaction.user.id)
+                
+                if user_id != MAIN_DEV_ID and not is_dev(user_id):
+                    return await interaction.response.send_message("❌ تفعيل شخصية السفاح الخارقة مخصص للمطورين فقط!", ephemeral=True)
 
-            if not is_user_registered(user_id):
-                return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+                if not is_user_registered(user_id):
+                    return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
 
-            assassin_stats = {
-                "custom_title": "🩸 السفاح الخالد - حاكم الظلمات والعوالم",
-                "power": 999999999999, "balance": 999999999999, "diamonds": 999999999,
-                "attack": 999999999, "defense": 999999999, "magic": 999999999,
-                "critical": 100, "accuracy": 999999999, "evasion": 999999999,
-                "intelligence": 999999999, "aim": 999999999
-            }
-
-            users_col.update_one(
-                {"user_id": user_id},
-                {
-                    "$set": assassin_stats,
-                    "$addToSet": {
-                        "titles": "🩸 السفاح الخالد - حاكم الظلمات والعوالم",
-                        "inventory": "🩸 سيف السفاح محطم العوالم والأرواح 💀"
-                    }
+                assassin_stats = {
+                    "custom_title": "🩸 السفاح الخالد - حاكم الظلمات والعوالم",
+                    "power": 999999999999, "balance": 999999999999, "diamonds": 999999999,
+                    "attack": 999999999, "defense": 999999999, "magic": 999999999,
+                    "critical": 100, "accuracy": 999999999, "evasion": 999999999,
+                    "intelligence": 999999999, "aim": 999999999
                 }
-            )
 
-            story_text = (
-                "✨ **القصة الملحمية والميلاد المحرّم:**\n"
-                "ولد السفاح في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، من أطياف الدماء المظلمة والأرواح النادمة.\n"
-                "كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه سيف الدم الأزلي الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.\n\n"
-                "عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السماء رماداً، حيث تتعدى قوته حدود العوالم والمليارات.. إنه سيد الظلمات الحقيقي والمسيطر مطلق القوة!\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "⚡ **تم تفعيل القدرات الخارقة لشخصيتك فوراً:**\n"
-                "• 👑 **اللقب المجهز:** `🩸 السفاح الخالد - حاكم الظلمات والعوالم`\n"
-                "• 🗡️ **السلاح أسطوري:** `🩸 سيف السفاح محطم العوالم والأرواح 💀`"
-            )
+                users_col.update_one(
+                    {"user_id": user_id},
+                    {
+                        "$set": assassin_stats,
+                        "$addToSet": {
+                            "titles": "🩸 السفاح الخالد - حاكم الظلمات والعوالم",
+                            "inventory": "🩸 سيف السفاح محطم العوالم والأرواح 💀"
+                        }
+                    }
+                )
 
-            embed = discord.Embed(
-                title="🩸 القوة المطلقة — تفعيل شخصية السفاح الخالد",
-                description=story_text,
-                color=discord.Color.dark_purple()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=False)
+                story_text = (
+                    "✨ **القصة الملحمية والميلاد المحرّم:**\n"
+                    "ولد السفاح في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، من أطياف الدماء المظلمة والأرواح النادمة.\n"
+                    "كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه سيف الدم الأزلي الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.\n\n"
+                    "عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السماء رماداً، حيث تتعدى قوته حدود العوالم والمليارات.. إنه سيد الظلمات الحقيقي والمسيطر مطلق القوة!\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "⚡ **تم تفعيل القدرات الخارقة لشخصيتك فوراً:**\n"
+                    "• 👑 **اللقب المجهز:** `🩸 السفاح الخالد - حاكم الظلمات والعوالم`\n"
+                    "• 🗡️ **السلاح أسطوري:** `🩸 سيف السفاح محطم العوالم والأرواح 💀`"
+                )
 
-class DevView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.target_user = None
-        self.add_item(DevUserSelectMenu())
-        self.add_item(DevActionSelectMenu())
-
-# ================== ⚡ 10. تسجيل أوامر السلاش (Slash Commands) ==================
-
-@bot.tree.command(name="تسجيل", description="📜 التسجيل في الإمبراطورية وإنشاء هويتك القتالية")
-async def register_cmd(interaction: discord.Interaction):
-    if is_user_registered(str(interaction.user.id)):
-        return await interaction.response.send_message("❌ أنت مسجل بالفعل في قاعدة البيانات!", ephemeral=True)
-    await interaction.response.send_modal(RegisterModal())
-
-@bot.tree.command(name="البرج", description="🏰 فتح واجهة برج الطوابق والمغامرة")
-async def tower_cmd(interaction: discord.Interaction):
-    if not is_user_registered(str(interaction.user.id)):
-        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
-    embed = discord.Embed(title="🏰 برج الإمبراطورية العظيم", description="اختر الإجراء من القائمة المنسدلة للأسفل:", color=discord.Color.gold())
-    await interaction.response.send_message(embed=embed, view=TowerMainView())
-
-@bot.tree.command(name="معركة", description="⚔️ فتح حلبة الصراع المباشر بين اللاعبين (PvP)")
-async def battle_cmd(interaction: discord.Interaction):
-    if not is_user_registered(str(interaction.user.id)):
-        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
-    embed = discord.Embed(title="⚔️ حلبة الصراع المباشر (PvP)", description="اختر نمط القتال:", color=discord.Color.red())
-    await interaction.response.send_message(embed=embed, view=BattleMainView())
-
-@bot.tree.command(name="الترتيب", description="🏆 عرض تصنيف وليدربورد العظماء والأقوياء")
-async def leaderboard_cmd(interaction: discord.Interaction):
-    embed = discord.Embed(title="🏆 قائمة الشرف والترتيب العام", description="اختر التصنيف المطلوب من القائمة:", color=discord.Color.gold())
-    await interaction.response.send_message(embed=embed, view=LeaderboardView())
-
-@bot.tree.command(name="لوحة_المطور", description="👑 فتح لوحة تحكم المطورين الإدارية")
-async def dev_panel_cmd(interaction: discord.Interaction):
-    if not is_dev(str(interaction.user.id)):
-        return await interaction.response.send_message("❌ **عذراً!** هذا الأمر مخصص للمطورين فقط!", ephemeral=True)
-    embed = discord.Embed(title="⚙️ لوحة تحكم المطورين", description="حدد اللاعب ثم اختر الإجراء المطلوب:", color=discord.Color.purple())
-    await interaction.response.send_message(embed=embed, view=DevView(), ephemeral=True)
-
-# ================== 🚀 حدث البدء وتحديث الأوامر ==================
-
-@bot.event
-async def on_ready():
-    print(f"✅ تم تسجيل الدخول بنجاح باسم: {bot.user} (ID: {bot.user.id})")
-    try:
-        synced = await bot.tree.sync()
-        print(f"✨ تم مزامنة {len(synced)} أمر slash بنجاح مع ديسكورد!")
-    except Exception as e:
-        print(f"❌ فشل مزامنة الأوامر: {e}")
-
-if __name__ == "__main__":
-    bot.run(DISCORD_TOKEN)
+                embed = discord.Embed(
+                    title="🩸 القوة المطلقة — تف
