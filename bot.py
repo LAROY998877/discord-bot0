@@ -42,7 +42,6 @@ for cat in CATEGORIES:
         GEAR_DATA[cat].append(d_item)
         ALL_DARK_ITEMS.append(d_item)
 
-# خرائط حساب قوة المعدات لليدربورد تلقائياً
 GEN_ITEM_POWER_MAP = {it["name"]: it["power"] for it in ALL_GENERAL_ITEMS}
 DARK_ITEM_POWER_MAP = {it["name"]: it["power"] for it in ALL_DARK_ITEMS}
 
@@ -260,8 +259,6 @@ class TowerMainView(discord.ui.View):
         super().__init__()
         self.add_item(TowerMainSelect())
 
-# ==================== الليدربورد المُعدل بالخيارات الـ 7 الجديدة ====================
-
 class LeaderboardSelect(discord.ui.Select):
     def __init__(self):
         opts = [
@@ -363,7 +360,7 @@ class DevPanelView(discord.ui.View):
         super().__init__()
         self.add_item(DevActionSelectMenu())
 
-# ==================== نظام البنك الإمبراطوري والنوافذ ====================
+# ==================== نظام البنك والتحويل بالمنشن ====================
 
 class BankDepositModal(discord.ui.Modal, title="📥 إيداع في البنك"):
     amount_in = discord.ui.TextInput(label="المبلغ المراد إيداعه", placeholder="مثال: 1000")
@@ -425,37 +422,54 @@ class TakeLoanModal(discord.ui.Modal, title="💳 طلب قرض إمبراطور
         users_col.update_one({"user_id": uid}, {"$inc": {"balance": amt}, "$set": {"loan": amt}})
         await ctx.response.send_message(f"💳 تم منحك القرض بنجاح بمبلغ `{amt:,}` 🪙! أضيفت إلى حسابك.", ephemeral=True)
 
-class BankTransferModal(discord.ui.Modal, title="💸 تحويل أموال سريع"):
-    target_in = discord.ui.TextInput(label="آيدي المستلم (User ID)", placeholder="ضع ID الشخص هنا...")
-    amount_in = discord.ui.TextInput(label="المبلغ المراد تحويله (🪙)", placeholder="مثال: 5000")
+# نافذة تحديد المبلغ عند التحويل بالمنشن
+class TransferAmountModal(discord.ui.Modal):
+    def __init__(self, target_user: discord.User):
+        super().__init__(title=f"💸 تحويل إلى {target_user.display_name[:15]}")
+        self.target_user = target_user
+        self.amount_in = discord.ui.TextInput(label="المبلغ المراد تحويله (🪙)", placeholder="مثال: 5000")
+        self.add_item(self.amount_in)
 
     async def on_submit(self, ctx: discord.Interaction):
         try:
-            t_id = self.target_in.value.strip()
             amt = int(self.amount_in.value.strip())
             if amt <= 0: raise ValueError()
         except:
-            await ctx.response.send_message("❌ تأكد من صحة الآيدي والمبلغ!", ephemeral=True)
+            await ctx.response.send_message("❌ أدخل رقماً صحيحاً أكبـر من 0!", ephemeral=True)
             return
 
-        if t_id == str(ctx.user.id):
+        if self.target_user.id == ctx.user.id:
             await ctx.response.send_message("❌ لا يمكنك التحويل لنفسك!", ephemeral=True)
             return
 
-        target_u = users_col.find_one({"user_id": t_id})
-        if not target_u:
-            await ctx.response.send_message("❌ المستلم غير مسجل باللعبة!", ephemeral=True)
+        if not is_user_registered(self.target_user.id):
+            await ctx.response.send_message("❌ هذا العضو غير مسجل باللعبة!", ephemeral=True)
             return
 
-        uid = str(ctx.user.id)
+        uid, t_id = str(ctx.user.id), str(self.target_user.id)
         u = users_col.find_one({"user_id": uid}) or {}
+
         if u.get("balance", 0) < amt:
-            await ctx.response.send_message("❌ لا تملك هذا القدر من الذهب في الكاش!", ephemeral=True)
+            await ctx.response.send_message("❌ لا تملك هذا القدر من الذهب في كاشك!", ephemeral=True)
             return
 
         users_col.update_one({"user_id": uid}, {"$inc": {"balance": -amt}})
         users_col.update_one({"user_id": t_id}, {"$inc": {"balance": amt}})
-        await ctx.response.send_message(f"💸 تم تحويل `{amt:,}` 🪙 بنجاح إلى المقاتل **{target_u.get('name', 'المستلم')}**!")
+        await ctx.response.send_message(f"💸 تم تحويل `{amt:,}` 🪙 بنجاح إلى المقاتل {self.target_user.mention}!")
+
+# قائمة اختيار الشخص بالمنشن للتحويل
+class BankTransferUserSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(placeholder="👤 اختر العضو الذي تريد التحويل له بالمنشن...", min_values=1, max_values=1)
+
+    async def callback(self, ctx: discord.Interaction):
+        selected_user = self.values[0]
+        await ctx.response.send_modal(TransferAmountModal(selected_user))
+
+class BankTransferSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.add_item(BankTransferUserSelect())
 
 class ImperialBankView(discord.ui.View):
     def __init__(self):
@@ -499,9 +513,9 @@ class ImperialBankView(discord.ui.View):
         users_col.update_one({"user_id": uid}, {"$inc": {"balance": -loan}, "$set": {"loan": 0}})
         await ctx.response.send_message(f"🎉 تم سداد القرض بالكامل بمبلغ `{loan:,}` 🪙! أصبحت خالي الديون.", ephemeral=True)
 
-    @discord.ui.button(label="💸 تحويل برقم ID", style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label="💸 تحويل بالمنشن", style=discord.ButtonStyle.danger, row=1)
     async def transfer_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
-        await ctx.response.send_modal(BankTransferModal())
+        await ctx.response.send_message("👤 اختر العضو المراد التحويل له من القائمة:", view=BankTransferSelectView(), ephemeral=True)
 
     @discord.ui.button(label="📥 إيداع", style=discord.ButtonStyle.secondary, row=1)
     async def deposit_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
@@ -669,10 +683,6 @@ async def imperial_bank_cmd(ctx: discord.Interaction):
     emb.set_footer(text="استخدم الأزرار بالأسفل للتفاعل السريع مع البنك")
 
     await ctx.response.send_message(embed=emb, view=ImperialBankView())
-
-@bot.tree.command(name="البنك", description="🏛️ فتح البنك الإمبراطوري")
-async def bank_alias_cmd(ctx: discord.Interaction):
-    await imperial_bank_cmd(ctx)
 
 @bot.tree.command(name="تحويل", description="💸 تحويل عملات مباشرة إلى مقاتل بالمنشن")
 @app_commands.describe(target="المقاتل المستلم", amount="المبلغ المراد تحويله", currency="نوع العملة")
