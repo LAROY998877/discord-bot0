@@ -1,5 +1,6 @@
 import os
 import random
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -23,7 +24,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 def is_user_registered(user_id: str) -> bool:
     return users_col.find_one({"user_id": str(user_id)}) is not None
 
-# ================== قاعدة بيانات 25 قطعة لكل فئة (المتاجر) ==================
+# ================== قاعدة بيانات 25 قطعة لكل فئة ==================
 CATEGORIES = ["خوذة", "درع", "بنطال", "حذاء", "سيف", "مطرقة", "خنجر", "عصا سحرية"]
 DARK_RANKS = ["السفاح القرمزي", "الجحيم القاتل", "الشيطان الأبدي"]
 
@@ -54,7 +55,7 @@ for cat in CATEGORIES:
             "store": "dark"
         })
 
-# ================== 1. نافذة منيو التسجيل (Modal) ==================
+# ================== 1. نافذة التسجيل ==================
 class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل في الإمبراطورية"):
     name_input = discord.ui.TextInput(label="الاسم الخاص بك", placeholder="أدخل اسم شخصيتك...", min_length=2, max_length=30, required=True)
     age_input = discord.ui.TextInput(label="العمر (أرقام فقط كحد أقصى 3000)", placeholder="مثال: 25", min_length=1, max_length=4, required=True)
@@ -354,7 +355,7 @@ class InventoryView(discord.ui.View):
         super().__init__()
         self.add_item(EquipSelect(user_inventory))
 
-# ================== 🏰 6. نظام الطوابق والقتال ==================
+# ================== 🏰 6. نظام الطوابق والقتال المستمر تلقائياً ==================
 ZOMBIE_QUOTES = [
     "🧟: 'سألتهم عظامك وأصنع منها قلادتي التالية!'",
     "🧟: 'رائحة دمائك تزكم الأنف.. تعال إلي!'",
@@ -374,108 +375,131 @@ def make_hp_bar(current: int, maximum: int) -> str:
     filled = int(ratio * 10)
     return "❤️ " + "█" * filled + "░" * (10 - filled) + f" `{current}/{maximum}`"
 
-async def execute_battle(interaction: discord.Interaction, is_boss: bool = False):
+async def execute_battle(interaction: discord.Interaction, is_boss: bool = False, auto_loop: bool = True):
     user_id = str(interaction.user.id)
-    user = users_col.find_one({"user_id": user_id})
-    current_floor = user.get("current_floor", 1)
+    await interaction.response.defer()
 
-    if current_floor > 500:
-        return await interaction.response.send_message("🏆 **أنت بالفعل قهرت البرج الكامل ووصلت للطابق 500 النهائي!**", ephemeral=True)
+    message_handle = None
 
-    player_power = user.get("power", 100) + user.get("attack", 10) * 5
-    player_hp = 100 + user.get("defense", 10) * 10
-    max_p_hp = player_hp
+    while True:
+        user = users_col.find_one({"user_id": user_id})
+        current_floor = user.get("current_floor", 1)
 
-    multiplier = 2.5 if is_boss else 1.0
-    enemy_hp = int((current_floor * 80 + 100) * multiplier)
-    max_e_hp = enemy_hp
-    enemy_atk = int((current_floor * 15 + 20) * multiplier)
-
-    enemy_name = f"👹 الـ BOSS [سيد الظلام طابق {current_floor}]" if is_boss else f"🧟 زومبي الطابق [{current_floor}]"
-
-    p_hp = max_p_hp
-    e_hp = max_e_hp
-    
-    while p_hp > 0 and e_hp > 0:
-        p_dmg = random.randint(int(player_power * 0.8), int(player_power * 1.2))
-        e_hp -= p_dmg
-        if e_hp <= 0:
-            e_hp = 0
-            break
-        e_dmg = random.randint(int(enemy_atk * 0.7), int(enemy_atk * 1.3))
-        p_hp -= e_dmg
-        if p_hp <= 0:
-            p_hp = 0
-
-    p_bar = make_hp_bar(p_hp, max_p_hp)
-    e_bar = make_hp_bar(e_hp, max_e_hp)
-
-    p_quote = random.choice(PLAYER_QUOTES)
-    z_quote = random.choice(ZOMBIE_QUOTES)
-
-    if p_hp > 0:
-        next_floor = current_floor + 1
-        gold_reward = current_floor * 250 + random.randint(50, 200)
-        diamond_reward = random.randint(1, 5) if (current_floor % 5 == 0 or is_boss) else 0
-        
-        item_dropped = None
-        if random.random() < 0.35 or is_boss:
-            category = random.choice(CATEGORIES)
-            if current_floor >= 50 and random.random() < 0.2:
-                dark_item = random.choice([item for item in GEAR_DATA[category] if item["store"] == "dark"])
-                item_dropped = dark_item["name"]
+        if current_floor > 500:
+            embed_finish = discord.Embed(title="🏆 قاهر البرج النهائي!", description="لقد بلغت الطابق 500 وقهرت البرج كاملاً!", color=discord.Color.gold())
+            if message_handle:
+                await message_handle.edit(embed=embed_finish)
             else:
-                gen_item = random.choice([item for item in GEAR_DATA[category] if item["store"] == "general"])
-                item_dropped = gen_item["name"]
+                await interaction.followup.send(embed=embed_finish)
+            break
 
-        update_data = {
-            "$inc": {"balance": gold_reward, "diamonds": diamond_reward, "kills": 1},
-            "$set": {"current_floor": min(500, next_floor)}
-        }
-        if next_floor > user.get("max_floor", 1):
-            update_data["$set"]["max_floor"] = min(500, next_floor)
+        player_power = user.get("power", 100) + user.get("attack", 10) * 5
+        player_hp = 100 + user.get("defense", 10) * 10
+        max_p_hp = player_hp
 
-        if item_dropped:
-            update_data["$push"] = {"inventory": item_dropped}
+        multiplier = 2.5 if is_boss else 1.0
+        enemy_hp = int((current_floor * 80 + 100) * multiplier)
+        max_e_hp = enemy_hp
+        enemy_atk = int((current_floor * 15 + 20) * multiplier)
 
-        users_col.update_one({"user_id": user_id}, update_data)
+        enemy_name = f"👹 الـ BOSS [سيد الظلام طابق {current_floor}]" if is_boss else f"🧟 زومبي الطابق [{current_floor}]"
 
-        embed_win = discord.Embed(
-            title=f"⚔️ نصر ساحق في الطابق [{current_floor}/500]!",
-            description=f"**سقط {enemy_name} صريعاً أمام طاقتك المدمرة!**\n\n"
-                        f"💬 {z_quote}\n💬 {p_quote}\n\n"
-                        f"**حالة المقاتل:**\n{interaction.user.mention}: {p_bar}\n{enemy_name}: {e_bar}\n\n"
-                        f"🎁 **المكافآت المكتسبة:**\n"
-                        f"• 🪙 **ذهب:** `+{gold_reward:,}`\n"
-                        + (f"• 💎 **ألماس نادر:** `+{diamond_reward}`\n" if diamond_reward else "")
-                        + (f"• 🔮 **غنائم عتاد:** `{item_dropped}`\n" if item_dropped else "")
-                        + f"\n🚀 **تم الانتقال تلقائياً إلى الطابق التالي: [{min(500, next_floor)}]**",
-            color=discord.Color.gold()
-        )
-        embed_win.set_thumbnail(url=interaction.user.display_avatar.url)
-        await interaction.response.send_message(embed=embed_win, ephemeral=False)
-    else:
-        embed_lose = discord.Embed(
-            title=f"💀 هزيمة منكرة في الطابق [{current_floor}]",
-            description=f"تم القضاء عليك بواسطة **{enemy_name}**!\n\n"
-                        f"💬 {z_quote}\n\n"
-                        f"**حالة المعركة الأخيرة:**\n{interaction.user.mention}: {p_bar}\n{enemy_name}: {e_bar}\n\n"
-                        f"💡 **نصيحة الإمبراطورية:** طور معدلاتك القتالية أو اشترِ عتاداً أقوى قبل المحاولة مجدداً!",
-            color=discord.Color.dark_red()
-        )
-        await interaction.response.send_message(embed=embed_lose, ephemeral=False)
+        p_hp = max_p_hp
+        e_hp = max_e_hp
+        
+        while p_hp > 0 and e_hp > 0:
+            p_dmg = random.randint(int(player_power * 0.8), int(player_power * 1.2))
+            e_hp -= p_dmg
+            if e_hp <= 0:
+                e_hp = 0
+                break
+            e_dmg = random.randint(int(enemy_atk * 0.7), int(enemy_atk * 1.3))
+            p_hp -= e_dmg
+            if p_hp <= 0:
+                p_hp = 0
+
+        p_bar = make_hp_bar(p_hp, max_p_hp)
+        e_bar = make_hp_bar(e_hp, max_e_hp)
+
+        p_quote = random.choice(PLAYER_QUOTES)
+        z_quote = random.choice(ZOMBIE_QUOTES)
+
+        if p_hp > 0:
+            next_floor = current_floor + 1
+            gold_reward = current_floor * 250 + random.randint(50, 200)
+            diamond_reward = random.randint(1, 5) if (current_floor % 5 == 0 or is_boss) else 0
+            
+            item_dropped = None
+            if random.random() < 0.35 or is_boss:
+                category = random.choice(CATEGORIES)
+                if current_floor >= 50 and random.random() < 0.2:
+                    dark_item = random.choice([item for item in GEAR_DATA[category] if item["store"] == "dark"])
+                    item_dropped = dark_item["name"]
+                else:
+                    gen_item = random.choice([item for item in GEAR_DATA[category] if item["store"] == "general"])
+                    item_dropped = gen_item["name"]
+
+            update_data = {
+                "$inc": {"balance": gold_reward, "diamonds": diamond_reward, "kills": 1},
+                "$set": {"current_floor": min(500, next_floor)}
+            }
+            if next_floor > user.get("max_floor", 1):
+                update_data["$set"]["max_floor"] = min(500, next_floor)
+
+            if item_dropped:
+                update_data["$push"] = {"inventory": item_dropped}
+
+            users_col.update_one({"user_id": user_id}, update_data)
+
+            embed_win = discord.Embed(
+                title=f"⚔️ نصر ساحق في الطابق [{current_floor}/500]!",
+                description=f"**سقط {enemy_name} صريعاً أمام طاقتك المدمرة!**\n\n"
+                            f"💬 {z_quote}\n💬 {p_quote}\n\n"
+                            f"**حالة المقاتل:**\n{interaction.user.mention}: {p_bar}\n{enemy_name}: {e_bar}\n\n"
+                            f"🎁 **المكافآت المكتسبة:**\n"
+                            f"• 🪙 **ذهب:** `+{gold_reward:,}`\n"
+                            + (f"• 💎 **ألماس نادر:** `+{diamond_reward}`\n" if diamond_reward else "")
+                            + (f"• 🔮 **غنائم عتاد:** `{item_dropped}`\n" if item_dropped else "")
+                            + f"\n⚡ **جاري الانتقال التلقائي للمعركة القادمة في الطابق [{min(500, next_floor)}]...** 🚀",
+                color=discord.Color.gold()
+            )
+            embed_win.set_thumbnail(url=interaction.user.display_avatar.url)
+
+            if not message_handle:
+                message_handle = await interaction.followup.send(embed=embed_win)
+            else:
+                await message_handle.edit(embed=embed_win)
+
+            if not auto_loop or is_boss:
+                break
+            
+            await asyncio.sleep(2.5)
+        else:
+            embed_lose = discord.Embed(
+                title=f"💀 هزيمة منكرة في الطابق [{current_floor}]",
+                description=f"تم القضاء عليك بواسطة **{enemy_name}**!\n\n"
+                            f"💬 {z_quote}\n\n"
+                            f"**حالة المعركة الأخيرة:**\n{interaction.user.mention}: {p_bar}\n{enemy_name}: {e_bar}\n\n"
+                            f"💡 **توقف القتال التلقائي!** طور معدلاتك القتالية أو اشترِ عتاداً أقوى قبل المحاولة مجدداً!",
+                color=discord.Color.dark_red()
+            )
+            if not message_handle:
+                await interaction.followup.send(embed=embed_lose)
+            else:
+                await message_handle.edit(embed=embed_lose)
+            break
 
 class FloorsHubView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="⚔️ بدء المغامرة", style=discord.ButtonStyle.success, row=0)
+    @discord.ui.button(label="⚔️ بدء المغامرة التلقائية", style=discord.ButtonStyle.success, row=0)
     async def start_adventure(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await execute_battle(interaction, is_boss=False)
+        await execute_battle(interaction, is_boss=False, auto_loop=True)
 
     @discord.ui.button(label="👹 مواجهة الـ BOSS", style=discord.ButtonStyle.danger, row=0)
     async def boss_adventure(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await execute_battle(interaction, is_boss=True)
+        await execute_battle(interaction, is_boss=True, auto_loop=False)
 
     @discord.ui.button(label="🎒 حقيبتي والعتاد", style=discord.ButtonStyle.primary, row=1)
     async def view_inventory(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -506,8 +530,7 @@ class FloorsHubView(discord.ui.View):
         embed = discord.Embed(title="🔮 المتجر المظلم المحرم", description="سوق الأسلحة المحرمة بالألماس 💎.", color=discord.Color.from_rgb(20, 0, 35))
         await interaction.response.send_message(embed=embed, view=DarkStoreView(), ephemeral=True)
 
-# ================== 🎮 7. نظام قسم الألعاب ولعبة الأسئلة ==================
-
+# ================== 🎮 7. نظام الألعاب والأسئلة ==================
 QUESTIONS_DATABASE = {
     "عادي": [
         "ما هو الشيء الذي كلما أخذت منه كبر؟",
@@ -622,7 +645,6 @@ class TriviaLobbyView(discord.ui.View):
         )
         await interaction.response.edit_message(embed=embed_stop, view=self)
 
-
 class TriviaDifficultySelect(discord.ui.Select):
     def __init__(self):
         options = [
@@ -636,7 +658,6 @@ class TriviaDifficultySelect(discord.ui.Select):
         difficulty = self.values[0]
         lobby_view = TriviaLobbyView(host=interaction.user, difficulty=difficulty)
         await interaction.response.edit_message(embed=lobby_view.build_embed(), view=lobby_view)
-
 
 class GamesMenuSelect(discord.ui.Select):
     def __init__(self):
@@ -661,7 +682,6 @@ class GamesMenuView(discord.ui.View):
     def __init__(self):
         super().__init__()
         self.add_item(GamesMenuSelect())
-
 
 # ================== تسجيل الأوامر الرئيسية ==================
 @bot.event
@@ -758,6 +778,5 @@ async def games_command(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed, view=GamesMenuView(), ephemeral=False)
 
-# --- تشغيل البوت ---
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
