@@ -22,35 +22,60 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 def is_user_registered(user_id: str) -> bool:
     return users_col.find_one({"user_id": str(user_id)}) is not None
 
-# ================== قاعدة بيانات 25 قطعة لكل فئة (المتاجر) ==================
+# ================== 🏰 قاعدة بيانات المتاجر المحدثة (25 قطعة لكل فئة) ==================
 CATEGORIES = ["خوذة", "درع", "بنطال", "حذاء", "سيف", "مطرقة", "خنجر", "عصا سحرية"]
-DARK_RANKS = ["السفاح القرمزي", "الجحيم القاتل", "الشيطان الأبدي"]
+
+# رتب المتجر المظلم للتعرف عليها بالليدربورد
+DARK_RANKS = ["مشعوذ الظلال", "السفاح القرمزي", "الجحيم القاتل", "الشيطان الأبدي", "حاكم الظلمات"]
 
 GEAR_DATA = {}
 for cat in CATEGORIES:
     GEAR_DATA[cat] = []
-    # 20 قطعة للمتجر العام
-    for i in range(1, 21):
-        rank = "مبتدئ" if i <= 5 else ("فولاذي" if i <= 10 else ("ملكي" if i <= 15 else "أسطوري"))
+    
+    # --- 1. 25 قطعة للمتجر العام (شراء بالذهب 🪙) ---
+    for i in range(1, 26):
+        if i <= 5:
+            rank, emoji = "مبتدئ", "🟢"
+        elif i <= 10:
+            rank, emoji = "فولاذي", "🪙"
+        elif i <= 15:
+            rank, emoji = "ملكي", "👑"
+        elif i <= 20:
+            rank, emoji = "أسطوري", "🌟"
+        else:
+            rank, emoji = "إمبراطوري", "🐉"
+
         GEAR_DATA[cat].append({
-            "id": f"{cat}_{i}",
-            "name": f"{cat} {rank} المستوى {i}",
+            "id": f"gen_{cat}_{i}",
+            "name": f"{emoji} {cat} [{rank}] T{i}",
             "rank": rank,
-            "power": i * 40,
-            "price": i * 350,
+            "emoji": emoji,
+            "power": i * 50,
+            "price": i * 400,
             "currency": "gold",
             "store": "general"
         })
-    # 5 قطع فائقة القوة للمتجر المظلم
-    for i in range(21, 26):
-        r_index = 0 if i <= 22 else (1 if i <= 24 else 2)
-        rank_name = DARK_RANKS[r_index]
+
+    # --- 2. 25 قطعة للمتجر المظلم (شراء بالألماس 💎) ---
+    for i in range(1, 26):
+        if i <= 5:
+            rank, emoji = "مشعوذ الظلال", "🌑"
+        elif i <= 10:
+            rank, emoji = "السفاح القرمزي", "🩸"
+        elif i <= 15:
+            rank, emoji = "الجحيم القاتل", "🔥"
+        elif i <= 20:
+            rank, emoji = "الشيطان الأبدي", "😈"
+        else:
+            rank, emoji = "حاكم الظلمات", "☠️"
+
         GEAR_DATA[cat].append({
-            "id": f"{cat}_{i}",
-            "name": f"💀 {cat} [{rank_name}] T{i-20}",
-            "rank": rank_name,
-            "power": i * 180,
-            "price": (i - 20) * 15,
+            "id": f"dark_{cat}_{i}",
+            "name": f"💀 {cat} [{rank}] T{i}",
+            "rank": rank,
+            "emoji": emoji,
+            "power": i * 250,
+            "price": i * 8, # من 8 إلى 200 ألماس
             "currency": "diamonds",
             "store": "dark"
         })
@@ -102,7 +127,7 @@ class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل 
         embed_success.add_field(name="🎁 مكافأة البداية", value="• `5,000` 🪙 ذهب\n• `20` 💎 ألماس", inline=False)
         await interaction.response.send_message(embed=embed_success, ephemeral=False)
 
-# ================== 🛒 2. المتجر العام (General Store) ==================
+# ================== 🛒 2. المتجر العام الفخم (General Store) ==================
 class GeneralItemSelect(discord.ui.Select):
     def __init__(self, category: str):
         self.category = category
@@ -111,11 +136,11 @@ class GeneralItemSelect(discord.ui.Select):
             discord.SelectOption(
                 label=item["name"],
                 value=item["id"],
-                description=f"الرتبة: {item['rank']} | القوة: +{item['power']} | السعر: {item['price']} 🪙",
-                emoji="⚔️"
+                description=f"الرتبة: {item['rank']} | ⚡ +{item['power']:,} | 🪙 {item['price']:,}",
+                emoji=item["emoji"]
             ) for item in items
         ]
-        super().__init__(placeholder=f"اختر قطعة من فئة [{category}]...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder=f"⚔️ تصفح عتاد [{category}] (25 قطعة)...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
@@ -124,7 +149,7 @@ class GeneralItemSelect(discord.ui.Select):
         
         user_data = users_col.find_one({"user_id": user_id})
         if user_data.get("balance", 0) < selected_item["price"]:
-            return await interaction.response.send_message(f"❌ رصيدك الذهبي لا يكفي! تحتاج `{selected_item['price']}` 🪙", ephemeral=True)
+            return await interaction.response.send_message(f"❌ رصيدك الذهبي لا يكفي! تحتاج `{selected_item['price']:,}` 🪙", ephemeral=True)
         
         users_col.update_one(
             {"user_id": user_id},
@@ -133,12 +158,19 @@ class GeneralItemSelect(discord.ui.Select):
                 "$push": {"inventory": selected_item["name"]}
             }
         )
-        await interaction.response.send_message(f"🛍️ **تم الشراء بنجاح!** حصلت على `{selected_item['name']}` وزادت طاقتك بـ `+{selected_item['power']}` ⚡", ephemeral=True)
+        embed_bought = discord.Embed(
+            title="🛍️ صفقة ناجحة — المتجر الإمبراطوري",
+            description=f"مبروك! حصلت على **{selected_item['name']}**\n"
+                        f"• ⚡ **القوة المضافة:** `+{selected_item['power']:,}`\n"
+                        f"• 🪙 **المبلغ المدفوع:** `{selected_item['price']:,}` ذهبة",
+            color=discord.Color.gold()
+        )
+        await interaction.response.send_message(embed=embed_bought, ephemeral=True)
 
 class GeneralCategorySelect(discord.ui.Select):
     def __init__(self):
-        options = [discord.SelectOption(label=cat, value=cat, emoji="🛡️") for cat in CATEGORIES]
-        super().__init__(placeholder="🏰 اختر فئة العتاد للعرض...", min_values=1, max_values=1, options=options)
+        options = [discord.SelectOption(label=f"قسم: {cat}", value=cat, emoji="🛡️") for cat in CATEGORIES]
+        super().__init__(placeholder="🏰 اختر قسم العتاد للعرض...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         cat = self.values[0]
@@ -146,7 +178,15 @@ class GeneralCategorySelect(discord.ui.Select):
         view.add_item(GeneralCategorySelect())
         view.add_item(GeneralItemSelect(cat))
         
-        embed = discord.Embed(title=f"🏛️ المتجر العام — فئة [{cat}]", description="اختر المعدات المطلوبة للشراء بالعملات الذهبية.", color=discord.Color.blue())
+        embed = discord.Embed(
+            title=f"🏛️ المتجر الإمبراطوري العام — قسم [{cat}]",
+            description="✨ **اختر المعدات المطلوبة للشراء بالعملات الذهبية (25 مستوى لكل فئة)**\n"
+                        "━"*32 + "\n"
+                        "🟢 `مبتدئ` (T1-T5) • 🪙 `فولاذي` (T6-T10)\n"
+                        "👑 `ملكي` (T11-T15) • 🌟 `أسطوري` (T16-T20)\n"
+                        "🐉 `إمبراطوري` (T21-T25)",
+            color=discord.Color.gold()
+        )
         await interaction.response.edit_message(embed=embed, view=view)
 
 class GeneralStoreView(discord.ui.View):
@@ -154,20 +194,20 @@ class GeneralStoreView(discord.ui.View):
         super().__init__()
         self.add_item(GeneralCategorySelect())
 
-# ================== 💀 3. المتجر المظلم (Dark Store) ==================
+# ================== 🔮 3. المتجر المظلم الفخم (Dark Store) ==================
 class DarkItemSelect(discord.ui.Select):
     def __init__(self, category: str):
         self.category = category
-        items = [item for item in GEAR_DATA[category] if item["store"] == "dark"]
+        items = [item for item in GEAR_DATA[category] if item["store"] == "dark"][:25]
         options = [
             discord.SelectOption(
                 label=item["name"],
                 value=item["id"],
-                description=f"الرتبة: {item['rank']} | القوة: +{item['power']} | السعر: {item['price']} 💎",
-                emoji="🔥" if item["rank"] == "الجحيم القاتل" else ("🩸" if item["rank"] == "السفاح القرمزي" else "😈")
+                description=f"الرتبة: {item['rank']} | ⚡ +{item['power']:,} | 💎 {item['price']:,}",
+                emoji=item["emoji"]
             ) for item in items
         ]
-        super().__init__(placeholder=f"🔮 عتاد الظلال السرية [{category}]...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder=f"🔮 عتاد الظلال المحرم [{category}] (25 قطعة)...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
@@ -176,7 +216,7 @@ class DarkItemSelect(discord.ui.Select):
         
         user_data = users_col.find_one({"user_id": user_id})
         if user_data.get("diamonds", 0) < selected_item["price"]:
-            return await interaction.response.send_message(f"❌ ألماس غير كافٍ! تحتاج إلى `{selected_item['price']}` 💎 ألماس.", ephemeral=True)
+            return await interaction.response.send_message(f"❌ ألماس غير كافٍ! تحتاج إلى `{selected_item['price']:,}` 💎 ألماس.", ephemeral=True)
         
         users_col.update_one(
             {"user_id": user_id},
@@ -186,16 +226,18 @@ class DarkItemSelect(discord.ui.Select):
             }
         )
         embed_buy = discord.Embed(
-            title="⚡ امتلاك عتاد محرم!",
-            description=f"لقد حصلت على **{selected_item['name']}** برتبة **[{selected_item['rank']}]**!\nارتفعت طاقتك بمقدار `+{selected_item['power']}` ⚡",
+            title="⚡ امتلاك عتاد محرم أسطوري!",
+            description=f"لقد حصلت على **{selected_item['name']}** برتبة **[{selected_item['rank']}]**!\n"
+                        f"• ⚡ **طاقة قتالية مرعبة:** `+{selected_item['power']:,}`\n"
+                        f"• 💎 **الألماس المستهلك:** `{selected_item['price']:,}` ألماس",
             color=discord.Color.dark_purple()
         )
         await interaction.response.send_message(embed=embed_buy, ephemeral=True)
 
 class DarkCategorySelect(discord.ui.Select):
     def __init__(self):
-        options = [discord.SelectOption(label=f"عتاد مظلم: {cat}", value=cat, emoji="🌑") for cat in CATEGORIES]
-        super().__init__(placeholder="👁️ اختر قسم العتاد المظلم...", min_values=1, max_values=1, options=options)
+        options = [discord.SelectOption(label=f"عتاد محرم: {cat}", value=cat, emoji="🌑") for cat in CATEGORIES]
+        super().__init__(placeholder="👁️ اختر قسم خزنة الظلال السري...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         cat = self.values[0]
@@ -204,12 +246,12 @@ class DarkCategorySelect(discord.ui.Select):
         view.add_item(DarkItemSelect(cat))
         
         embed = discord.Embed(
-            title=f"🖤 خزنة الظلال السرية — [{cat}]",
-            description="⚠️ **تنبيه:** المعدات المعروضة هنا تتطلب **💎 الألماس** فقط.\n\n"
-                        "🏆 **الرتب العليا المتاحة:**\n"
-                        "• 😈 **الشيطان الأبدي**\n"
-                        "• 🔥 **الجحيم القاتل**\n"
-                        "• 🩸 **السفاح القرمزي**",
+            title=f"🖤 خزنة الظلال المحرمة — [{cat}]",
+            description="⚠️ **سوق الأسلحة والعتاد المحرم (تتطلب 💎 الألماس فقط)**\n"
+                        "━"*32 + "\n"
+                        "🌑 `مشعوذ الظلال` (T1-T5) • 🩸 `السفاح القرمزي` (T6-T10)\n"
+                        "🔥 `الجحيم القاتل` (T11-T15) • 😈 `الشيطان الأبدي` (T16-T20)\n"
+                        "☠️ `حاكم الظلمات` (T21-T25)",
             color=discord.Color.from_rgb(45, 0, 60)
         )
         await interaction.response.edit_message(embed=embed, view=view)
@@ -292,7 +334,6 @@ class StatsUpgradeView(discord.ui.View):
 # ================== 🏆 5. نظام الليدربورد والترتيب الفخم (Leaderboard System) ==================
 
 def get_prestigious_badge(rank_num: int) -> str:
-    """إرجاع شارة ملكية فخمة لكل مركز بالليدربورد"""
     badges = {
         1: "👑 **[الملك - المركز الأول]**",
         2: "🥇 **[المركز الثاني]**",
@@ -498,7 +539,11 @@ async def general_store(interaction: discord.Interaction):
     if not is_user_registered(interaction.user.id):
         return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
     
-    embed = discord.Embed(title="🏛️ متجر الإمبراطورية الملكي العام", description="تصفح العتاد والشراء بالذهب 🪙.", color=discord.Color.gold())
+    embed = discord.Embed(
+        title="🏛️ متجر الإمبراطورية الملكي العام",
+        description="تصفح العتاد والشراء بالذهب 🪙. اختر قسم العتاد المطلوبة من القائمة المنسدلة أسفله (25 قطعة لكل فئة).",
+        color=discord.Color.gold()
+    )
     await interaction.response.send_message(embed=embed, view=GeneralStoreView(), ephemeral=False)
 
 @bot.tree.command(name="المتجر_المظلم", description="👁️ دخول سوق الظلال السري لشراء العتاد الأسطوري بالألماس")
@@ -506,7 +551,11 @@ async def dark_store(interaction: discord.Interaction):
     if not is_user_registered(interaction.user.id):
         return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
     
-    embed = discord.Embed(title="🔮 المتجر المظلم المحرم — Dark Sanctuary", description="سوق الأسلحة المحرمة برتب الشيطان الأبدي بالألماس 💎.", color=discord.Color.from_rgb(20, 0, 35))
+    embed = discord.Embed(
+        title="🔮 المتجر المظلم المحرم — Dark Sanctuary",
+        description="سوق الأسلحة والعتاد المحرمة بالألماس 💎 (25 قطعة أسطورية لكل قسم).",
+        color=discord.Color.from_rgb(20, 0, 35)
+    )
     await interaction.response.send_message(embed=embed, view=DarkStoreView(), ephemeral=False)
 
 @bot.tree.command(name="تطوير_المعدلات", description="⚡ فتح مذبح تطوير المعدلات القتالية كسر الحدود إلى المليارات")
@@ -515,7 +564,6 @@ async def upgrade_stats_command(interaction: discord.Interaction):
     if not is_user_registered(user_id):
         return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
 
-    user_data = users_col.find_one({"user_id": user_id})
     embed = discord.Embed(title="✨ مذبح الصقل وتطوير القوى الإمبراطورية", description="تطوير المعدلات القتالية بلا حدود حتى المليارات.", color=discord.Color.red())
     await interaction.response.send_message(embed=embed, view=StatsUpgradeView(), ephemeral=False)
 
