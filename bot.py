@@ -402,13 +402,18 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
     p_hp = 300 + user_data.get("defense", 10) * 25 + user_data.get("power", 100) * 2
     p_max_hp = p_hp
 
+    e_name = enemy["name"]
+    e_quote = enemy["enemy_quote"]
+    p_quote = enemy["player_quote"]
+    p_name = user_data.get("name", "المقاتل")
+
     embed = discord.Embed(
         title=f"⚔️ ساحة معركة البرج — الطابق [{floor_num}/500]",
-        description=f"⚔️ **تواجَه الآن ضد:** `{enemy['name']}`\n💬 **الخصم:** \"{enemy['enemy_quote']}\"\n🗣️ **{user_data.get('name', 'المقاتل')}:** \"{enemy['player_quote']}\"\n",
+        description=f"⚔️ **تواجَه الآن ضد:** `{e_name}`\n💬 **الخصم:** {e_quote}\n🗣️ **{p_name}:** {p_quote}\n",
         color=enemy["color"]
     )
-    embed.add_field(name=f"👤 {user_data.get('name', 'المقاتل')}", value=render_hp_bar(int(p_hp), int(p_max_hp)), inline=True)
-    embed.add_field(name=f"👾 {enemy['name']}", value=render_hp_bar(int(enemy['hp']), int(enemy['max_hp'])), inline=True)
+    embed.add_field(name=f"👤 {p_name}", value=render_hp_bar(int(p_hp), int(p_max_hp)), inline=True)
+    embed.add_field(name=f"👾 {e_name}", value=render_hp_bar(int(enemy['hp']), int(enemy['max_hp'])), inline=True)
 
     await interaction.response.send_message(embed=embed, ephemeral=False)
     message = await interaction.original_response()
@@ -434,7 +439,7 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
         p_hp -= dmg_to_player
         if p_hp <= 0:
             p_hp = 0
-            logs.append(f"🩸 **تلقيت ضربة قاضية!** سقطت في الطابق.")
+            logs.append("🩸 **تلقيت ضربة قاضية!** سقطت في الطابق.")
             break
         else:
             logs.append(f"🩸 هاجمك الخصم بـ `{dmg_to_player:,}` ضرر!")
@@ -708,7 +713,7 @@ class LeaderboardSelect(discord.ui.Select):
             
             embed = discord.Embed(
                 title="🪙 ترتيب أغنى شخص — ثروة الإمبراطورية",
-                description="✨ **أثرى الشخصيات بالذهب والعملات (تحديث تلقائي):**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                description="✨ **أثرى الشخصيات بالذهب والعملات (تحديث تلقائي):**\n" + "━"*32,
                 color=discord.Color.gold()
             )
             text = ""
@@ -723,7 +728,7 @@ class LeaderboardSelect(discord.ui.Select):
             top_users = list(users_col.find().sort([("power", -1)]).limit(10))
             embed = discord.Embed(
                 title="⚡ ترتيب الأقوى دائماً — عرش القوة القتالية",
-                description="✨ **أعتى مقاتلي الإمبراطورية طاقة وقوة (تحديث تلقائي):**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                description="✨ **أعتى مقاتلي الإمبراطورية طاقة وقوة (تحديث تلقائي):**\n" + "━"*32,
                 color=discord.Color.red()
             )
             text = ""
@@ -739,7 +744,7 @@ class LeaderboardSelect(discord.ui.Select):
             top_users = list(users_col.find().sort([("max_floor", -1)]).limit(10))
             embed = discord.Embed(
                 title="🏰 ترتيب غزو الطوابق — فاتحو البرج العظيم",
-                description="✨ **أعلى الفاتحين تسلقاً لطوابق البرج الـ 500 (تحديث تلقائي):**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                description="✨ **أعلى الفاتحين تسلقاً لطوابق البرج الـ 500 (تحديث تلقائي):**\n" + "━"*32,
                 color=discord.Color.dark_green()
             )
             text = ""
@@ -754,7 +759,7 @@ class LeaderboardSelect(discord.ui.Select):
             top_users = list(users_col.find().sort([("kills", -1)]).limit(10))
             embed = discord.Embed(
                 title="💀 ترتيب قاهر اللاعبين — سجل الإبادة والضحايا",
-                description="✨ **أكثر المقاتلين سحقاً وإبادة للخصوم (تحديث تلقائي):**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                description="✨ **أكثر المقاتلين سحقاً وإبادة للخصوم (تحديث تلقائي):**\n" + "━"*32,
                 color=discord.Color.dark_red()
             )
             text = ""
@@ -776,7 +781,7 @@ class LeaderboardSelect(discord.ui.Select):
             
             embed = discord.Embed(
                 title="🛡️ ترتيب أقوى العتاد العادي — ترسانة العتاد الملكي",
-                description="✨ **أكثر المالكين للعتاد والأسلحة العامة (تحديث تلقائي):**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                description="✨ **أكثر المالكين للعتاد والأسلحة العامة (تحديث تلقائي):**\n" + "━"*32,
                 color=discord.Color.blue()
             )
             text = ""
@@ -797,7 +802,7 @@ class LeaderboardSelect(discord.ui.Select):
 
             embed = discord.Embed(
                 title="🔮 ترتيب أقوى العتاد المحرم — أسياد سوق الظلال",
-                description="✨ **أكثر المالكين للأسلحة والعتاد المحرم الأسطوري (تحديث تلقائي):**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                description="✨ **أكثر المالكين للأسلحة والعتاد المحرم الأسطوري (تحديث تلقائي):**\n" + "━"*32,
                 color=discord.Color.from_rgb(85, 0, 110)
             )
             text = ""
@@ -818,7 +823,7 @@ class LeaderboardSelect(discord.ui.Select):
 
             embed = discord.Embed(
                 title="👑 ترتيب جامع الألقاب — قاعة الشرف والألقاب",
-                description="✨ **أكثر المقاتلين حاصدي الألقاب والرتب (تحديث تلقائي):**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                description="✨ **أكثر المقاتلين حاصدي الألقاب والرتب (تحديث تلقائي):**\n" + "━"*32,
                 color=discord.Color.purple()
             )
             text = ""
@@ -1004,14 +1009,14 @@ class DevActionSelectMenu(discord.ui.Select):
                 }
             )
 
-            story_desc = """✨ **القصة الملحمية والميلاد المحرّم:**
-ولد 'السفاح' في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، من أطياف الدماء المظلمة والأرواح النادمة.
-كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه سيف الدم الأزلي الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.
-
-عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السماء رماداً، حيث تتعدى قوته حدود العوالم والمليارات.. إنه سيد الظلمات الحقيقي والمسيطر مطلق القوة!
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **تم تفعيل القدرات الخارقة لشخصيتك فوراً:**
-• 👑 **اللقب المجهز:** `🩸 السفاح الخالد - حاكم الظلمات والعوالم`
-• 🗡️ **سلاح العرش:** `🩸 سيف السفاح محطم العوالم والأرواح 💀`
-• 💥 **جمي
+            story_lines = [
+                "✨ **القصة الملحمية والميلاد المحرّم:**",
+                "ولد السفاح في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، من أطياف الدماء المظلمة والأرواح النادمة.",
+                "كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه سيف الدم الأزلي الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.",
+                "",
+                "عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السماء رماداً، حيث تتعدى قوته حدود العوالم والمليارات.. إنه سيد الظلمات الحقيقي والمسيطر مطلق القوة!",
+                "",
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                "⚡ **تم تفعيل القدرات الخارقة لشخصيتك فوراً:**",
+                "• 👑 **اللقب المجهز:** `🩸 السفاح الخالد - حاكم الظلمات والعوالم`",
+                "• 🗡️
