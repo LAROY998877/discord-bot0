@@ -254,7 +254,7 @@ class DarkItemSelect(discord.ui.Select):
             description=f"لقد حصلت على **{selected_item['name']}** برتبة **[{selected_item['rank']}]**!",
             color=discord.Color.dark_purple()
         )
-        await interaction.response.send_message(embed=embed_buy, ephemeral=True)
+        await interaction.response.send_message(embed_buy, ephemeral=True)
 
 class DarkCategorySelect(discord.ui.Select):
     def __init__(self):
@@ -560,11 +560,6 @@ class TowerMainView(discord.ui.View):
 
 # ================== ⚔️ 7. نظام المعارك المباشرة PvP ==================
 
-PVP_BANTER = [
-    ("سأعلمك اليوم كيف تحترم أباطرة الإمبراطورية!", "كلامك كثير وحقيبتك فارغة، أرني ما لديك!"),
-    ("سيفي لا يرحم الضعفاء في الميدان!", "دفاعي الصلب سيحطم سيفك إلى شظايا!")
-]
-
 class BattleLobbyView(discord.ui.View):
     def __init__(self, mode: str, host_user: discord.User):
         super().__init__(timeout=300)
@@ -689,7 +684,7 @@ class BattleMainView(discord.ui.View):
         super().__init__()
         self.add_item(BattleModeSelect())
 
-# ================== 🏆 8. نظام الليدربورد والترتيب التلقائي MAPPED ==================
+# ================== 🏆 8. نظام الليدربورد والترتيب التلقائي ==================
 
 def get_prestigious_badge(rank_num: int) -> str:
     badges = {1: "👑 **[الملك - المركز الأول]**", 2: "🥇 **[المركز الثاني]**", 3: "🥈 **[المركز الثالث]**", 4: "🥉 **[المركز الرابع]**"}
@@ -711,7 +706,6 @@ class LeaderboardSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         category = self.values[0]
         
-        # 1. ترتيب أغنى شخص
         if category == "rich":
             all_users = list(users_col.find())
             all_users.sort(key=lambda u: u.get("balance", 0) + u.get("bank", 0), reverse=True)
@@ -729,7 +723,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{user.get('name', 'مقاتل')}** — 🪙 `{total:,}` ذهب\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 2. ترتيب الأقوى دائماً
         elif category == "power":
             top_users = list(users_col.find().sort([("power", -1)]).limit(10))
             embed = discord.Embed(
@@ -745,7 +738,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{user.get('name', 'مقاتل')}** `[{title}]` — ⚡ `{pwr:,}` طاقة\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 3. ترتيب غزو الطوابق
         elif category == "floors":
             top_users = list(users_col.find().sort([("max_floor", -1)]).limit(10))
             embed = discord.Embed(
@@ -760,7 +752,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{user.get('name', 'مقاتل')}** — 🏢 الطابق `{floor:,}` 🏰\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 4. ترتيب قاهر اللاعبين
         elif category == "kills":
             top_users = list(users_col.find().sort([("kills", -1)]).limit(10))
             embed = discord.Embed(
@@ -775,7 +766,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{user.get('name', 'مقاتل')}** — 💀 `{kills:,}` قتلة\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 5. ترتيب أقوى العتاد العادي
         elif category == "normal_gear":
             all_users = list(users_col.find())
             scored_users = []
@@ -796,7 +786,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{name}** — ⚔️ `{norm_count:,}` قطعة عتاد عادي\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 6. ترتيب أقوى العتاد المحرم
         elif category == "dark_gear":
             all_users = list(users_col.find())
             scored_users = []
@@ -817,7 +806,6 @@ class LeaderboardSelect(discord.ui.Select):
                 text += f"{badge} **{name}** — 💀 `{count:,}` سلاح محرم\n"
             embed.description += f"\n{text}" if text else "\nلا توجد بيانات مسجلة حالياً."
 
-        # 7. ترتيب جامع الألقاب
         elif category == "titles_collector":
             all_users = list(users_col.find())
             scored_users = []
@@ -938,7 +926,6 @@ class DevActionSelectMenu(discord.ui.Select):
         target_user = getattr(self.view, "target_user", interaction.user)
         action = self.values[0]
 
-        # 1. عملات لا نهائية
         if action == "infinite_coins":
             if not is_user_registered(str(target_user.id)):
                 return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
@@ -954,19 +941,16 @@ class DevActionSelectMenu(discord.ui.Select):
             )
             await interaction.response.send_message(embed=embed, ephemeral=False)
 
-        # 2. تحويل عملات مطور
         elif action == "transfer_coins":
             if not is_user_registered(str(target_user.id)):
                 return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
             await interaction.response.send_modal(DevTransferCoinsModal(target_user))
 
-        # 3. إهداء عتاد
         elif action == "gift_gear":
             if not is_user_registered(str(target_user.id)):
                 return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
             await interaction.response.send_modal(DevGiftGearModal(target_user))
 
-        # 4. إضافة مطور
         elif action == "add_dev":
             user_id = str(target_user.id)
             if is_dev(user_id):
@@ -976,7 +960,6 @@ class DevActionSelectMenu(discord.ui.Select):
             users_col.update_one({"user_id": user_id}, {"$set": {"is_dev": True}})
             await interaction.response.send_message(f"👑 تم منح {target_user.mention} صلاحيات المطور بنجاح!", ephemeral=False)
 
-        # 5. حذف مطور
         elif action == "remove_dev":
             user_id = str(target_user.id)
             if user_id == MAIN_DEV_ID:
@@ -986,7 +969,6 @@ class DevActionSelectMenu(discord.ui.Select):
             users_col.update_one({"user_id": user_id}, {"$set": {"is_dev": False}})
             await interaction.response.send_message(f"🚫 تم سحب صلاحية المطور من {target_user.mention}!", ephemeral=False)
 
-        # 6. شخصية السفاح
         elif action == "activate_assassin":
             user_id = str(interaction.user.id)
             
@@ -1015,11 +997,27 @@ class DevActionSelectMenu(discord.ui.Select):
                 }
             )
 
-            story_desc = (
-                "✨ **القصة الملحمية والميلاد المحرّم:**\n"
-                "\"في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، ولد 'السفاح' من أطياف الدماء المظلمة والأرواح النادمة. "
-                "كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه سيف الدم الأزلي الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.\n\n"
-                "عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السماء رماداً، حيث تتعدى قوته حدود العوالم والمليارات.. "
-                "إنه سيد الظلمات الحقيقي والمسيطر مطلق القوة!\"\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "⚡ **ت
+            story_desc = """✨ **القصة الملحمية والميلاد المحرّم:**
+في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، ولد 'السفاح' من أطياف الدماء المظلمة والأرواح النادمة. كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه سيف الدم الأزلي الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.
+
+عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السماء رماداً، حيث تتعدى قوته حدود العوالم والمليارات.. إنه سيد الظلمات الحقيقي والمسيطر مطلق القوة!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ **تم تفعيل القدرات الخارقة لشخصيتك فوراً:**
+• 👑 **اللقب المجهز:** `🩸 السفاح الخالد - حاكم الظلمات والعوالم`
+• 🗡️ **سلاح العرش:** `🩸 سيف السفاح محطم العوالم والأرواح 💀`
+• 💥 **جميع الإحصائيات:** `999,999,999` (خارقة)
+• ⚡ **إجمالي الطاقة القتالية:** `999,999,999,999` ⚡"""
+
+            story_embed = discord.Embed(
+                title="🩸 ظُهور شخصية [السـفّـاح الخـالـد] — العرش الخارِق",
+                description=story_desc,
+                color=discord.Color.from_rgb(120, 0, 0)
+            )
+            await interaction.response.send_message(embed=story_embed, ephemeral=False)
+
+class DevPanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.target_user = None
+        self.add_item(
