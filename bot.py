@@ -30,7 +30,6 @@ DARK_RANKS = ["السفاح القرمزي", "الجحيم القاتل", "ال�
 GEAR_DATA = {}
 for cat in CATEGORIES:
     GEAR_DATA[cat] = []
-    # 20 قطعة للمتجر العام
     for i in range(1, 21):
         rank = "مبتدئ" if i <= 5 else ("فولاذي" if i <= 10 else ("ملكي" if i <= 15 else "أسطوري"))
         GEAR_DATA[cat].append({
@@ -42,7 +41,6 @@ for cat in CATEGORIES:
             "currency": "gold",
             "store": "general"
         })
-    # 5 قطع فائقة القوة للمتجر المظلم
     for i in range(21, 26):
         r_index = 0 if i <= 22 else (1 if i <= 24 else 2)
         rank_name = DARK_RANKS[r_index]
@@ -105,17 +103,15 @@ class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل 
         embed_success.add_field(name="🎁 مكافأة البداية", value="• `5,000` 🪙 ذهب\n• `20` 💎 ألماس", inline=False)
         await interaction.response.send_message(embed=embed_success, ephemeral=False)
 
-# ================== 🛒 2. المتجر العام (General Store) ==================
+# ================== 🛒 2. المتاجر والعتاد ==================
 class GeneralItemSelect(discord.ui.Select):
     def __init__(self, category: str):
         self.category = category
         items = [item for item in GEAR_DATA[category] if item["store"] == "general"][:25]
         options = [
             discord.SelectOption(
-                label=item["name"],
-                value=item["id"],
-                description=f"الرتبة: {item['rank']} | القوة: +{item['power']} | السعر: {item['price']} 🪙",
-                emoji="⚔️"
+                label=item["name"], value=item["id"],
+                description=f"الرتبة: {item['rank']} | القوة: +{item['power']} | السعر: {item['price']} 🪙", emoji="⚔️"
             ) for item in items
         ]
         super().__init__(placeholder=f"اختر قطعة من فئة [{category}]...", min_values=1, max_values=1, options=options)
@@ -131,10 +127,7 @@ class GeneralItemSelect(discord.ui.Select):
         
         users_col.update_one(
             {"user_id": user_id},
-            {
-                "$inc": {"balance": -selected_item["price"], "power": selected_item["power"]},
-                "$push": {"inventory": selected_item["name"]}
-            }
+            {"$inc": {"balance": -selected_item["price"], "power": selected_item["power"]}, "$push": {"inventory": selected_item["name"]}}
         )
         await interaction.response.send_message(f"🛍️ **تم الشراء بنجاح!** حصلت على `{selected_item['name']}` وزادت طاقتك بـ `+{selected_item['power']}` ⚡", ephemeral=True)
 
@@ -148,7 +141,6 @@ class GeneralCategorySelect(discord.ui.Select):
         view = discord.ui.View()
         view.add_item(GeneralCategorySelect())
         view.add_item(GeneralItemSelect(cat))
-        
         embed = discord.Embed(title=f"🏛️ المتجر العام — فئة [{cat}]", description="اختر المعدات المطلوبة للشراء بالعملات الذهبية.", color=discord.Color.blue())
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -157,15 +149,13 @@ class GeneralStoreView(discord.ui.View):
         super().__init__()
         self.add_item(GeneralCategorySelect())
 
-# ================== 💀 3. المتجر المظلم (Dark Store) ==================
 class DarkItemSelect(discord.ui.Select):
     def __init__(self, category: str):
         self.category = category
         items = [item for item in GEAR_DATA[category] if item["store"] == "dark"]
         options = [
             discord.SelectOption(
-                label=item["name"],
-                value=item["id"],
+                label=item["name"], value=item["id"],
                 description=f"الرتبة: {item['rank']} | القوة: +{item['power']} | السعر: {item['price']} 💎",
                 emoji="🔥" if item["rank"] == "الجحيم القاتل" else ("🩸" if item["rank"] == "السفاح القرمزي" else "😈")
             ) for item in items
@@ -183,10 +173,7 @@ class DarkItemSelect(discord.ui.Select):
         
         users_col.update_one(
             {"user_id": user_id},
-            {
-                "$inc": {"diamonds": -selected_item["price"], "power": selected_item["power"]},
-                "$push": {"inventory": selected_item["name"]}
-            }
+            {"$inc": {"diamonds": -selected_item["price"], "power": selected_item["power"]}, "$push": {"inventory": selected_item["name"]}}
         )
         embed_buy = discord.Embed(
             title="⚡ امتلاك عتاد محرم!",
@@ -205,7 +192,6 @@ class DarkCategorySelect(discord.ui.Select):
         view = discord.ui.View()
         view.add_item(DarkCategorySelect())
         view.add_item(DarkItemSelect(cat))
-        
         embed = discord.Embed(
             title=f"🖤 خزنة الظلال السرية — [{cat}]",
             description="⚠️ **تنبيه:** المعدات المعروضة هنا تتطلب **💎 الألماس** فقط.\n\n"
@@ -222,7 +208,7 @@ class DarkStoreView(discord.ui.View):
         super().__init__()
         self.add_item(DarkCategorySelect())
 
-# ================== ⚡ 4. نظام تطوير المعدلات (Upgrade Stats) ==================
+# ================== ⚡ 3. نظام تطوير المعدلات ==================
 STATS_CONFIG = {
     "aim": {"name": "التصويب", "emoji": "🎯", "cost": 100},
     "evasion": {"name": "المراوغة", "emoji": "💨", "cost": 100},
@@ -239,11 +225,9 @@ class StatUpgradeModal(discord.ui.Modal):
         super().__init__(title=f"🚀 ترقية معدل: {stat_info['name']}")
         self.stat_key = stat_key
         self.stat_info = stat_info
-
         self.amount_input = discord.ui.TextInput(
             label=f"عدد النقاط (سعر النقطة: {stat_info['cost']} 🪙)",
-            placeholder="أدخل عدد النقاط المراد إضافتها (بلا حد أقصى)...",
-            min_length=1, max_length=20, required=True
+            placeholder="أدخل عدد النقاط المراد إضافتها...", min_length=1, max_length=20, required=True
         )
         self.add_item(self.amount_input)
 
@@ -267,7 +251,6 @@ class StatUpgradeModal(discord.ui.Modal):
             {"user_id": user_id},
             {"$inc": {"balance": -total_cost, self.stat_key: points, "power": points * 10}}
         )
-
         embed_success = discord.Embed(
             title=f"🔥 انطلاق القوة القتالية! — {self.stat_info['name']}",
             description=f"تم زيادة **{self.stat_info['emoji']} {self.stat_info['name']}** بـ `+{points:,}` نقطة!",
@@ -292,7 +275,7 @@ class StatsUpgradeView(discord.ui.View):
         super().__init__()
         self.add_item(StatSelect())
 
-# ================== 🏆 5. نظام الليدربورد والترتيب (Leaderboard System) ==================
+# ================== 🏆 4. نظام الليدربورد والترتيب ==================
 def get_medal_emoji(rank_num: int) -> str:
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     return medals.get(rank_num, f"`#{rank_num}`")
@@ -340,7 +323,7 @@ class LeaderboardView(discord.ui.View):
         super().__init__()
         self.add_item(LeaderboardSelect())
 
-# ================== 🎒 6. نظام الحقيبة والتجهيز (Inventory & Equipment) ==================
+# ================== 🎒 5. نظام الحقيبة والتجهيز ==================
 class EquipSelect(discord.ui.Select):
     def __init__(self, user_inventory: list):
         options = [
@@ -371,8 +354,7 @@ class InventoryView(discord.ui.View):
         super().__init__()
         self.add_item(EquipSelect(user_inventory))
 
-# ================== 🏰 7. نظام الطوابق والمغامرة مع BOSS (Floors Hub System) ==================
-
+# ================== 🏰 6. نظام الطوابق والقتال ==================
 ZOMBIE_QUOTES = [
     "🧟: 'سألتهم عظامك وأصنع منها قلادتي التالية!'",
     "🧟: 'رائحة دمائك تزكم الأنف.. تعال إلي!'",
@@ -404,7 +386,6 @@ async def execute_battle(interaction: discord.Interaction, is_boss: bool = False
     player_hp = 100 + user.get("defense", 10) * 10
     max_p_hp = player_hp
 
-    # صعوبة الطابق والعدو
     multiplier = 2.5 if is_boss else 1.0
     enemy_hp = int((current_floor * 80 + 100) * multiplier)
     max_e_hp = enemy_hp
@@ -412,20 +393,15 @@ async def execute_battle(interaction: discord.Interaction, is_boss: bool = False
 
     enemy_name = f"👹 الـ BOSS [سيد الظلام طابق {current_floor}]" if is_boss else f"🧟 زومبي الطابق [{current_floor}]"
 
-    # المحاكاة الواقعية للقتال
-    turn_log = []
     p_hp = max_p_hp
     e_hp = max_e_hp
     
-    # محاكاة الضرر
     while p_hp > 0 and e_hp > 0:
-        # هجوم اللاعب
         p_dmg = random.randint(int(player_power * 0.8), int(player_power * 1.2))
         e_hp -= p_dmg
         if e_hp <= 0:
             e_hp = 0
             break
-        # هجوم الزومبي/البوس
         e_dmg = random.randint(int(enemy_atk * 0.7), int(enemy_atk * 1.3))
         p_hp -= e_dmg
         if p_hp <= 0:
@@ -438,25 +414,20 @@ async def execute_battle(interaction: discord.Interaction, is_boss: bool = False
     z_quote = random.choice(ZOMBIE_QUOTES)
 
     if p_hp > 0:
-        # انتصار
         next_floor = current_floor + 1
         gold_reward = current_floor * 250 + random.randint(50, 200)
         diamond_reward = random.randint(1, 5) if (current_floor % 5 == 0 or is_boss) else 0
         
-        # مكافأة عتاد عشوائية حسب الصعوبة
         item_dropped = None
         if random.random() < 0.35 or is_boss:
             category = random.choice(CATEGORIES)
             if current_floor >= 50 and random.random() < 0.2:
-                # عتاد مظلم محرم
                 dark_item = random.choice([item for item in GEAR_DATA[category] if item["store"] == "dark"])
                 item_dropped = dark_item["name"]
             else:
-                # عتاد عادي
                 gen_item = random.choice([item for item in GEAR_DATA[category] if item["store"] == "general"])
                 item_dropped = gen_item["name"]
 
-        # تحديث الحساب
         update_data = {
             "$inc": {"balance": gold_reward, "diamonds": diamond_reward, "kills": 1},
             "$set": {"current_floor": min(500, next_floor)}
@@ -472,39 +443,33 @@ async def execute_battle(interaction: discord.Interaction, is_boss: bool = False
         embed_win = discord.Embed(
             title=f"⚔️ نصر ساحق في الطابق [{current_floor}/500]!",
             description=f"**سقط {enemy_name} صريعاً أمام طاقتك المدمرة!**\n\n"
-                        f"💬 {z_quote}\n"
-                        f"💬 {p_quote}\n\n"
-                        f"**حالة المقاتل:**\n{interaction.user.mention}: {p_bar}\n"
-                        f"{enemy_name}: {e_bar}\n\n"
+                        f"💬 {z_quote}\n💬 {p_quote}\n\n"
+                        f"**حالة المقاتل:**\n{interaction.user.mention}: {p_bar}\n{enemy_name}: {e_bar}\n\n"
                         f"🎁 **المكافآت المكتسبة:**\n"
                         f"• 🪙 **ذهب:** `+{gold_reward:,}`\n"
                         + (f"• 💎 **ألماس نادر:** `+{diamond_reward}`\n" if diamond_reward else "")
-                        + (f"• 🔮 **غنائم قطعت عتاد:** `{item_dropped}`\n" if item_dropped else "")
+                        + (f"• 🔮 **غنائم عتاد:** `{item_dropped}`\n" if item_dropped else "")
                         + f"\n🚀 **تم الانتقال تلقائياً إلى الطابق التالي: [{min(500, next_floor)}]**",
             color=discord.Color.gold()
         )
         embed_win.set_thumbnail(url=interaction.user.display_avatar.url)
         await interaction.response.send_message(embed=embed_win, ephemeral=False)
     else:
-        # هزيمة
         embed_lose = discord.Embed(
             title=f"💀 هزيمة منكرة في الطابق [{current_floor}]",
             description=f"تم القضاء عليك بواسطة **{enemy_name}**!\n\n"
                         f"💬 {z_quote}\n\n"
-                        f"**حالة المعركة الأخيرة:**\n"
-                        f"{interaction.user.mention}: {p_bar}\n"
-                        f"{enemy_name}: {e_bar}\n\n"
-                        f"💡 **نصيحة الإمبراطورية:** طور معدلاتك القتالية أو اشترِ عتاداً أقوى من المتاجر قبل المحاولة مجدداً!",
+                        f"**حالة المعركة الأخيرة:**\n{interaction.user.mention}: {p_bar}\n{enemy_name}: {e_bar}\n\n"
+                        f"💡 **نصيحة الإمبراطورية:** طور معدلاتك القتالية أو اشترِ عتاداً أقوى قبل المحاولة مجدداً!",
             color=discord.Color.dark_red()
         )
         await interaction.response.send_message(embed=embed_lose, ephemeral=False)
-
 
 class FloorsHubView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="⚔️ بدء المغامرة (الطابق الحالي)", style=discord.ButtonStyle.success, row=0)
+    @discord.ui.button(label="⚔️ بدء المغامرة", style=discord.ButtonStyle.success, row=0)
     async def start_adventure(self, interaction: discord.Interaction, button: discord.ui.Button):
         await execute_battle(interaction, is_boss=False)
 
@@ -517,12 +482,10 @@ class FloorsHubView(discord.ui.View):
         user = users_col.find_one({"user_id": str(interaction.user.id)})
         inv = user.get("inventory", [])
         equipped = user.get("equipped", {}).get("active_weapon", "لا يوجد سلاح مجهز")
-        
         embed = discord.Embed(
             title=f"🎒 حقيبة المقاتل — {user.get('name')}",
-            description=f"⚔️ **السلاح المجهز حالياً:** `{equipped}`\n\n"
-                        f"📦 **المحتويات المخزنة ({len(inv)} قطعة):**\n" +
-                        ("\n".join([f"• {item}" for item in inv[:15]]) or "الحقيبة فارغة تماماً."),
+            description=f"⚔️ **السلاح المجهز:** `{equipped}`\n\n📦 **المحتويات ({len(inv)} قطعة):**\n" +
+                        ("\n".join([f"• {item}" for item in inv[:15]]) or "الحقيبة فارغة."),
             color=discord.Color.purple()
         )
         await interaction.response.send_message(embed=embed, view=InventoryView(inv), ephemeral=True)
@@ -530,25 +493,177 @@ class FloorsHubView(discord.ui.View):
     @discord.ui.button(label="⚡ تطوير معداتي", style=discord.ButtonStyle.secondary, row=1)
     async def open_stats(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_data = users_col.find_one({"user_id": str(interaction.user.id)})
-        embed = discord.Embed(
-            title="✨ مذبح تطوير القوى",
-            description=f"رصيدك: `{user_data.get('balance', 0):,}` 🪙 | طاقتك: `{user_data.get('power', 0):,}` ⚡",
-            color=discord.Color.red()
-        )
+        embed = discord.Embed(title="✨ مذبح تطوير القوى", description=f"رصيدك: `{user_data.get('balance', 0):,}` 🪙", color=discord.Color.red())
         await interaction.response.send_message(embed=embed, view=StatsUpgradeView(), ephemeral=True)
 
     @discord.ui.button(label="🏛️ المتجر العام", style=discord.ButtonStyle.secondary, row=2)
     async def open_general(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(title="🏛️ متجر الإمبراطورية الملكي العام", description="تصفح العتاد والشراء بالذهب 🪙.", color=discord.Color.gold())
+        embed = discord.Embed(title="🏛️ متجر الإمبراطورية العام", description="تصفح العتاد والشراء بالذهب 🪙.", color=discord.Color.gold())
         await interaction.response.send_message(embed=embed, view=GeneralStoreView(), ephemeral=True)
 
     @discord.ui.button(label="🔮 المتجر المظلم", style=discord.ButtonStyle.secondary, row=2)
     async def open_dark(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(title="🔮 المتجر المظلم المحرم", description="سوق الأسلحة المحرمة برتب الشيطان الأبدي بالألماس 💎.", color=discord.Color.from_rgb(20, 0, 35))
+        embed = discord.Embed(title="🔮 المتجر المظلم المحرم", description="سوق الأسلحة المحرمة بالألماس 💎.", color=discord.Color.from_rgb(20, 0, 35))
         await interaction.response.send_message(embed=embed, view=DarkStoreView(), ephemeral=True)
 
+# ================== 🎮 7. نظام قسم الألعاب ولعبة الأسئلة ==================
 
-# ================== تسجيل وتنسيق الأوامر الرئيسية ==================
+QUESTIONS_DATABASE = {
+    "عادي": [
+        "ما هو الشيء الذي كلما أخذت منه كبر؟",
+        "لو أُتيحت لك فرصة السفر لأي بلد مجاناً، أين ستذهب؟",
+        "ما هي هوايتك المفضلة في أوقات الفراغ؟",
+        "ماهي أكثر وجبة تحب تناولها في منتصف الليل؟",
+        "ما هو الشيء الذي إذا صببت عليه الماء لا يبتل؟"
+    ],
+    "متوسط": [
+        "ما هي أكثر لحظة شعرت فيها بالإحراج في حياتك؟",
+        "هل سبق لك وأن كذبت كذبة كبيرة ولم يكتشفها أحد؟",
+        "ما هو القرار الذي اتخذته وندمت عليه لاحقاً؟",
+        "من هو الشخص الذي لا تستطيع رفض طلب له أبداً؟",
+        "ما هي العادة السلبية التي تتمنى التخلص منها فوراً؟"
+    ],
+    "جريئ جدا": [
+        "ما هي أكبر سرية أو اعتراف شخصي تخفيه عن الجميع؟",
+        "هل سبق لك وانجذبت لشخص وكان هذا الانجذاب محظوراً أو غير متوقع؟",
+        "ما هو أجرأ عمل قمت به في حياتك ولم تخبر به عائلتك؟",
+        "هل سبق وقرأت رسائل شخص ما بدون علمه سرا؟ ولماذا؟",
+        "لو خيروك بين التضحية بأكبر خططك المستقبيلة أو خيانة صديقك المقرب، ماذا تختار؟"
+    ]
+}
+
+class ActiveQuestionView(discord.ui.View):
+    def __init__(self, players: list, difficulty: str):
+        super().__init__(timeout=None)
+        self.players = players
+        self.difficulty = difficulty
+
+    @discord.ui.button(label="🎲 السؤال التالي", style=discord.ButtonStyle.primary)
+    async def next_question(self, interaction: discord.Interaction, button: discord.ui.Button):
+        chosen_player = random.choice(self.players)
+        chosen_question = random.choice(QUESTIONS_DATABASE[self.difficulty])
+
+        embed = discord.Embed(
+            title=f"❓ لعبة الأسئلة — المستوى [{self.difficulty}]",
+            description=f"🎯 **اللاعب المختار للإجابة:** {chosen_player.mention}\n\n"
+                        f"📜 **السؤال المطلوب:**\n`{chosen_question}`\n\n"
+                        f"⚠️ **على {chosen_player.mention} الإجابة بشفافية وصراحة الآن!**",
+            color=discord.Color.dark_purple() if self.difficulty == "جريئ جدا" else discord.Color.blue()
+        )
+        embed.set_footer(text=f"عدد المشاركين في الجلسة: {len(self.players)} لاعبين")
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="🛑 إيقاف اللعبة", style=discord.ButtonStyle.danger)
+    async def stop_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for item in self.children:
+            item.disabled = True
+        
+        embed_stop = discord.Embed(
+            title="🛑 تم إيقاف لعبة الأسئلة",
+            description=f"قام **{interaction.user.mention}** بإيقاف الجلسة الحالية. شكراً لمشاركتكم!",
+            color=discord.Color.red()
+        )
+        await interaction.response.edit_message(embed=embed_stop, view=self)
+
+class TriviaLobbyView(discord.ui.View):
+    def __init__(self, host: discord.User, difficulty: str):
+        super().__init__(timeout=None)
+        self.host = host
+        self.difficulty = difficulty
+        self.players = [host]
+
+    def build_embed(self) -> discord.Embed:
+        players_list_str = "\n".join([f"• {p.mention}" for p in self.players])
+        embed = discord.Embed(
+            title=f"🎲 غرفة انتظار لعبة الأسئلة — المستوى [{self.difficulty}]",
+            description="**شروط اللعبة:** لا يمكن بدء الجلسة إلا عند انضمام **شخصين (2) أو أكثر**.\n\n"
+                        f"👥 **المشاركون المنضمون حالياً ({len(self.players)}):**\n{players_list_str}\n\n"
+                        "اضغط على زر **انضمام** للمشاركة أو **بدء اللعبة** في حال جاهزية الجميع!",
+            color=discord.Color.purple() if self.difficulty == "جريئ جدا" else discord.Color.green()
+        )
+        return embed
+
+    @discord.ui.button(label="🎮 انضمام للعبة", style=discord.ButtonStyle.success)
+    async def join_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user in self.players:
+            return await interaction.response.send_message("⚠️ أنت منضم بالفعل لهذه الجلسة!", ephemeral=True)
+        
+        self.players.append(interaction.user)
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.button(label="🚀 بدء اللعبة", style=discord.ButtonStyle.primary)
+    async def start_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if len(self.players) < 2:
+            return await interaction.response.send_message("❌ **لا يمكن بدء اللعبة!** يجب أن ينضم شخصان (2) أو أكثر أولاً.", ephemeral=True)
+
+        chosen_player = random.choice(self.players)
+        chosen_question = random.choice(QUESTIONS_DATABASE[self.difficulty])
+
+        embed = discord.Embed(
+            title=f"❓ انطلقت لعبة الأسئلة — المستوى [{self.difficulty}]",
+            description=f"🎯 **اللاعب المختار للإجابة عشوائياً:** {chosen_player.mention}\n\n"
+                        f"📜 **السؤال:**\n`{chosen_question}`\n\n"
+                        f"⚠️ **على {chosen_player.mention} الإجابة بشفافية وصراحة الآن!**",
+            color=discord.Color.dark_purple() if self.difficulty == "جريئ جدا" else discord.Color.gold()
+        )
+        embed.set_footer(text=f"عدد المشاركين: {len(self.players)} لاعبين")
+        active_view = ActiveQuestionView(players=self.players, difficulty=self.difficulty)
+        await interaction.response.edit_message(embed=embed, view=active_view)
+
+    @discord.ui.button(label="🛑 إيقاف", style=discord.ButtonStyle.danger)
+    async def stop_lobby(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for item in self.children:
+            item.disabled = True
+        
+        embed_stop = discord.Embed(
+            title="🛑 تم إيقاف وإلغاء غرفة اللعبة",
+            description=f"تم إيقاف اللعبة بواسطة **{interaction.user.mention}**.",
+            color=discord.Color.red()
+        )
+        await interaction.response.edit_message(embed=embed_stop, view=self)
+
+
+class TriviaDifficultySelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="عادي", value="عادي", description="أسئلة خفيفة وعامة تناسب الجميع", emoji="🟢"),
+            discord.SelectOption(label="متوسط", value="متوسط", description="أسئلة شخصية وإحراج خفيف", emoji="🟡"),
+            discord.SelectOption(label="جريئ جداً", value="جريئ جدا", description="أسئلة خاصة جداً، محروجة وجريئة للغاية", emoji="🔴")
+        ]
+        super().__init__(placeholder="🎯 اختر مستوى صعوبة وجرأة الأسئلة...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        difficulty = self.values[0]
+        lobby_view = TriviaLobbyView(host=interaction.user, difficulty=difficulty)
+        await interaction.response.edit_message(embed=lobby_view.build_embed(), view=lobby_view)
+
+
+class GamesMenuSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="لعبة الأسئلة", value="trivia", description="لعبة التحدي والاعترافات بين اللاعبين", emoji="❓")
+        ]
+        super().__init__(placeholder="🎮 اختر اللعبة المراد فتحها...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_game = self.values[0]
+        if selected_game == "trivia":
+            view = discord.ui.View()
+            view.add_item(TriviaDifficultySelect())
+            embed = discord.Embed(
+                title="❓ لعبة الأسئلة والتحديات",
+                description="يرجى تحديد مستوى الجرأة والصعوبة المطلوب للأسئلة من القائمة القادمة:",
+                color=discord.Color.blue()
+            )
+            await interaction.response.edit_message(embed=embed, view=view)
+
+class GamesMenuView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(GamesMenuSelect())
+
+
+# ================== تسجيل الأوامر الرئيسية ==================
 @bot.event
 async def on_ready():
     try:
@@ -603,8 +718,7 @@ async def inventory_command(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title=f"🎒 حقيبة المقاتل — {user.get('name')}",
-        description=f"⚔️ **السلاح المجهز:** `{equipped}`\n\n"
-                    f"📦 **المحتويات ({len(inv)} قطعة):**\n" +
+        description=f"⚔️ **السلاح المجهز:** `{equipped}`\n\n📦 **المحتويات ({len(inv)} قطعة):**\n" +
                     ("\n".join([f"• {item}" for item in inv[:15]]) or "الحقيبة فارغة."),
         color=discord.Color.purple()
     )
@@ -626,11 +740,23 @@ async def floors_hub_command(interaction: discord.Interaction):
                     f"📍 **الطابق الحالي:** `{cur_floor} / 500`\n"
                     f"🏆 **أعلى طابق تم بلواغه:** `{max_fl}`\n"
                     f"⚡ **طاقتك القتالية:** `{user.get('power', 100):,}` ⚡\n\n"
-                    "استخدم الأزرا أدناه للقتال والتنقل المباشر بين المتاجر وتطوير المعدلات والحقيبة:",
+                    "استخدم الأزرار أدناه للقتال والتنقل المباشر:",
         color=discord.Color.dark_green()
     )
     embed.set_thumbnail(url=interaction.user.display_avatar.url)
     await interaction.response.send_message(embed=embed, view=FloorsHubView(), ephemeral=False)
+
+@bot.tree.command(name="الالعاب", description="🎲 فتح قائمة الألعاب التفاعلية المتاحة في البوت")
+async def games_command(interaction: discord.Interaction):
+    if not is_user_registered(interaction.user.id):
+        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+
+    embed = discord.Embed(
+        title="🎲 قائمة ألعاب البوت التفاعلية",
+        description="اختر اللعبة المراد لعبها مع أصدقائك من القائمة المنسدلة أسفله:",
+        color=discord.Color.purple()
+    )
+    await interaction.response.send_message(embed=embed, view=GamesMenuView(), ephemeral=False)
 
 # --- تشغيل البوت ---
 if __name__ == "__main__":
