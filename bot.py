@@ -321,7 +321,6 @@ class LeaderboardSelect(discord.ui.Select):
         # 1. ترتيب أغنى شخص
         if category == "rich":
             all_users = list(users_col.find())
-            # ترتيب تلقائي بحسب مجموع ثروة المحفظة + البنك
             all_users.sort(key=lambda u: u.get("balance", 0) + u.get("bank", 0), reverse=True)
             top_users = all_users[:10]
             
@@ -520,8 +519,8 @@ async def upgrade_stats_command(interaction: discord.Interaction):
     embed = discord.Embed(title="✨ مذبح الصقل وتطوير القوى الإمبراطورية", description="تطوير المعدلات القتالية بلا حدود حتى المليارات.", color=discord.Color.red())
     await interaction.response.send_message(embed=embed, view=StatsUpgradeView(), ephemeral=False)
 
-# --- دالة عرض الليدربورد المشتركة للأمرين /الترتيب و /الليدربورد ---
-async def show_leaderboard_menu(interaction: discord.Interaction):
+@bot.tree.command(name="الليدربورد", description="👑 عرض قاعة العظماء وتصنيفات الشرف التلقائية بالإمبراطورية")
+async def leaderboard_command(interaction: discord.Interaction):
     if not is_user_registered(interaction.user.id):
         return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
 
@@ -548,14 +547,6 @@ async def show_leaderboard_menu(interaction: discord.Interaction):
     )
     embed.set_footer(text="الإمبراطورية العظمى • التحديث تلقائي ومباشر")
     await interaction.response.send_message(embed=embed, view=LeaderboardView(), ephemeral=False)
-
-@bot.tree.command(name="الترتيب", description="🏆 عرض لوحات الشرف والليدربورد الفخم لأعظم الشخصيات والنقابات")
-async def leaderboard_command_1(interaction: discord.Interaction):
-    await show_leaderboard_menu(interaction)
-
-@bot.tree.command(name="الليدربورد", description="👑 عرض قاعة العظماء وتصنيفات الشرف التلقائية بالإمبراطورية")
-async def leaderboard_command_2(interaction: discord.Interaction):
-    await show_leaderboard_menu(interaction)
 
 # --- تشغيل البوت ---
 if __name__ == "__main__":
