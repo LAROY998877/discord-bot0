@@ -311,6 +311,29 @@ class GuildDonateGearModal(discord.ui.Modal, title="⚔️ مستودع النق
 
 # ================== واجهات المتاجر ==================
 
+class DarkShopView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+
+    @discord.ui.button(label="عروض رتب الشياطين الحصرية", style=discord.ButtonStyle.danger, emoji="👑", row=0)
+    async def dark_catalog(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🔥 عرش الأسلحة المحرمة والرتب المطلقة",
+            description="أنت تستعرض الآن أقوى العتاد في اللعبة بأسرها.",
+            color=discord.Color.dark_red()
+        )
+        embed.set_footer(text="العملة المستخدمة: الألماس الأسود النادر 💎")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="العودة للمنطقة الآمنة 🏛️", style=discord.ButtonStyle.secondary, emoji="🔙", row=0)
+    async def return_normal_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="🏛️ متجر الإمبراطورية المركزي (المنطقة الآمنة)",
+            description="أهلاً بك مجدداً في النور.",
+            color=discord.Color.gold()
+        )
+        await interaction.response.edit_message(embed=embed, view=NormalShopView())
+
 class NormalShopView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=180)
@@ -335,29 +358,6 @@ class NormalShopView(discord.ui.View):
         )
         await interaction.response.edit_message(embed=embed, view=DarkShopView())
 
-class DarkShopView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=180)
-
-    @discord.ui.button(label="عروض رتب الشياطين الحصرية", style=discord.ButtonStyle.danger, emoji="👑", row=0)
-    async def dark_catalog(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="🔥 عرش الأسلحة المحرمة والرتب المطلقة",
-            description="أنت تستعرض الآن أقوى العتاد في اللعبة بأسرها.",
-            color=discord.Color.dark_red()
-        )
-        embed.set_footer(text="العملة المستخدمة: الألماس الأسود النادر 💎")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @discord.ui.button(label="العودة للمنطقة الآمنة 🏛️", style=discord.ButtonStyle.secondary, emoji="🔙", row=0)
-    async def return_normal_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="🏛️ متجر الإمبراطورية المركزي (المنطقة الآمنة)",
-            description="أهلاً بك مجدداً في النور.",
-            color=discord.Color.gold()
-        )
-        await interaction.response.edit_message(embed=embed, view=NormalShopView())
-
 @bot.tree.command(name="المتجر", description="فتح بوابة المتاجر (العادي والمظلم)")
 async def shop_command(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -375,7 +375,7 @@ class HeroesSelect(discord.ui.Select):
         heroes_list = {k: v for k, v in HEROES_DATA.items() if k != "assassin_dev"}
         options = [
             discord.SelectOption(
-                label=data["name"],
+                label=data["name"][:100],
                 value=hero_key,
                 description=f"النوع: {data['gender']} | القوة: {data['power']}"
             )
@@ -669,6 +669,40 @@ async def guilds_leaderboard_command(interaction: discord.Interaction):
     view = JoinGuildSelectView(all_guilds)
     await interaction.followup.send(embed=embed, view=view, ephemeral=False)
 
+class GuildWarehouseSelect(discord.ui.Select):
+    def __init__(self, warehouse_items: list, guild_id: str):
+        self.guild_id = guild_id
+        options = [
+            discord.SelectOption(label=item[:99], description="قطعة عتاد متبرع بها في المستودع", value=str(idx))
+            for idx, item in enumerate(warehouse_items[:25])
+        ]
+        super().__init__(placeholder="اختر قطعة عتاد لسحبها لحقيبتك...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        guild_data = guilds_col.find_one({"guild_id": self.guild_id})
+        if not guild_data:
+            return await interaction.followup.send("❌ حدث خطأ أثناء جلب بيانات المستودع.", ephemeral=True)
+            
+        warehouse = guild_data.get("warehouse", [])
+        idx = int(self.values[0])
+        
+        if idx >= len(warehouse):
+            return await interaction.followup.send("❌ عذراً، هذه القطعة تم سحبها مسبقاً بواسطة مقاتل آخر!", ephemeral=True)
+            
+        chosen_item = warehouse[idx]
+        
+        guilds_col.update_one({"guild_id": self.guild_id}, {"$pull": {"warehouse": chosen_item}})
+        users_col.update_one({"user_id": user_id}, {"$push": {"inventory": chosen_item}})
+        
+        await interaction.followup.send(f"🎉 **تم سحب القطعة بنجاح!** حصلت على `{chosen_item}` وأضيفت فوراً إلى حقيبتك الشخصية ⚔️", ephemeral=True)
+
+class GuildWarehouseSelectView(discord.ui.View):
+    def __init__(self, warehouse_items: list, guild_id: str):
+        super().__init__(timeout=120)
+        self.add_item(GuildWarehouseSelect(warehouse_items, guild_id))
+
 class GuildManagementView(discord.ui.View):
     def __init__(self, guild_id: str, is_leader: bool, is_locked: bool):
         super().__init__(timeout=180)
@@ -750,40 +784,6 @@ class GuildManagementView(discord.ui.View):
         guilds_col.update_one({"guild_id": self.guild_id}, {"$pull": {"members": user_id}})
         
         await interaction.followup.send("🚪 لقد غادرت النقابة بنجاح وأصبحت حراً طليقاً في أرجاء الإمبراطورية.", ephemeral=True)
-
-class GuildWarehouseSelect(discord.ui.Select):
-    def __init__(self, warehouse_items: list, guild_id: str):
-        self.guild_id = guild_id
-        options = [
-            discord.SelectOption(label=item[:99], description="قطعة عتاد متبرع بها في المستودع", value=str(idx))
-            for idx, item in enumerate(warehouse_items[:25])
-        ]
-        super().__init__(placeholder="اختر قطعة عتاد لسحبها لحقيبتك...", min_values=1, max_values=1, options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        user_id = str(interaction.user.id)
-        guild_data = guilds_col.find_one({"guild_id": self.guild_id})
-        if not guild_data:
-            return await interaction.followup.send("❌ حدث خطأ أثناء جلب بيانات المستودع.", ephemeral=True)
-            
-        warehouse = guild_data.get("warehouse", [])
-        idx = int(self.values[0])
-        
-        if idx >= len(warehouse):
-            return await interaction.followup.send("❌ عذراً، هذه القطعة تم سحبها مسبقاً بواسطة مقاتل آخر!", ephemeral=True)
-            
-        chosen_item = warehouse[idx]
-        
-        guilds_col.update_one({"guild_id": self.guild_id}, {"$pull": {"warehouse": chosen_item}})
-        users_col.update_one({"user_id": user_id}, {"$push": {"inventory": chosen_item}})
-        
-        await interaction.followup.send(f"🎉 **تم سحب القطعة بنجاح!** حصلت على `{chosen_item}` وأضيفت فوراً إلى حقيبتك الشخصية ⚔️", ephemeral=True)
-
-class GuildWarehouseSelectView(discord.ui.View):
-    def __init__(self, warehouse_items: list, guild_id: str):
-        super().__init__(timeout=120)
-        self.add_item(GuildWarehouseSelect(warehouse_items, guild_id))
 
 @bot.tree.command(name="نقابتي", description="عرض السجل الشامل لنقابتك، مستواها، خزنتها، وخيارات الإدارة والتبرع والاستحواذ")
 async def my_guild_command(interaction: discord.Interaction):
@@ -1036,4 +1036,4 @@ async def register_command(interaction: discord.Interaction):
         "defense": 10, "critical": 10, "magic": 10, "intelligence": 10
     }
     users_col.insert_one(new_user)
-    await interaction.response.send_message("🎉 **تم تسجيلك
+    await interaction.response.send_message("🎉 **تم 
