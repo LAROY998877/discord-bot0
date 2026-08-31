@@ -1,7 +1,7 @@
 import os, random, asyncio, pymongo, discord
 from discord import app_commands
 from discord.ext import commands
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
@@ -66,7 +66,8 @@ class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل 
             "created_at": datetime.now(timezone.utc), "balance": 5000, "bank": 0, "diamonds": 20,
             "power": 100, "kills": 0, "max_floor": 1, "inventory": [], "titles": ["المبتدئ الأسطوري"],
             "custom_title": "المبتدئ الأسطوري", "is_dev": (uid == MAIN_DEV_ID),
-            "aim": 10, "evasion": 10, "attack": 10, "accuracy": 10, "critical": 10, "magic": 10, "intelligence": 10, "defense": 10
+            "aim": 10, "evasion": 10, "attack": 10, "accuracy": 10, "critical": 10, "magic": 10, "intelligence": 10, "defense": 10,
+            "last_daily": None, "loan": 0
         })
         emb = discord.Embed(title="👑 تم التسجيل بنجاح!", color=discord.Color.gold())
         emb.add_field(name="🪪 الاسم", value=f"`{self.name_in.value}`", inline=True)
@@ -317,6 +318,156 @@ class DevPanelView(discord.ui.View):
         super().__init__()
         self.add_item(DevActionSelectMenu())
 
+# ==================== نظام البنك الإمبراطوري والنوافذ ====================
+
+class BankDepositModal(discord.ui.Modal, title="📥 إيداع في البنك"):
+    amount_in = discord.ui.TextInput(label="المبلغ المراد إيداعه", placeholder="مثال: 1000")
+
+    async def on_submit(self, ctx: discord.Interaction):
+        try:
+            amt = int(self.amount_in.value.strip())
+            if amt <= 0: raise ValueError()
+        except:
+            await ctx.response.send_message("❌ أدخل رقماً صحيحاً!", ephemeral=True)
+            return
+
+        uid = str(ctx.user.id)
+        u = users_col.find_one({"user_id": uid}) or {}
+        if u.get("balance", 0) < amt:
+            await ctx.response.send_message("❌ لا تملك هذا المبلغ في كاشك!", ephemeral=True)
+            return
+
+        users_col.update_one({"user_id": uid}, {"$inc": {"balance": -amt, "bank": amt}})
+        await ctx.response.send_message(f"🏦 تم إيداع `{amt:,}` 🪙 في بنكك بنجاح!", ephemeral=True)
+
+class BankWithdrawModal(discord.ui.Modal, title="📤 سحب من البنك"):
+    amount_in = discord.ui.TextInput(label="المبلغ المراد سحبه", placeholder="مثال: 1000")
+
+    async def on_submit(self, ctx: discord.Interaction):
+        try:
+            amt = int(self.amount_in.value.strip())
+            if amt <= 0: raise ValueError()
+        except:
+            await ctx.response.send_message("❌ أدخل رقماً صحيحاً!", ephemeral=True)
+            return
+
+        uid = str(ctx.user.id)
+        u = users_col.find_one({"user_id": uid}) or {}
+        if u.get("bank", 0) < amt:
+            await ctx.response.send_message("❌ لا تملك هذا المبلغ في البنك!", ephemeral=True)
+            return
+
+        users_col.update_one({"user_id": uid}, {"$inc": {"bank": -amt, "balance": amt}})
+        await ctx.response.send_message(f"💵 تم سحب `{amt:,}` 🪙 من البنك إلى كاشك بنجاح!", ephemeral=True)
+
+class TakeLoanModal(discord.ui.Modal, title="💳 طلب قرض إمبراطوري"):
+    amount_in = discord.ui.TextInput(label="قيمة القرض (الأقصى 50,000 🪙)", placeholder="مثال: 20000")
+
+    async def on_submit(self, ctx: discord.Interaction):
+        try:
+            amt = int(self.amount_in.value.strip())
+            if not (1 <= amt <= 50000): raise ValueError()
+        except:
+            await ctx.response.send_message("❌ المبلغ يجب أن يكون رقماً بين 1 و 50,000 🪙!", ephemeral=True)
+            return
+
+        uid = str(ctx.user.id)
+        u = users_col.find_one({"user_id": uid}) or {}
+        if u.get("loan", 0) > 0:
+            await ctx.response.send_message(f"❌ عليك قرض سابق بـ `{u.get('loan'):,}` 🪙، يجب سداده أولاً!", ephemeral=True)
+            return
+
+        users_col.update_one({"user_id": uid}, {"$inc": {"balance": amt}, "$set": {"loan": amt}})
+        await ctx.response.send_message(f"💳 تم منحك القرض بنجاح بمبلغ `{amt:,}` 🪙! أضيفت إلى حسابك.", ephemeral=True)
+
+class BankTransferModal(discord.ui.Modal, title="💸 تحويل أموال سريع"):
+    target_in = discord.ui.TextInput(label="آيدي المستلم (User ID)", placeholder="ضع ID الشخص هنا...")
+    amount_in = discord.ui.TextInput(label="المبلغ المراد تحويله (🪙)", placeholder="مثال: 5000")
+
+    async def on_submit(self, ctx: discord.Interaction):
+        try:
+            t_id = self.target_in.value.strip()
+            amt = int(self.amount_in.value.strip())
+            if amt <= 0: raise ValueError()
+        except:
+            await ctx.response.send_message("❌ تأكد من صحة الآيدي والمبلغ!", ephemeral=True)
+            return
+
+        if t_id == str(ctx.user.id):
+            await ctx.response.send_message("❌ لا يمكنك التحويل لنفسك!", ephemeral=True)
+            return
+
+        target_u = users_col.find_one({"user_id": t_id})
+        if not target_u:
+            await ctx.response.send_message("❌ المستلم غير مسجل باللعبة!", ephemeral=True)
+            return
+
+        uid = str(ctx.user.id)
+        u = users_col.find_one({"user_id": uid}) or {}
+        if u.get("balance", 0) < amt:
+            await ctx.response.send_message("❌ لا تملك هذا القدر من الذهب في الكاش!", ephemeral=True)
+            return
+
+        users_col.update_one({"user_id": uid}, {"$inc": {"balance": -amt}})
+        users_col.update_one({"user_id": t_id}, {"$inc": {"balance": amt}})
+        await ctx.response.send_message(f"💸 تم تحويل `{amt:,}` 🪙 بنجاح إلى المقاتل **{target_u.get('name', 'المستلم')}**!")
+
+class ImperialBankView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🎁 الراتب اليومي", style=discord.ButtonStyle.success, row=0)
+    async def daily_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        uid = str(ctx.user.id)
+        u = users_col.find_one({"user_id": uid}) or {}
+        last_d = u.get("last_daily")
+        now = datetime.now(timezone.utc)
+
+        if last_d and (now - last_d.replace(tzinfo=timezone.utc if last_d.tzinfo is None else last_d.tzinfo)).total_seconds() < 86400:
+            rem_sec = int(86400 - (now - last_d.replace(tzinfo=timezone.utc if last_d.tzinfo is None else last_d.tzinfo)).total_seconds())
+            hrs, mins = rem_sec // 3600, (rem_sec % 3600) // 60
+            await ctx.response.send_message(f"⏳ أخذت راتبك اليومي! يمكنك الاستلام بعد: `{hrs}` ساعة و `{mins}` دقيقة.", ephemeral=True)
+            return
+
+        gold_reward, dia_reward = 3000, 5
+        users_col.update_one({"user_id": uid}, {"$inc": {"balance": gold_reward, "diamonds": dia_reward}, "$set": {"last_daily": now}})
+        await ctx.response.send_message(f"🎉 تم استلام الراتب اليومي الإمبراطوري!\n🪙 +`{gold_reward:,}` ذهب | 💎 +`{dia_reward}` ألماس", ephemeral=True)
+
+    @discord.ui.button(label="💳 طلب قرض", style=discord.ButtonStyle.primary, row=0)
+    async def loan_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        await ctx.response.send_modal(TakeLoanModal())
+
+    @discord.ui.button(label="⚖️ سداد القرض", style=discord.ButtonStyle.secondary, row=0)
+    async def repay_loan_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        uid = str(ctx.user.id)
+        u = users_col.find_one({"user_id": uid}) or {}
+        loan = u.get("loan", 0)
+
+        if loan <= 0:
+            await ctx.response.send_message("✨ لا تجب عليك أي ديون أو قروض حالياً!", ephemeral=True)
+            return
+
+        if u.get("balance", 0) < loan:
+            await ctx.response.send_message(f"❌ تحتاج إلى `{loan:,}` 🪙 في الكاش لسداد القرض!", ephemeral=True)
+            return
+
+        users_col.update_one({"user_id": uid}, {"$inc": {"balance": -loan}, "$set": {"loan": 0}})
+        await ctx.response.send_message(f"🎉 تم سداد القرض بالكامل بمبلغ `{loan:,}` 🪙! أصبحت خالي الديون.", ephemeral=True)
+
+    @discord.ui.button(label="💸 تحويل برقم ID", style=discord.ButtonStyle.danger, row=1)
+    async def transfer_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        await ctx.response.send_modal(BankTransferModal())
+
+    @discord.ui.button(label="📥 إيداع", style=discord.ButtonStyle.secondary, row=1)
+    async def deposit_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        await ctx.response.send_modal(BankDepositModal())
+
+    @discord.ui.button(label="📤 سحب", style=discord.ButtonStyle.secondary, row=1)
+    async def withdraw_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        await ctx.response.send_modal(BankWithdrawModal())
+
+# ==================== أحداث البوت والأوامر ====================
+
 @bot.event
 async def on_ready():
     try:
@@ -375,6 +526,158 @@ async def dev_panel_command(ctx: discord.Interaction):
         await ctx.response.send_message("❌ هذا الأمر للمطورين فقط!", ephemeral=True)
         return
     await ctx.response.send_message(embed=discord.Embed(title="👑 لوحة التحكم الإدارية", color=discord.Color.purple()), view=DevPanelView(), ephemeral=True)
+
+@bot.tree.command(name="بروفايل", description="🪪 عرض معلوماتك أو معلومات مقاتل آخر")
+async def profile_command(ctx: discord.Interaction, target: discord.User = None):
+    if not is_user_registered(ctx.user.id):
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        return
+
+    target_user = target or ctx.user
+    u = users_col.find_one({"user_id": str(target_user.id)})
+
+    if not u:
+        await ctx.response.send_message("❌ هذا المستخدم غير مسجل بعد!", ephemeral=True)
+        return
+
+    emb = discord.Embed(title=f"🪪 ملف المقاتل — {u.get('name', 'غير معروف')}", color=discord.Color.blue())
+    emb.set_thumbnail(url=target_user.display_avatar.url)
+    emb.add_field(name="👑 اللقب", value=f"`{u.get('custom_title', 'المبتدئ')}`", inline=True)
+    emb.add_field(name="⌛ العمر", value=f"`{u.get('age', '-')}` سنة", inline=True)
+    emb.add_field(name="🚻 الجنس", value=f"`{u.get('gender', '-')}`", inline=True)
+    emb.add_field(name="⚡ القوة الإجمالية", value=f"`{u.get('power', 0):,}`", inline=False)
+    emb.add_field(name="🪙 الكاش", value=f"`{u.get('balance', 0):,}`", inline=True)
+    emb.add_field(name="🏦 البنك", value=f"`{u.get('bank', 0):,}`", inline=True)
+    emb.add_field(name="💎 الألماس", value=f"`{u.get('diamonds', 0):,}`", inline=True)
+    emb.add_field(name="🏰 أعلى طابق", value=f"`{u.get('max_floor', 1)}`", inline=True)
+
+    stats_str = f"🗡️ هجوم: `{u.get('attack', 10)}` | 🛡️ دفاع: `{u.get('defense', 10)}` | 🔮 سحر: `{u.get('magic', 10)}`\n🎯 تصويب: `{u.get('aim', 10)}` | 💨 مراوغة: `{u.get('evasion', 10)}` | 👁️ دقة: `{u.get('accuracy', 10)}`"
+    emb.add_field(name="📊 الخصائص القتالية", value=stats_str, inline=False)
+
+    await ctx.response.send_message(embed=emb)
+
+@bot.tree.command(name="الحقيبة", description="🎒 عرض المعدات والعتاد الممتلك")
+async def inventory_command(ctx: discord.Interaction):
+    if not is_user_registered(ctx.user.id):
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        return
+
+    u = users_col.find_one({"user_id": str(ctx.user.id)}) or {}
+    inv = u.get("inventory", [])
+
+    emb = discord.Embed(title="🎒 حقائبك ومعداتك", color=discord.Color.dark_green())
+    if not inv:
+        emb.description = "لا تملك أي عتاد حالياً. يمكنك الشراء من المتجر!"
+    else:
+        counts = {}
+        for item in inv:
+            counts[item] = counts.get(item, 0) + 1
+        items_txt = "\n".join([f"• **{k}** (x{v})" for k, v in counts.items()])
+        emb.description = items_txt
+
+    await ctx.response.send_message(embed=emb, ephemeral=True)
+
+@bot.tree.command(name="يومي", description="🎁 استلام المكافأة اليومية")
+async def daily_command(ctx: discord.Interaction):
+    if not is_user_registered(ctx.user.id):
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        return
+
+    uid = str(ctx.user.id)
+    u = users_col.find_one({"user_id": uid}) or {}
+    last_d = u.get("last_daily")
+    now = datetime.now(timezone.utc)
+
+    if last_d and (now - last_d.replace(tzinfo=timezone.utc if last_d.tzinfo is None else last_d.tzinfo)).total_seconds() < 86400:
+        rem_sec = int(86400 - (now - last_d.replace(tzinfo=timezone.utc if last_d.tzinfo is None else last_d.tzinfo)).total_seconds())
+        hrs, mins = rem_sec // 3600, (rem_sec % 3600) // 60
+        await ctx.response.send_message(f"⏳ يمكنك استلام المكافأة بعد: `{hrs}` ساعة و `{mins}` دقيقة!", ephemeral=True)
+        return
+
+    gold_reward = 3000
+    dia_reward = 5
+    users_col.update_one({"user_id": uid}, {"$inc": {"balance": gold_reward, "diamonds": dia_reward}, "$set": {"last_daily": now}})
+    await ctx.response.send_message(f"🎉 تم استلام راتبك اليومي بنجاح!\n🪙 +`{gold_reward:,}` ذهب\n💎 +`{dia_reward}` ألماس")
+
+# ===== أمر البنك الإمبراطوري المتكامل =====
+
+@bot.tree.command(name="البنك_الإمبراطوري", description="🏛️ الخزنة الملكية، إدارة الثروات، القروض والتحويلات")
+async def imperial_bank_cmd(ctx: discord.Interaction):
+    if not is_user_registered(ctx.user.id):
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        return
+
+    u = users_col.find_one({"user_id": str(ctx.user.id)}) or {}
+
+    emb = discord.Embed(
+        title="🏛️ البنك الإمبراطوري الملكي",
+        description=f"أهلاً بك يا المقاتل **{u.get('name', ctx.user.display_name)}** في النظام المالي للإمبراطورية.\nيمكنك من هنا استلام رواتبك، طلب القروض، أو تحويل الثروات مع بقية المحاربين.",
+        color=discord.Color.gold()
+    )
+    emb.set_thumbnail(url=ctx.user.display_avatar.url)
+
+    emb.add_field(name="🪙 الكاش المباشر", value=f"`{u.get('balance', 0):,}` ذهبة", inline=True)
+    emb.add_field(name="🏦 الخزنة بالبنك", value=f"`{u.get('bank', 0):,}` ذهبة", inline=True)
+    emb.add_field(name="💎 الألماس الملكي", value=f"`{u.get('diamonds', 0):,}` ألماس", inline=True)
+
+    loan = u.get("loan", 0)
+    loan_status = f"`{loan:,}` 🪙 (مستحق)" if loan > 0 else "لا توجد ديون ✅"
+    emb.add_field(name="💳 حالة القروض", value=loan_status, inline=False)
+    emb.set_footer(text="استخدم الأزرار بالأسفل للتفاعل السريع مع البنك")
+
+    await ctx.response.send_message(embed=emb, view=ImperialBankView())
+
+@bot.tree.command(name="البنك", description="🏛️ فتح البنك الإمبراطوري")
+async def bank_alias_cmd(ctx: discord.Interaction):
+    await imperial_bank_cmd(ctx)
+
+@bot.tree.command(name="تحويل", description="💸 تحويل عملات مباشرة إلى مقاتل بالمنشن")
+@app_commands.describe(target="المقاتل المستلم", amount="المبلغ المراد تحويله", currency="نوع العملة")
+@app_commands.choices(currency=[
+    app_commands.Choice(name="🪙 ذهب", value="gold"),
+    app_commands.Choice(name="💎 ألماس", value="diamonds")
+])
+async def transfer_command(ctx: discord.Interaction, target: discord.User, amount: int, currency: str):
+    if not is_user_registered(ctx.user.id):
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        return
+
+    if target.id == ctx.user.id:
+        await ctx.response.send_message("❌ لا يمكنك التحويل لنفسك!", ephemeral=True)
+        return
+
+    if not is_user_registered(target.id):
+        await ctx.response.send_message("❌ المستلم غير مسجل في البوت!", ephemeral=True)
+        return
+
+    if amount <= 0:
+        await ctx.response.send_message("❌ اكتب مبلغاً أكبر من 0!", ephemeral=True)
+        return
+
+    sender_id, target_id = str(ctx.user.id), str(target.id)
+    s_user = users_col.find_one({"user_id": sender_id}) or {}
+
+    field = "balance" if currency == "gold" else "diamonds"
+    sym = "🪙" if currency == "gold" else "💎"
+
+    if s_user.get(field, 0) < amount:
+        await ctx.response.send_message(f"❌ لا تملك هذا القدر من الـ {sym}!", ephemeral=True)
+        return
+
+    users_col.update_one({"user_id": sender_id}, {"$inc": {field: -amount}})
+    users_col.update_one({"user_id": target_id}, {"$inc": {field: amount}})
+
+    await ctx.response.send_message(f"💸 تم تحويل `{amount:,}` {sym} إلى {target.mention} بنجاح!")
+
+@bot.tree.command(name="إضافة_مطور", description="👑 إضافة مطور جديد للبوت (للمطور الرئيسي فقط)")
+async def add_dev_command(ctx: discord.Interaction, target: discord.User):
+    if str(ctx.user.id) != MAIN_DEV_ID:
+        await ctx.response.send_message("❌ هذا الأمر خاص بالمطور الرئيسي فقط!", ephemeral=True)
+        return
+
+    devs_col.update_one({"user_id": str(target.id)}, {"$set": {"user_id": str(target.id)}}, upsert=True)
+    users_col.update_one({"user_id": str(target.id)}, {"$set": {"is_dev": True}})
+    await ctx.response.send_message(f"👑 تم إعطاء صلاحيات المطور لـ {target.mention} بنجاح!")
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
