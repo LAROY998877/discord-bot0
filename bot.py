@@ -56,7 +56,7 @@ async def register_command(interaction: discord.Interaction):
     await interaction.response.send_message("🎉 **تم تسجيلك بنجاح في الإمبراطورية!** حصلت على مكافأة البداية `1,000` 🪙 و `10` 💎 ألماس.", ephemeral=True)
 
 
-# ================== 2. الملف الشخصي (معدل ومرتب بشكل رهيب) ==================
+# ================== 2. الملف الشخصي (مرتب بشكل رهيب) ==================
 @bot.tree.command(name="الملف", description="عرض السجل الأسطوري والمعدلات القتالية الشاملة")
 async def profile_command(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=False)
@@ -89,7 +89,6 @@ async def profile_command(interaction: discord.Interaction):
         color=discord.Color.from_rgb(40, 40, 40)
     )
     
-    # قسم المعلومات الشخصية والأساسية
     general_info = (
         f"👑 **اللقب الحالي:** `{custom_title}`\n"
         f"🦸‍♂️ **البطل المختار:** `{selected_hero}`\n"
@@ -98,7 +97,6 @@ async def profile_command(interaction: discord.Interaction):
     )
     embed.add_field(name="📌 **المعلومات العامة**", value=general_info, inline=False)
     
-    # قسم المعدلات القتالية مرتب بشكل أنيق
     combat_stats = (
         f"🎯 **التصويب:** `{aim:,}` | 💨 **المراوغة:** `{evasion:,}`\n"
         f"🗡️ **الهجوم:** `{attack:,}` | 👁️ **الدقة:** `{accuracy:,}`\n"
@@ -107,7 +105,6 @@ async def profile_command(interaction: discord.Interaction):
     )
     embed.add_field(name="📊 **ترسانة المعدلات القتالية**", value=combat_stats, inline=False)
     
-    # قسم الإنجازات والثروة
     wealth_stats = (
         f"🏢 **أعلى طابق:** `{max_floor}` | 💀 **الخصوم المقضي عليهم:** `{kills:,}`\n"
         f"🪙 **المحفظة:** `{balance:,}` | 💳 **البنك:** `{bank:,}`\n"
@@ -177,7 +174,37 @@ async def select_hero(interaction: discord.Interaction, bosta: str):
     await interaction.response.send_message(f"⚔️ لقد اخترت البطل **{bosta}** بنجاح!", ephemeral=False)
 
 
-# ================== 5. أوامر المتاجر وخياراته ==================
+# ================== 5. أوامر تطوير المعداتي وخياراته ==================
+@bot.tree.command(name="تطوير_المعدات", description="تطوير معداتك القتالية لرفع خصائص الهجوم والدفاع والدقة")
+async def upgrade_gear(interaction: discord.Interaction, stat_type: str):
+    user_id = str(interaction.user.id)
+    user_data = users_col.find_one({"user_id": user_id})
+    if not user_data:
+        return await interaction.response.send_message("❌ يجب التسجيل أولاً!", ephemeral=True)
+    
+    valid_stats = ["attack", "defense", "aim", "evasion", "accuracy", "critical", "magic", "intelligence"]
+    if stat_type not in valid_stats:
+        return await interaction.response.send_message(f"❌ نوع المعدات غير صحيح! الخيارات المتاحة: `{', '.join(valid_stats)}`", ephemeral=True)
+    
+    cost = 300  # تكلفة التطوير
+    if user_data.get("balance", 0) < cost:
+        return await interaction.response.send_message(f"❌ رصيدك لا يكفي لتطوير المعدات (تحتاج إلى `{cost}` 🪙)!", ephemeral=True)
+    
+    # خصم التكلفة وزيادة الخاصية المطلوبة مع زيادة الطاقة القتالية العامة
+    users_col.update_one(
+        {"user_id": user_id},
+        {
+            "$inc": {
+                "balance": -cost,
+                stat_type: 5,
+                "power": 15
+            }
+        }
+    )
+    await interaction.response.send_message(f"🛠️ **تم تطوير معداتك بنجاح!** زادت خاصية `{stat_type}` بمقدار `5` نقاط، وزادت طاقتك الإجمالية بـ `15` نقطة.", ephemeral=False)
+
+
+# ================== 6. أوامر المتاجر وخياراته ==================
 @bot.tree.command(name="متجر_عرض", description="عرض المنتجات المتاحة للشراء في المتجر")
 async def store_view(interaction: discord.Interaction):
     embed = discord.Embed(title="🛒 متجر الإمبراطورية العظيم", color=discord.Color.gold())
@@ -196,7 +223,7 @@ async def buy_potion(interaction: discord.Interaction):
     await interaction.response.send_message("🧪 لقد اشتريت جرعة الطاقة بنجاح وزادت طاقتك القتالية بـ `50` نقطة!", ephemeral=False)
 
 
-# ================== 6. أوامر الطوابق وخياراته ==================
+# ================== 7. أوامر الطوابق وخياراته ==================
 @bot.tree.command(name="طابق_صعود", description="صعود الطوابق وقتال وحوش البرج لاجتياز الاختبارات")
 async def floor_climb(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -214,7 +241,7 @@ async def floor_climb(interaction: discord.Interaction):
         await interaction.response.send_message(f"💀 **هزيمة قاسية!** وحش الطابق `{next_floor}` كان أقوى منك، ارفع طاقتك وحاول مجدداً.", ephemeral=False)
 
 
-# ================== 7. أوامر الحقيبة وخياراته ==================
+# ================== 8. أوامر الحقيبة وخياراته ==================
 @bot.tree.command(name="حقيبة_عرض", description="عرض محتويات حقيبتك الشخصية")
 async def inventory_view(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -229,7 +256,7 @@ async def inventory_view(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
-# ================== 8. أوامر إنشاء نقابة ونقابتي ==================
+# ================== 9. أوامر إنشاء نقابة ونقابتي ==================
 @bot.tree.command(name="انشاء_نقابة", description="إنشاء نقابة جديدة خاصة بك (التكلفة: 5000 عملة)")
 async def create_guild(interaction: discord.Interaction, guild_name: str):
     user_id = str(interaction.user.id)
@@ -261,7 +288,7 @@ async def my_guild(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
-# ================== 9. أوامر الألعاب وخياراته ==================
+# ================== 10. أوامر الألعاب وخياراته ==================
 @bot.tree.command(name="لعبة_حظ", description="لعبة حظ سريعة لمضاعفة عملاتك أو خسارتها")
 async def gamble_game(interaction: discord.Interaction, amount: int):
     user_id = str(interaction.user.id)
@@ -277,7 +304,7 @@ async def gamble_game(interaction: discord.Interaction, amount: int):
         await interaction.response.send_message(f"😢 **للأسف!** خسرت رهانتك وقدرها `{amount:,}` 🪙.", ephemeral=False)
 
 
-# ================== 10. لوحة المطور وكامل خياراتها ==================
+# ================== 11. لوحة المطور وكامل خياراتها ==================
 @bot.tree.command(name="مطور_اعطاء_فلوس", description="[للمطور فقط] منح عملات لمستخدم معين")
 async def dev_give_money(interaction: discord.Interaction, member: discord.Member, amount: int):
     if interaction.user.id not in DEVELOPER_IDS:
