@@ -582,6 +582,101 @@ async def adventure_command(interaction: discord.Interaction):
 async def create_guild_command(interaction: discord.Interaction):
     await interaction.response.send_modal(CreateGuildModal())
 
+# قائمة اختيار الانضمام للنقابات عبر أمر /النقابات
+class JoinGuildSelect(discord.ui.Select):
+    def __init__(self, guilds_list):
+        options = []
+        for g in guilds_list[:25]: # الحد الأقصى 25 خيار للقائمة المنسدلة
+            lock_status = "🔒 مغلقة" if g.get("is_locked", False) else "🔓 متاح الانضمام"
+            options.append(
+                discord.SelectOption(
+                    label=g["name"][:100],
+                    description=f"المستوى: {g.get('level', 1)} | الخزينة: {g.get('treasury', 0):,} 🪙 ({lock_status})",
+                    value=g["guild_id"]
+                )
+            )
+        super().__init__(placeholder="اختر نقابة للانضمام إليها فوراً...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        
+        user_data = users_col.find_one({"user_id": user_id})
+        if not user_data:
+            return await interaction.followup.send("❌ لم تقم بالتسجيل بعد في النظام! استخدم أمر `/تسجيل` أولاً.", ephemeral=True)
+            
+        if user_data.get("guild_id"):
+            return await interaction.followup.send("❌ أنت منضم بالفعل لنقابة! يجب عليك مغادرة نقابتك الحالية قبل الانضمام لأخرى.", ephemeral=True)
+            
+        chosen_guild_id = self.values[0]
+        guild_data = guilds_col.find_one({"guild_id": chosen_guild_id})
+        
+        if not guild_data:
+            return await interaction.followup.send("❌ عذراً، هذه النقابة لم تعد موجودة أو تم حذفها.", ephemeral=True)
+            
+        if guild_data.get("is_locked", False):
+            return await interaction.followup.send(f"❌ بوابات نقابة **{guild_data['name']}** مغلقة حالياً ولا تقبل أعضاء جدد!", ephemeral=True)
+            
+        # إتمام الانضمام
+        guilds_col.update_one({"guild_id": chosen_guild_id}, {"$push": {"members": user_id}})
+        users_col.update_one({"user_id": user_id}, {"$set": {"guild_id": chosen_guild_id}})
+        
+        embed = discord.Embed(
+            title="🎉 مبروك! انضممت إلى النقابة بنجاح",
+            description=f"لقد رحبت بك نقابة **{guild_data['name']}** في صفوفها العسكرية! أصبحت الآن جزءاً من هذا الصرح.",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="🏰 اسم النقابة", value=guild_data['name'], inline=True)
+        embed.add_field(name="📈 مستوى النقابة", value=f"المستوى `{guild_data.get('level', 1)}`", inline=True)
+        embed.set_footer(text="استخدم أمر /نقابتي لاستعراض مزايا نقابتك الجديدة والتبرع لها!")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+class JoinGuildSelectView(discord.ui.View):
+    def __init__(self, guilds_list):
+        super().__init__(timeout=180)
+        self.add_item(JoinGuildSelect(guilds_list))
+
+@bot.tree.command(name="النقابات", description="عرض لوحة ترتيب النقابات المتاحة في الإمبراطورية مع خيار الانضمام السريع")
+async def guilds_leaderboard_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=False)
+    
+    # جلب جميع النقابات مرتبة حسب المستوى والخزينة تنازلياً
+    all_guilds = list(guilds_col.find().sort([("level", -1), ("treasury", -1)]).limit(10))
+    
+    if not all_guilds:
+        embed_empty = discord.Embed(
+            title="🏰 لوحة ترتيب النقابات الإمبراطورية",
+            description="لا توجد أي نقابات مؤسسة في الإمبراطورية حتى الآن!\nكن أول الأبطال وأسس نقابتك الخاصة باستخدام أمر `/انشاء_نقابه`.",
+            color=discord.Color.dark_orange()
+        )
+        return await interaction.followup.send(embed=embed_empty, ephemeral=False)
+        
+    desc_lines = []
+    medals = ["👑", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    
+    for idx, g in enumerate(all_guilds):
+        name = g.get("name", "نقابة مجهولة")
+        level = g.get("level", 1)
+        treasury = g.get("treasury", 0)
+        members_count = len(g.get("members", []))
+        lock_icon = "🔒" if g.get("is_locked", False) else "🔓"
+        
+        desc_lines.append(
+            f"{medals[idx]} **{name}** {lock_icon}\n"
+            f"　└ مستوى: `{level}` | الأعضاء: `{members_count}` | الخزينة: `{treasury:,}` 🪙\n"
+        )
+        
+    embed = discord.Embed(
+        title="🏰 لوحة شرف وترتيب النقابات الإمبراطورية",
+        description="إليك أقوى الصروح والنقابات المرتبة تصاعدياً. يمكنك اختيار النقابة التي تناسب طموحك والانضمام إليها مباشرة من القائمة أدناه:\n\n" + "\n".join(desc_lines),
+        color=discord.Color.gold()
+    )
+    embed.set_footer(text=f"تم استعراض النقابات بواسطة {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
+    
+    view = JoinGuildSelectView(all_guilds)
+    await interaction.followup.send(embed=embed, view=view, ephemeral=False)
+
 class GuildManagementView(discord.ui.View):
     def __init__(self, guild_id: str, is_leader: bool, is_locked: bool):
         super().__init__(timeout=180)
@@ -711,7 +806,7 @@ async def my_guild_command(interaction: discord.Interaction):
     if not guild_id:
         embed_no_guild = discord.Embed(
             title="🏰 أنت لست عضواً في أي نقابة بعد!",
-            description="الإمبراطورية مليئة بالفرص! يمكنك تأسيس نقابتك الخاصة عبر أمر `/انشاء_نقابه` بتكلفة `300` عملة ذهبية فقط.",
+            description="الإمبراطورية مليئة بالفرص! يمكنك تأسيس نقابتك الخاصة عبر أمر `/انشاء_نقابه` بتكلفة `300` عملة ذهبية فقط، أو استعراض النقابات المتاحة والانضمام إليها عبر أمر `/النقابات`.",
             color=discord.Color.dark_orange()
         )
         return await interaction.followup.send(embed=embed_no_guild, ephemeral=False)
@@ -935,21 +1030,4 @@ async def register_command(interaction: discord.Interaction):
     
     new_user = {
         "user_id": user_id,
-        "balance": 1000,
-        "bank": 0,
-        "diamonds": 10,
-        "max_floor": 0,
-        "kills": 0,
-        "battles_played": 0,
-        "power": 100,
-        "custom_title": "المبتدئ",
-        "unlocked_titles": ["المبتدئ"],
-        "selected_hero": "لم يتم اختيار بطل بعد",
-        "inventory": [],
-        "aim": 10, "evasion": 10, "attack": 10, "accuracy": 10,
-        "defense": 10, "critical": 10, "magic": 10, "intelligence": 10
-    }
-    users_col.insert_one(new_user)
-    await interaction.response.send_message("🎉 **تم تسجيلك بنجاح!** حصلت على لقب `المبتدئ` ورصيدك الأولي.", ephemeral=True)
-
-bot.run(DISCORD_TOKEN)
+        "
