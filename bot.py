@@ -184,9 +184,7 @@ class GeneralItemSelect(discord.ui.Select):
         )
         embed_bought = discord.Embed(
             title="🛍️ صفقة ناجحة — المتجر الإمبراطوري",
-            description=f"مبروك! حصلت على **{selected_item['name']}**\n"
-                        f"• ⚡ **القوة المضافة:** `+{selected_item['power']:,}`\n"
-                        f"• 🪙 **المبلغ المدفوع:** `{selected_item['price']:,}` ذهبة",
+            description=f"مبروك! حصلت على **{selected_item['name']}**\n• ⚡ **القوة المضافة:** `+{selected_item['power']:,}`\n• 🪙 **المبلغ المدفوع:** `{selected_item['price']:,}` ذهبة",
             color=discord.Color.gold()
         )
         await interaction.response.send_message(embed=embed_bought, ephemeral=True)
@@ -406,9 +404,7 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
 
     embed = discord.Embed(
         title=f"⚔️ ساحة معركة البرج — الطابق [{floor_num}/500]",
-        description=f"⚔️ **تواجَه الآن ضد:** `{enemy['name']}`\n"
-                    f"💬 **الخصم:** \"{enemy['enemy_quote']}\"\n"
-                    f"🗣️ **{user_data.get('name', 'المقاتل')}:** \"{enemy['player_quote']}\"\n",
+        description=f"⚔️ **تواجَه الآن ضد:** `{enemy['name']}`\n💬 **الخصم:** \"{enemy['enemy_quote']}\"\n🗣️ **{user_data.get('name', 'المقاتل')}:** \"{enemy['player_quote']}\"\n",
         color=enemy["color"]
     )
     embed.add_field(name=f"👤 {user_data.get('name', 'المقاتل')}", value=render_hp_bar(int(p_hp), int(p_max_hp)), inline=True)
@@ -471,8 +467,7 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
 
         embed_win = discord.Embed(
             title=f"🎉 **انتصار ساحق في الطابق [{floor_num}]!**",
-            description=f"👑 **تم سحق {enemy['name']} بنجاح!**\n"
-                        f"🎁 **المكافآت:** 🪙 `{gold_reward:,}` | 💎 `{diamond_reward}` | {gear_msg}\n",
+            description=f"👑 **تم سحق {enemy['name']} بنجاح!**\n🎁 **المكافآت:** 🪙 `{gold_reward:,}` | 💎 `{diamond_reward}` | {gear_msg}\n",
             color=discord.Color.gold()
         )
         embed_win.add_field(name="📜 سجل القتال النهائي", value="\n".join(logs[-4:]), inline=False)
@@ -683,7 +678,7 @@ class BattleMainView(discord.ui.View):
         super().__init__()
         self.add_item(BattleModeSelect())
 
-# ================== 🏆 8. نظام الليدربورد والترتيب التلقائي MAPPED ==================
+# ================== 🏆 8. نظام الليدربورد والترتيب التلقائي ==================
 
 def get_prestigious_badge(rank_num: int) -> str:
     badges = {1: "👑 **[الملك - المركز الأول]**", 2: "🥇 **[المركز الثاني]**", 3: "🥈 **[المركز الثالث]**", 4: "🥉 **[المركز الرابع]**"}
@@ -866,9 +861,7 @@ class DevTransferCoinsModal(discord.ui.Modal, title="🪙 تحويل عملات 
 
         embed = discord.Embed(
             title="🎁 تحويل إداري ناجح!",
-            description=f"تم إضافة الرصيد لحساب {self.target_user.mention}:\n"
-                        f"• 🪙 **ذهب مضاف:** `+{gold:,}`\n"
-                        f"• 💎 **ألماس مضاف:** `+{diamonds:,}`",
+            description=f"تم إضافة الرصيد لحساب {self.target_user.mention}:\n• 🪙 **ذهب مضاف:** `+{gold:,}`\n• 💎 **ألماس مضاف:** `+{diamonds:,}`",
             color=discord.Color.green()
         )
         await interaction.response.send_message(embed=embed, ephemeral=False)
@@ -899,9 +892,7 @@ class DevGiftGearModal(discord.ui.Modal, title="🎁 إهداء عتاد وسل�
 
         embed = discord.Embed(
             title="🎁 إهداء عتاد إداري أسطوري!",
-            description=f"تم إهداء العتاد للاعب {self.target_user.mention}:\n"
-                        f"• 🗡️ **العتاد:** `{gear_name}`\n"
-                        f"• ⚡ **مكافأة الطاقة:** `+{power_boost:,}`",
+            description=f"تم إهداء العتاد للاعب {self.target_user.mention}:\n• 🗡️ **العتاد:** `{gear_name}`\n• ⚡ **مكافأة الطاقة:** `+{power_boost:,}`",
             color=discord.Color.blue()
         )
         await interaction.response.send_message(embed=embed, ephemeral=False)
@@ -1013,9 +1004,13 @@ class DevActionSelectMenu(discord.ui.Select):
                 }
             )
 
-            story_embed = discord.Embed(
-                title="🩸 ظُهور شخصية [السـفّـاح الخـالـد] — العرش الخارِق",
-                description="✨ **القصة الملحمية والميلاد المحرّم:**\n"
-                            "\"في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، ولد **'السفاح'** من أطياف الدماء المظلمة والأرواح النادمة. "
-                            "كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه **سيف الدم الأزلي** الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.\n\n"
-                            "عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السما
+            story_desc = (
+                "✨ **القصة الملحمية والميلاد المحرّم:**\n"
+                "ولد 'السفاح' في أعمق أزقة الجحيم المظلمة وقبل أن تُبنى ملوك الإمبراطورية، من أطياف الدماء المظلمة والأرواح النادمة.\n"
+                "كائن لا يخضع لقوانين الفانين ولا لعدالة الآلهة، يحمل في يمينه سيف الدم الأزلي الذي يلتهم طاقة أي مقاتل يجرؤ على النظر في عينيه.\n\n"
+                "عندما يخطو السفاح خطوة واحدة في ساحة المعركة، تتجمد الأرض وتتساقط السماء رماداً، حيث تتعدى قوته حدود العوالم والمليارات.. إنه سيد الظلمات الحقيقي والمسيطر مطلق القوة!\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "⚡ **تم تفعيل القدرات الخارقة لشخصيتك فوراً:**\n"
+                "• 👑 **اللقب المجهز:** `🩸 السفاح الخالد - حاكم الظلمات والعوالم`\n"
+                "• 🗡️ **سلاح العرش:** `🩸 سيف السفاح محطم العوالم والأرواح 💀`\n"
+          
