@@ -319,7 +319,7 @@ class StatUpgradeModal(discord.ui.Modal):
             description=f"تم زيادة **{self.stat_info['emoji']} {self.stat_info['name']}** بـ `+{points:,}` نقطة!",
             color=discord.Color.red()
         )
-        await interaction.response.send_message(embed=embed_success, ephemeral=False)
+        await interaction.response.send_message(embed_success, ephemeral=False)
 
 class StatSelect(discord.ui.Select):
     def __init__(self):
@@ -472,7 +472,6 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
         gold_reward = floor_num * 300 + random.randint(200, 800)
         diamond_reward = random.randint(1, 4) if (enemy["is_boss"] or random.random() < 0.25) else 0
         
-        # إمكانية الحصول على عتاد عادي أو محرم عشوائي
         dropped_gear = None
         gear_msg = "لا يوجد عتاد مسقط"
         
@@ -483,7 +482,6 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
             dropped_gear = random.choice(ALL_GENERAL_ITEMS)
             gear_msg = f"🗡️ **عتاد إمبراطوري:** `{dropped_gear['name']}`"
 
-        # تحديث قاعدة البيانات
         update_doc = {
             "$inc": {"balance": gold_reward, "diamonds": diamond_reward, "kills": 1, "power": 30},
             "$set": {"max_floor": floor_num + 1}
@@ -569,34 +567,27 @@ class TowerMainSelect(discord.ui.Select):
         user_data = users_col.find_one({"user_id": user_id})
         val = self.values[0]
 
-        # 1. بدء المغامرة تلقائياً
         if val == "start_adv":
             current_f = user_data.get("max_floor", 1)
             await process_floor_battle(interaction, current_f)
 
-        # 2. قتال الزعيم مباشرة
         elif val == "boss_fight":
             current_f = user_data.get("max_floor", 1)
-            # تقريب لأقرب طابق زعيم
             boss_f = current_f if current_f % 10 == 0 else ((current_f // 10 + 1) * 10)
             await process_floor_battle(interaction, boss_f, is_boss_only=True)
 
-        # 3. المتجر العادي
         elif val == "gen_store":
             embed = discord.Embed(title="🏛️ متجر الإمبراطورية الملكي العام", description="اختر قسم العتاد للشراء بالذهب 🪙.", color=discord.Color.gold())
             await interaction.response.send_message(embed=embed, view=GeneralStoreView(), ephemeral=True)
 
-        # 4. المتجر المظلم
         elif val == "dark_store":
             embed = discord.Embed(title="🔮 المتجر المظلم المحرم — Dark Sanctuary", description="سوق العتاد المحرم بالألماس 💎.", color=discord.Color.from_rgb(20, 0, 35))
             await interaction.response.send_message(embed=embed, view=DarkStoreView(), ephemeral=True)
 
-        # 5. تطوير معداتي
         elif val == "upgrade_stats":
             embed = discord.Embed(title="✨ مذبح الصقل وتطوير القوى الإمبراطورية", description="ترقية معدلات القوة القتالية بلا حدود.", color=discord.Color.red())
             await interaction.response.send_message(embed=embed, view=StatsUpgradeView(), ephemeral=True)
 
-        # 6. حقيبتي
         elif val == "my_inventory":
             inv = user_data.get("inventory", [])
             embed = discord.Embed(
@@ -614,7 +605,250 @@ class TowerMainView(discord.ui.View):
         super().__init__()
         self.add_item(TowerMainSelect())
 
-# ================== 🏆 7. نظام الليدربورد والترتيب الفخم (Leaderboard System) ==================
+# ================== ⚔️ 7. نظام المعارك المباشرة PvP (1v1, 2v2, 3v3) ==================
+
+PVP_BANTER = [
+    ("سأعلمك اليوم كيف تحترم أباطرة الإمبراطورية!", "كلامك كثير وحقيبتك فارغة، أرني ما لديك!"),
+    ("سيفي لا يرحم الضعفاء في الميدان!", "دفاعي الصلب سيحطم سيفك إلى شظايا!"),
+    ("ضرباتي القاتلة ستشعل الساحة بالدماء!", "لن تلمس شعرة مني قبل أن تسقط أرضاً!"),
+    ("ستكون هذه أسرع معركة تخسرها بحياتك!", "سترى القوة الحقيقية المخبأة في معداتي!")
+]
+
+class BattleLobbyView(discord.ui.View):
+    def __init__(self, mode: str, host_user: discord.User):
+        super().__init__(timeout=300)
+        self.mode = mode # "1v1", "2v2", "3v3"
+        self.team_size = int(mode[0]) # 1, 2, or 3
+        self.team_red = [] # الفريق الأحمر
+        self.team_blue = [] # الفريق الأزرق
+        self.host_user = host_user
+        
+        # إضافة صاحب الغرفة تلقائياً للفريق الأحمر
+        self.team_red.append(host_user)
+
+    def is_full(self) -> bool:
+        return len(self.team_red) == self.team_size and len(self.team_blue) == self.team_size
+
+    def get_embed(self) -> discord.Embed:
+        red_names = "\n".join([f"• 🔴 **{u.display_name}**" for u in self.team_red]) if self.team_red else "بانتظار المقاتلين..."
+        blue_names = "\n".join([f"• 🔵 **{u.display_name}**" for u in self.team_blue]) if self.team_blue else "بانتظار المقاتلين..."
+        
+        embed = discord.Embed(
+            title=f"⚔️ حلبة الصراع والمجد — معركة [{self.mode}]",
+            description=f"✨ **أنشأ الغرفة:** {self.host_user.mention}\n"
+                        f"⚠️ **الشرط:** لا تبدأ المعركة إلا عند اكتمال `{self.team_size}` مقاتلين في كل فريق!\n"
+                        "━"*32,
+            color=discord.Color.dark_gold()
+        )
+        embed.add_field(name=f"🔴 الفريق الأحمر ({len(self.team_red)}/{self.team_size})", value=red_names, inline=True)
+        embed.add_field(name=f"🔵 الفريق الأزرق ({len(self.team_blue)}/{self.team_size})", value=blue_names, inline=True)
+        embed.set_footer(text="اضغط على الأزرار بالأسفل للانضمام إلى أحد الفريقين!")
+        return embed
+
+    @discord.ui.button(label="انضمام للفريق الأحمر 🔴", style=discord.ButtonStyle.danger)
+    async def join_red(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_user_registered(interaction.user.id):
+            return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر امر `/تسجيل`!", ephemeral=True)
+            
+        user = interaction.user
+        if user in self.team_red or user in self.team_blue:
+            return await interaction.response.send_message("⚠️ أنت مشارك بالفعل في إحدى الفرق!", ephemeral=True)
+            
+        if len(self.team_red) >= self.team_size:
+            return await interaction.response.send_message("❌ الفريق الأحمر مكتمل!", ephemeral=True)
+
+        self.team_red.append(user)
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        
+        if self.is_full():
+            await self.start_pvp_battle(interaction)
+
+    @discord.ui.button(label="انضمام للفريق الأزرق 🔵", style=discord.ButtonStyle.primary)
+    async def join_blue(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_user_registered(interaction.user.id):
+            return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر امر `/تسجيل`!", ephemeral=True)
+
+        user = interaction.user
+        if user in self.team_red or user in self.team_blue:
+            return await interaction.response.send_message("⚠️ أنت مشارك بالفعل في إحدى الفرق!", ephemeral=True)
+
+        if len(self.team_blue) >= self.team_size:
+            return await interaction.response.send_message("❌ الفريق الأزرق مكتمل!", ephemeral=True)
+
+        self.team_blue.append(user)
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+        if self.is_full():
+            await self.start_pvp_battle(interaction)
+
+    @discord.ui.button(label="انسحاب 🚪", style=discord.ButtonStyle.secondary)
+    async def leave_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user = interaction.user
+        if user in self.team_red:
+            self.team_red.remove(user)
+        elif user in self.team_blue:
+            self.team_blue.remove(user)
+        else:
+            return await interaction.response.send_message("⚠️ أنت لست مشاركاً بالمواجهة!", ephemeral=True)
+
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    async def start_pvp_battle(self, interaction: discord.Interaction):
+        # تعطيل الأزرار بعد اكتمال الغرفة
+        for item in self.children:
+            item.disabled = True
+        
+        # جلب بيانات جميع اللاعبين وحساب إحصائياتهم
+        red_data_list = [users_col.find_one({"user_id": str(u.id)}) for u in self.team_red]
+        blue_data_list = [users_col.find_one({"user_id": str(u.id)}) for u in self.team_blue]
+
+        # حساب إجمالي الطاقة والإحصائيات لكل فريق
+        red_power = sum(d.get("power", 100) for d in red_data_list)
+        red_atk = sum(d.get("attack", 10) * 12 + d.get("power", 100) * 1.1 for d in red_data_list)
+        red_def = sum(d.get("defense", 10) * 8 + 20 for d in red_data_list)
+        red_hp = int(sum(400 + d.get("defense", 10) * 30 + d.get("power", 100) * 2.5 for d in red_data_list))
+        red_max_hp = red_hp
+
+        blue_power = sum(d.get("power", 100) for d in blue_data_list)
+        blue_atk = sum(d.get("attack", 10) * 12 + d.get("power", 100) * 1.1 for d in blue_data_list)
+        blue_def = sum(d.get("defense", 10) * 8 + 20 for d in blue_data_list)
+        blue_hp = int(sum(400 + d.get("defense", 10) * 30 + d.get("power", 100) * 2.5 for d in blue_data_list))
+        blue_max_hp = blue_hp
+
+        # إعداد استعراض بيانات ومعدلات اللاعبين الشاملة قبل بدء المعركة
+        stats_text_red = ""
+        for u, d in zip(self.team_red, red_data_list):
+            stats_text_red += f"🔴 **{d.get('name')}** `[{d.get('custom_title')}]`\n" \
+                             f"├ ⚡ القوة: `{d.get('power', 0):,}` | 🗡️ هجوم: `{d.get('attack', 0)}` | 🛡️ دفاع: `{d.get('defense', 0)}`\n" \
+                             f"└ 💥 ضربات قاتلة: `{d.get('critical', 0)}%` | 🎒 العتاد: `{len(d.get('inventory', []))}` قطعة\n\n"
+
+        stats_text_blue = ""
+        for u, d in zip(self.team_blue, blue_data_list):
+            stats_text_blue += f"🔵 **{d.get('name')}** `[{d.get('custom_title')}]`\n" \
+                              f"├ ⚡ القوة: `{d.get('power', 0):,}` | 🗡️ هجوم: `{d.get('attack', 0)}` | 🛡️ دفاع: `{d.get('defense', 0)}`\n" \
+                              f"└ 💥 ضربات قاتلة: `{d.get('critical', 0)}%` | 🎒 العتاد: `{len(d.get('inventory', []))}` قطعة\n\n"
+
+        banter = random.choice(PVP_BANTER)
+
+        embed_battle = discord.Embed(
+            title=f"🔥 انطلاق الملحمة — معركة [{self.mode}] الحية!",
+            description=f"⚔️ **اكتمل النصاب ودخل المقاتلون الساحة!**\n\n"
+                        f"💬 **{self.team_red[0].display_name}:** \"{banter[0]}\"\n"
+                        f"💬 **{self.team_blue[0].display_name}:** \"{banter[1]}\"\n"
+                        "━"*32,
+            color=discord.Color.red()
+        )
+        embed_battle.add_field(name="🔴 معدات وقوة الفريق الأحمر", value=stats_text_red, inline=False)
+        embed_battle.add_field(name="🔵 معدات وقوة الفريق الأزرق", value=stats_text_blue, inline=False)
+        embed_battle.add_field(name="🩸 شريط دماء الفريق الأحمر", value=render_hp_bar(red_hp, red_max_hp), inline=True)
+        embed_battle.add_field(name="🩸 شريط دماء الفريق الأزرق", value=render_hp_bar(blue_hp, blue_max_hp), inline=True)
+
+        message = await interaction.channel.send(embed=embed_battle)
+
+        # تبادل الضربات والجولات الواقعية
+        logs = []
+        round_cnt = 1
+
+        while red_hp > 0 and blue_hp > 0 and round_cnt <= 6:
+            await asyncio.sleep(2.0)
+
+            # هجوم الفريق الأحمر
+            dmg_to_blue = max(20, int(red_atk - (blue_def * 0.35)) + random.randint(-20, 35))
+            if random.random() < 0.25:
+                dmg_to_blue = int(dmg_to_blue * 1.7)
+                logs.append(f"💥 **ضربة ساحقة!** الفريق الأحمر يوجه `{dmg_to_blue:,}` ضرر مرعب!")
+            else:
+                logs.append(f"🔴 الفريق الأحمر يسدد هجوماً مباغتاً بـ `{dmg_to_blue:,}` ضرر!")
+            
+            blue_hp -= dmg_to_blue
+            if blue_hp <= 0:
+                blue_hp = 0
+                break
+
+            # هجوم الفريق الأزرق
+            dmg_to_red = max(20, int(blue_atk - (red_def * 0.35)) + random.randint(-20, 35))
+            if random.random() < 0.25:
+                dmg_to_red = int(dmg_to_red * 1.7)
+                logs.append(f"💥 **ضربة قاضية!** الفريق الأزرق يمزق دروع الخصم بـ `{dmg_to_red:,}` ضرر!")
+            else:
+                logs.append(f"🔵 الفريق الأزرق يرد بهجوم مضاد بـ `{dmg_to_red:,}` ضرر!")
+
+            red_hp -= dmg_to_red
+            if red_hp <= 0:
+                red_hp = 0
+                break
+
+            embed_battle.set_field_at(2, name="🩸 شريط دماء الفريق الأحمر", value=render_hp_bar(red_hp, red_max_hp), inline=True)
+            embed_battle.set_field_at(3, name="🩸 شريط دماء الفريق الأزرق", value=render_hp_bar(blue_hp, blue_max_hp), inline=True)
+            embed_battle.set_footer(text=f"الجولة {round_cnt} • " + (logs[-1] if logs else ""))
+            await message.edit(embed=embed_battle)
+            round_cnt += 1
+
+        # تحديد الفائز توزيع الجوائز
+        if red_hp > blue_hp:
+            winning_team = "🔴 الفريق الأحمر"
+            winners = self.team_red
+            losers = self.team_blue
+            win_color = discord.Color.red()
+        else:
+            winning_team = "🔵 الفريق الأزرق"
+            winners = self.team_blue
+            losers = self.team_red
+            win_color = discord.Color.blue()
+
+        gold_reward = 3000 * self.team_size
+        power_reward = 50 * self.team_size
+
+        # إضافة الجوائز والقتلات للفائزين
+        for u in winners:
+            users_col.update_one(
+                {"user_id": str(u.id)},
+                {"$inc": {"balance": gold_reward, "power": power_reward, "kills": 1}}
+            )
+
+        embed_final = discord.Embed(
+            title=f"👑 انتصار مجيد في معركة [{self.mode}]!",
+            description=f"🏆 **الفائز بالمعركة:** {winning_team}\n"
+                        f"👥 **أبطال النصر:** " + ", ".join([u.mention for u in winners]) + "\n\n"
+                        f"🎁 **مكافآت الانتصار لكل بطل:**\n"
+                        f"• 🪙 **ذهب نصر:** `+{gold_reward:,}`\n"
+                        f"• ⚡ **طاقة قتالية:** `+{power_reward}`\n"
+                        f"• 💀 **تسجيل قتلة جديدة** في سجل قاهر اللاعبين!\n"
+                        "━"*32,
+            color=win_color
+        )
+        embed_final.add_field(name="📜 مجريات الجولات الأخيرة", value="\n".join(logs[-4:]), inline=False)
+        await message.edit(embed=embed_final)
+
+class BattleModeSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="مواجهة فردية 1v1", value="1v1", description="قتال لاعب ضد لاعب حماسي مباشر", emoji="⚔️"),
+            discord.SelectOption(label="معركة ثنائية 2v2", value="2v2", description="قتال ثنائي بين فريقين (4 لاعبين)", emoji="🛡️"),
+            discord.SelectOption(label="ملحمة ثلاثية 3v3", value="3v3", description="معركة جيوش مصغرة (6 لاعبين)", emoji="🔥")
+        ]
+        super().__init__(placeholder="⚔️ اختر نمط المعركة لإنشاء صالة الانتظار...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
+        if not is_user_registered(user_id):
+            return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
+
+        mode = self.values[0]
+        lobby_view = BattleLobbyView(mode, interaction.user)
+        
+        await interaction.response.send_message(
+            embed=lobby_view.get_embed(),
+            view=lobby_view,
+            ephemeral=False
+        )
+
+class BattleMainView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(BattleModeSelect())
+
+# ================== 🏆 8. نظام الليدربورد والترتيب الفخم (Leaderboard System) ==================
 
 def get_prestigious_badge(rank_num: int) -> str:
     badges = {
@@ -801,108 +1035,4 @@ class LeaderboardView(discord.ui.View):
         self.add_item(LeaderboardSelect())
 
 
-# ================== تسجيل وتنسيق الأوامر ==================
-@bot.event
-async def on_ready():
-    try:
-        synced = await bot.tree.sync()
-        print(f"✨ تم مزامنة {len(synced)} أمر بنجاح!")
-    except Exception as e:
-        print(f"❌ خطأ أثناء المزامنة: {e}")
-    print(f"👑 البوت يعمل الآن باسم: {bot.user}")
-
-@bot.tree.command(name="تسجيل", description="📜 فتح استمارة التسجيل في الإمبراطورية")
-async def register_command(interaction: discord.Interaction):
-    if is_user_registered(interaction.user.id):
-        return await interaction.response.send_message("⚠️ أنت مسجل بالفعل!", ephemeral=True)
-    await interaction.response.send_modal(RegisterModal())
-
-@bot.tree.command(name="المتجر_العام", description="🏛️ فتح متجر الإمبراطورية العام لشراء العتاد بالذهب")
-async def general_store(interaction: discord.Interaction):
-    if not is_user_registered(interaction.user.id):
-        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
-    
-    embed = discord.Embed(
-        title="🏛️ متجر الإمبراطورية الملكي العام",
-        description="تصفح العتاد والشراء بالذهب 🪙. اختر قسم العتاد المطلوبة من القائمة المنسدلة أسفله (25 قطعة لكل فئة).",
-        color=discord.Color.gold()
-    )
-    await interaction.response.send_message(embed=embed, view=GeneralStoreView(), ephemeral=False)
-
-@bot.tree.command(name="المتجر_المظلم", description="👁️ دخول سوق الظلال السري لشراء العتاد الأسطوري بالألماس")
-async def dark_store(interaction: discord.Interaction):
-    if not is_user_registered(interaction.user.id):
-        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
-    
-    embed = discord.Embed(
-        title="🔮 المتجر المظلم المحرم — Dark Sanctuary",
-        description="سوق الأسلحة والعتاد المحرمة بالألماس 💎 (25 قطعة أسطورية لكل قسم).",
-        color=discord.Color.from_rgb(20, 0, 35)
-    )
-    await interaction.response.send_message(embed=embed, view=DarkStoreView(), ephemeral=False)
-
-@bot.tree.command(name="تطوير_المعدلات", description="⚡ فتح مذبح تطوير المعدلات القتالية كسر الحدود إلى المليارات")
-async def upgrade_stats_command(interaction: discord.Interaction):
-    user_id = str(interaction.user.id)
-    if not is_user_registered(user_id):
-        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
-
-    embed = discord.Embed(title="✨ مذبح الصقل وتطوير القوى الإمبراطورية", description="تطوير المعدلات القتالية بلا حدود حتى المليارات.", color=discord.Color.red())
-    await interaction.response.send_message(embed=embed, view=StatsUpgradeView(), ephemeral=False)
-
-@bot.tree.command(name="الطوابق", description="🏰 فتح بوابات برج الـ 500 طابق والبدء بالمغامرة التلقائية وشراء المعدات")
-async def tower_floors_command(interaction: discord.Interaction):
-    user_id = str(interaction.user.id)
-    if not is_user_registered(user_id):
-        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
-
-    user_data = users_col.find_one({"user_id": user_id})
-    current_floor = user_data.get("max_floor", 1)
-
-    embed = discord.Embed(
-        title="🏰 عرش البرج العظيم — بوابات الـ 500 طابق",
-        description=f"✨ **مرحباً بك يا كابتن `{user_data.get('name')}`!**\n"
-                    f"• 🏢 **طابقك الحالي المستهدف:** `الطابق [{current_floor}/500]`\n"
-                    f"• ⚡ **طاقاتك القتالية:** `{user_data.get('power', 0):,}` ⚡\n"
-                    f"• 🪙 **رصيد المحفظة:** `{user_data.get('balance', 0):,}` 🪙 | 💎 `{user_data.get('diamonds', 0):,}`\n\n"
-                    "اختر الخيار المطلوب من القائمة المنسدلة للبدء فوراً بالقتال والتنقل بين المتاجر وتحديث معداتك!",
-        color=discord.Color.dark_green()
-    )
-    if interaction.guild and interaction.guild.icon:
-        embed.set_thumbnail(url=interaction.guild.icon.url)
-        
-    embed.set_footer(text="برج المغامرات الإمبراطوري • القتال والتنقل تلقائي")
-    await interaction.response.send_message(embed=embed, view=TowerMainView(), ephemeral=False)
-
-@bot.tree.command(name="الليدربورد", description="👑 عرض قاعة العظماء وتصنيفات الشرف التلقائية بالإمبراطورية")
-async def leaderboard_command(interaction: discord.Interaction):
-    if not is_user_registered(interaction.user.id):
-        return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
-
-    embed = discord.Embed(
-        title="👑 قاعة العظماء وليدربورد الإمبراطورية الفخم",
-        description="✨ **مرحباً بك في مجلس الشرف المباشر!**\n"
-                    "اختر التصنيف المطلوب من القائمة المنسدلة بالأسفل لعرض ترتيب العظماء تلقائياً بحسب إحصائيات قاعدة البيانات المباشرة.",
-        color=discord.Color.gold()
-    )
-    if interaction.guild and interaction.guild.icon:
-        embed.set_thumbnail(url=interaction.guild.icon.url)
-    
-    embed.add_field(
-        name="📜 التصنيفات المتاحة للترتيب التلقائي:",
-        value="• 🪙 **أغنى شخص:** (مجموع الذهب بالبنك والمحفظة)\n"
-              "• ⚡ **أقوى شخص:** (إجمالي الطاقة القتالية)\n"
-              "• 💀 **قاهر اللاعبين:** (عدد الانتصارات والقتلات)\n"
-              "• 🗡️ **الأسلحة الإمبراطورية:** (عدد معدات المتجر العام)\n"
-              "• 🔮 **الأسلحة المحرمة:** (ترسانة المتجر المظلم)\n"
-              "• 👑 **الألقاب:** (أصحاب الرتب والألقاب الملكية)\n"
-              "• 🏰 **الطوابق:** (أعلى طابق تم اختراقه بالبرج)\n"
-              "• 🛡️ **أقوى النقابات:** (ترتيب التحالفات العسكرية)",
-        inline=False
-    )
-    embed.set_footer(text="الإمبراطورية العظمى • التحديث تلقائي ومباشر")
-    await interaction.response.send_message(embed=embed, view=LeaderboardView(), ephemeral=False)
-
-# --- تشغيل البوت ---
-if __name__ == "__main__":
-    bot.run(DISCORD_TOKEN)
+# =================
