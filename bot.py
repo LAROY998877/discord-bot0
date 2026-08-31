@@ -14,7 +14,6 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
 # الآيدي الخاص بالمطور الرئيسي والمالك للإمبراطورية
 MAIN_DEV_ID = "1103985971638325269"
 
-# ربط قاعدة البيانات مع تحديد مهلة اتصال لمنع تعليق الاستجابة
 try:
     client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
     db = client["game_database"]
@@ -28,26 +27,63 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ================== دالة التحقق من التسجيل والمطورين ==================
-def is_user_registered(user_id: str) -> bool:
+# ================== دوال مساعدة معزولة لقاعدة البيانات ==================
+def db_get_user(user_id: str) -> dict:
+    try:
+        return users_col.find_one({"user_id": str(user_id)}) or {}
+    except Exception as e:
+        print(f"❌ خطأ DB (get_user): {e}")
+        return {}
+
+def db_is_registered(user_id: str) -> bool:
     try:
         return users_col.find_one({"user_id": str(user_id)}) is not None
     except Exception as e:
-        print(f"❌ خطأ فحص التسجيل: {e}")
+        print(f"❌ خطأ DB (is_registered): {e}")
         return False
 
-def is_dev(user_id: str) -> bool:
+def db_is_dev(user_id: str) -> bool:
     try:
         str_id = str(user_id)
         if str_id == MAIN_DEV_ID:
             return True
-        user_data = users_col.find_one({"user_id": str_id})
-        if user_data and user_data.get("is_dev", False):
+        u_data = users_col.find_one({"user_id": str_id})
+        if u_data and u_data.get("is_dev", False):
             return True
         return devs_col.find_one({"user_id": str_id}) is not None
     except Exception as e:
-        print(f"❌ خطأ فحص صلاحيات المطور: {e}")
+        print(f"❌ خطأ DB (is_dev): {e}")
         return str(user_id) == MAIN_DEV_ID
+
+def db_update_user(user_id: str, update_doc: dict):
+    try:
+        users_col.update_one({"user_id": str(user_id)}, update_doc)
+    except Exception as e:
+        print(f"❌ خطأ DB (update_user): {e}")
+
+def db_insert_user(user_doc: dict):
+    try:
+        users_col.insert_one(user_doc)
+    except Exception as e:
+        print(f"❌ خطأ DB (insert_user): {e}")
+
+def db_add_dev(user_id: str, added_by: str):
+    try:
+        devs_col.update_one(
+            {"user_id": str(user_id)},
+            {"$set": {"added_by": str(added_by), "added_at": datetime.now(timezone.utc)}},
+            upsert=True
+        )
+        users_col.update_one({"user_id": str(user_id)}, {"$set": {"is_dev": True}})
+    except Exception as e:
+        print(f"❌ خطأ DB (add_dev): {e}")
+
+def db_remove_dev(user_id: str):
+    try:
+        devs_col.delete_one({"user_id": str(user_id)})
+        users_col.update_one({"user_id": str(user_id)}, {"$set": {"is_dev": False}})
+    except Exception as e:
+        print(f"❌ خطأ DB (remove_dev): {e}")
 
 # ================== 🏰 قاعدة بيانات المتاجر المحدثة ==================
 CATEGORIES = ["خوذة", "درع", "بنطال", "حذاء", "سيف", "مطرقة", "خنجر", "عصا سحرية"]
@@ -120,7 +156,7 @@ class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل 
 
     async def on_submit(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
-        registered = await asyncio.to_thread(is_user_registered, user_id)
+        registered = await asyncio.to_thread(db_is_registered, user_id)
         if registered:
             return await interaction.response.send_message("❌ أنت مسجل بالفعل في الإمبراطورية!", ephemeral=True)
 
@@ -158,7 +194,7 @@ class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل 
             "critical": 10, "magic": 10, "intelligence": 10, "defense": 10
         }
         
-        await asyncio.to_thread(users_col.insert_one, new_user)
+        await asyncio.to_thread(db_insert_user, new_user)
 
         embed_success = discord.Embed(title="👑 أهلاً بك في عرش الإمبراطورية!", description="تمت معالجة وثيقة هويتك بنجاح.", color=discord.Color.gold())
         embed_success.add_field(name="🪪 الاسم", value=f"`{self.name_input.value.strip()}`", inline=True)
@@ -187,19 +223,15 @@ class GeneralItemSelect(discord.ui.Select):
         selected_id = self.values[0]
         selected_item = next(item for item in GEAR_DATA[self.category] if item["id"] == selected_id)
         
-        user_data = await asyncio.to_thread(users_col.find_one, {"user_id": user_id}) or {}
+        user_data = await asyncio.to_thread(db_get_user, user_id)
         if user_data.get("balance", 0) < selected_item["price"]:
             return await interaction.response.send_message(f"❌ رصيدك الذهبي لا يكفي! تحتاج `{selected_item['price']:,}` 🪙", ephemeral=True)
         
-        def _update():
-            users_col.update_one(
-                {"user_id": user_id},
-                {
-                    "$inc": {"balance": -selected_item["price"], "power": selected_item["power"]},
-                    "$push": {"inventory": selected_item["name"]}
-                }
-            )
-        await asyncio.to_thread(_update)
+        update_doc = {
+            "$inc": {"balance": -selected_item["price"], "power": selected_item["power"]},
+            "$push": {"inventory": selected_item["name"]}
+        }
+        await asyncio.to_thread(db_update_user, user_id, update_doc)
 
         embed_bought = discord.Embed(
             title="🛍️ صفقة ناجحة — المتجر الإمبراطوري",
@@ -251,26 +283,22 @@ class DarkItemSelect(discord.ui.Select):
         selected_id = self.values[0]
         selected_item = next(item for item in GEAR_DATA[self.category] if item["id"] == selected_id)
         
-        user_data = await asyncio.to_thread(users_col.find_one, {"user_id": user_id}) or {}
+        user_data = await asyncio.to_thread(db_get_user, user_id)
         if user_data.get("diamonds", 0) < selected_item["price"]:
             return await interaction.response.send_message(f"❌ ألماس غير كافٍ! تحتاج إلى `{selected_item['price']:,}` 💎 ألماس.", ephemeral=True)
         
-        def _update():
-            users_col.update_one(
-                {"user_id": user_id},
-                {
-                    "$inc": {"diamonds": -selected_item["price"], "power": selected_item["power"]},
-                    "$push": {"inventory": selected_item["name"]}
-                }
-            )
-        await asyncio.to_thread(_update)
+        update_doc = {
+            "$inc": {"diamonds": -selected_item["price"], "power": selected_item["power"]},
+            "$push": {"inventory": selected_item["name"]}
+        }
+        await asyncio.to_thread(db_update_user, user_id, update_doc)
 
         embed_buy = discord.Embed(
             title="⚡ امتلاك عتاد محرم أسطوري!",
             description=f"لقد حصلت على **{selected_item['name']}** برتبة **[{selected_item['rank']}]**!",
             color=discord.Color.dark_purple()
         )
-        await interaction.response.send_message(embed=embed_buy, ephemeral=True)
+        await interaction.response.send_message(embed_buy, ephemeral=True)
 
 class DarkCategorySelect(discord.ui.Select):
     def __init__(self):
@@ -331,17 +359,13 @@ class StatUpgradeModal(discord.ui.Modal):
             return await interaction.response.send_message("❌ يجب أن تكون النقاط أكبر من 0!", ephemeral=True)
 
         total_cost = points * self.stat_info["cost"]
-        user_data = await asyncio.to_thread(users_col.find_one, {"user_id": user_id}) or {}
+        user_data = await asyncio.to_thread(db_get_user, user_id)
 
         if user_data.get("balance", 0) < total_cost:
             return await interaction.response.send_message(f"❌ لا تملك ذهبًا كافيًا! التكلفة: `{total_cost:,}` 🪙", ephemeral=True)
 
-        def _update():
-            users_col.update_one(
-                {"user_id": user_id},
-                {"$inc": {"balance": -total_cost, self.stat_key: points, "power": points * 10}}
-            )
-        await asyncio.to_thread(_update)
+        update_doc = {"$inc": {"balance": -total_cost, self.stat_key: points, "power": points * 10}}
+        await asyncio.to_thread(db_update_user, user_id, update_doc)
 
         embed_success = discord.Embed(
             title=f"🔥 انطلاق القوة القتالية! — {self.stat_info['name']}",
@@ -415,7 +439,7 @@ def get_floor_enemy_info(floor_num: int) -> dict:
 
 async def process_floor_battle(interaction: discord.Interaction, floor_num: int, is_boss_only: bool = False):
     user_id = str(interaction.user.id)
-    user_data = await asyncio.to_thread(users_col.find_one, {"user_id": user_id}) or {}
+    user_data = await asyncio.to_thread(db_get_user, user_id)
 
     if floor_num > 500:
         if not interaction.response.is_done():
@@ -498,9 +522,7 @@ async def process_floor_battle(interaction: discord.Interaction, floor_num: int,
             update_doc["$push"] = {"inventory": dropped_gear["name"]}
             update_doc["$inc"]["power"] += dropped_gear["power"]
 
-        def _update_win():
-            users_col.update_one({"user_id": user_id}, update_doc)
-        await asyncio.to_thread(_update_win)
+        await asyncio.to_thread(db_update_user, user_id, update_doc)
 
         embed_win = discord.Embed(
             title=f"🎉 **انتصار ساحق في الطابق [{floor_num}]!**",
@@ -559,7 +581,7 @@ class TowerMainSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
-        user_data = await asyncio.to_thread(users_col.find_one, {"user_id": user_id}) or {}
+        user_data = await asyncio.to_thread(db_get_user, user_id)
         val = self.values[0]
 
         if val == "start_adv":
@@ -609,7 +631,7 @@ class BattleLobbyView(discord.ui.View):
 
     @discord.ui.button(label="انضمام للفريق الأحمر 🔴", style=discord.ButtonStyle.danger)
     async def join_red(self, interaction: discord.Interaction, button: discord.ui.Button):
-        reg = await asyncio.to_thread(is_user_registered, str(interaction.user.id))
+        reg = await asyncio.to_thread(db_is_registered, str(interaction.user.id))
         if not reg:
             return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
         if interaction.user in self.team_red or interaction.user in self.team_blue:
@@ -624,7 +646,7 @@ class BattleLobbyView(discord.ui.View):
 
     @discord.ui.button(label="انضمام للفريق الأزرق 🔵", style=discord.ButtonStyle.primary)
     async def join_blue(self, interaction: discord.Interaction, button: discord.ui.Button):
-        reg = await asyncio.to_thread(is_user_registered, str(interaction.user.id))
+        reg = await asyncio.to_thread(db_is_registered, str(interaction.user.id))
         if not reg:
             return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
         if interaction.user in self.team_red or interaction.user in self.team_blue:
@@ -639,8 +661,8 @@ class BattleLobbyView(discord.ui.View):
 
     async def start_pvp_battle(self, interaction: discord.Interaction):
         def _get_data():
-            r_data = [users_col.find_one({"user_id": str(u.id)}) or {} for u in self.team_red]
-            b_data = [users_col.find_one({"user_id": str(u.id)}) or {} for u in self.team_blue]
+            r_data = [db_get_user(str(u.id)) for u in self.team_red]
+            b_data = [db_get_user(str(u.id)) for u in self.team_blue]
             return r_data, b_data
 
         red_data_list, blue_data_list = await asyncio.to_thread(_get_data)
@@ -687,7 +709,7 @@ class BattleLobbyView(discord.ui.View):
 
         def _award_winners():
             for u in winners:
-                users_col.update_one({"user_id": str(u.id)}, {"$inc": {"balance": gold_reward, "power": 50, "kills": 1}})
+                db_update_user(str(u.id), {"$inc": {"balance": gold_reward, "power": 50, "kills": 1}})
         await asyncio.to_thread(_award_winners)
 
         embed_final = discord.Embed(
@@ -708,7 +730,7 @@ class BattleModeSelect(discord.ui.Select):
         super().__init__(placeholder="⚔️ اختر نمط المعركة...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        reg = await asyncio.to_thread(is_user_registered, str(interaction.user.id))
+        reg = await asyncio.to_thread(db_is_registered, str(interaction.user.id))
         if not reg:
             return await interaction.response.send_message("❌ يجب التسجيل أولاً عبر أمر `/تسجيل`!", ephemeral=True)
         lobby = BattleLobbyView(self.values[0], interaction.user)
@@ -909,12 +931,8 @@ class DevTransferCoinsModal(discord.ui.Modal, title="🪙 تحويل عملات 
         except ValueError:
             return await interaction.response.send_message("❌ يرجى كتابة أرقام صحيحة!", ephemeral=True)
 
-        def _update():
-            users_col.update_one(
-                {"user_id": str(self.target_user.id)},
-                {"$inc": {"balance": max(0, gold), "diamonds": max(0, diamonds)}}
-            )
-        await asyncio.to_thread(_update)
+        update_doc = {"$inc": {"balance": max(0, gold), "diamonds": max(0, diamonds)}}
+        await asyncio.to_thread(db_update_user, str(self.target_user.id), update_doc)
 
         embed = discord.Embed(
             title="🎁 تحويل إداري ناجح!",
@@ -938,16 +956,11 @@ class DevGiftGearModal(discord.ui.Modal, title="🎁 إهداء عتاد وسل�
             return await interaction.response.send_message("❌ يرجى كتابة رقم صحيح للطاقة!", ephemeral=True)
 
         gear_name = self.gear_name_input.value.strip()
-
-        def _update():
-            users_col.update_one(
-                {"user_id": str(self.target_user.id)},
-                {
-                    "$push": {"inventory": gear_name},
-                    "$inc": {"power": power_boost}
-                }
-            )
-        await asyncio.to_thread(_update)
+        update_doc = {
+            "$push": {"inventory": gear_name},
+            "$inc": {"power": power_boost}
+        }
+        await asyncio.to_thread(db_update_user, str(self.target_user.id), update_doc)
 
         embed = discord.Embed(
             title="🎁 إهداء عتاد إداري أسطوري!",
@@ -981,7 +994,7 @@ class DevActionSelectMenu(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         try:
-            dev_check = await asyncio.to_thread(is_dev, str(interaction.user.id))
+            dev_check = await asyncio.to_thread(db_is_dev, str(interaction.user.id))
             if not dev_check:
                 return await interaction.response.send_message("❌ **عذراً!** لا تملك صلاحية مطور!", ephemeral=True)
 
@@ -989,15 +1002,13 @@ class DevActionSelectMenu(discord.ui.Select):
             action = self.values[0]
 
             if action == "infinite_coins":
-                reg_check = await asyncio.to_thread(is_user_registered, str(target_user.id))
+                reg_check = await asyncio.to_thread(db_is_registered, str(target_user.id))
                 if not reg_check:
                     return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
 
-                await asyncio.to_thread(
-                    users_col.update_one,
-                    {"user_id": str(target_user.id)},
-                    {"$set": {"balance": 999999999999, "diamonds": 999999999}}
-                )
+                update_doc = {"$set": {"balance": 999999999999, "diamonds": 999999999}}
+                await asyncio.to_thread(db_update_user, str(target_user.id), update_doc)
+
                 embed = discord.Embed(
                     title="♾️ شحن العملات اللانهائية!",
                     description=f"تم منح {target_user.mention} ثروة غير محدودة:\n• 🪙 **ذهب:** `999,999,999,999`\n• 💎 **ألماس:** `999,999,999`",
@@ -1006,23 +1017,19 @@ class DevActionSelectMenu(discord.ui.Select):
                 await interaction.response.send_message(embed=embed, ephemeral=False)
 
             elif action == "transfer_coins":
-                reg_check = await asyncio.to_thread(is_user_registered, str(target_user.id))
+                reg_check = await asyncio.to_thread(db_is_registered, str(target_user.id))
                 if not reg_check:
                     return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
                 await interaction.response.send_modal(DevTransferCoinsModal(target_user))
 
             elif action == "gift_gear":
-                reg_check = await asyncio.to_thread(is_user_registered, str(target_user.id))
+                reg_check = await asyncio.to_thread(db_is_registered, str(target_user.id))
                 if not reg_check:
                     return await interaction.response.send_message("❌ المستخدم المحدد غير مسجل باللعبة!", ephemeral=True)
                 await interaction.response.send_modal(DevGiftGearModal(target_user))
 
             elif action == "add_dev":
                 user_id = str(target_user.id)
-                target_is_dev = await asyncio.to_thread(is_dev, user_id)
+                target_is_dev = await asyncio.to_thread(db_is_dev, user_id)
                 if target_is_dev:
-                    return await interaction.response.send_message(f"⚠️ {target_user.mention} مطور بالفعل!", ephemeral=True)
-
-                def _add():
-                    devs_col.update_one({"user_id": user_id}, {"$set": {"added_by": str(interaction.user.id), "added_at": datetime.now(timezone.utc)}}, upsert=True)
-                    users_col.update_one({"user_id": user_id}, {"$set": {"is_dev"
+                    return await interaction.re
