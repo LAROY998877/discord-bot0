@@ -42,6 +42,10 @@ for cat in CATEGORIES:
         GEAR_DATA[cat].append(d_item)
         ALL_DARK_ITEMS.append(d_item)
 
+# خرائط حساب قوة المعدات لليدربورد تلقائياً
+GEN_ITEM_POWER_MAP = {it["name"]: it["power"] for it in ALL_GENERAL_ITEMS}
+DARK_ITEM_POWER_MAP = {it["name"]: it["power"] for it in ALL_DARK_ITEMS}
+
 class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل في الإمبراطورية"):
     name_in = discord.ui.TextInput(label="الاسم", placeholder="اسم الشخصية...", min_length=2, max_length=30)
     age_in = discord.ui.TextInput(label="العمر", placeholder="مثال: 25", min_length=1, max_length=4)
@@ -256,32 +260,73 @@ class TowerMainView(discord.ui.View):
         super().__init__()
         self.add_item(TowerMainSelect())
 
+# ==================== الليدربورد المُعدل بالخيارات الـ 7 الجديدة ====================
+
 class LeaderboardSelect(discord.ui.Select):
     def __init__(self):
         opts = [
-            discord.SelectOption(label="الأغنى", value="rich", emoji="🪙"),
-            discord.SelectOption(label="الأقوى", value="power", emoji="⚡"),
-            discord.SelectOption(label="غزو الطوابق", value="floors", emoji="🏰")
+            discord.SelectOption(label="ترتيب اقوى اللاعبين", value="top_power", emoji="⚡", description="حسب إجمالي الطاقة والقوة"),
+            discord.SelectOption(label="ترتيب اغني اللاعبين", value="top_rich", emoji="🪙", description="حسب إجمالي الذهب بالكاش والبنك"),
+            discord.SelectOption(label="ترتيب قاهر اللاعبين", value="top_kills", emoji="🩸", description="حسب عدد القتلات والإطاحات"),
+            discord.SelectOption(label="ترتيب المعدات العادية", value="top_gen_gear", emoji="🛡️", description="حسب قوة العتاد العادي الممتلك"),
+            discord.SelectOption(label="ترتيب المعدات المحرمة", value="top_dark_gear", emoji="🔮", description="حسب قوة عتاد الظلال المحرم"),
+            discord.SelectOption(label="ترتيب غزو الطوابق", value="top_floors", emoji="🏰", description="حسب أعلى طابق تم الوصول إليه"),
+            discord.SelectOption(label="ترتيب جامع الالقاب", value="top_titles", emoji="👑", description="حسب عدد الألقاب المكتسبة")
         ]
-        super().__init__(placeholder="🏆 اختر التصنيف...", options=opts)
+        super().__init__(placeholder="🏆 اختر تصنيف الليدربورد...", options=opts)
 
     async def callback(self, ctx: discord.Interaction):
         v = self.values[0]
         all_u = list(users_col.find())
-        if v == "rich":
+
+        if v == "top_power":
+            all_u.sort(key=lambda x: x.get("power", 0), reverse=True)
+            txt = "\n".join([f"#{i+1} **{u.get('name','مقاتل')}** — ⚡ `{u.get('power',0):,}` طاقة" for i, u in enumerate(all_u[:10])])
+            title = "⚡ ترتيب أقوى اللاعبين"
+
+        elif v == "top_rich":
             all_u.sort(key=lambda x: x.get("balance",0) + x.get("bank",0), reverse=True)
-            txt = "\n".join([f"#{i+1} **{u.get('name','مقاتل')}** — 🪙 `{u.get('balance',0):,}`" for i, u in enumerate(all_u[:10])])
-            title = "🪙 ترتيب الأغنى"
-        elif v == "power":
-            all_u.sort(key=lambda x: x.get("power",0), reverse=True)
-            txt = "\n".join([f"#{i+1} **{u.get('name','مقاتل')}** — ⚡ `{u.get('power',0):,}`" for i, u in enumerate(all_u[:10])])
-            title = "⚡ ترتيب الأقوى"
-        else:
+            txt = "\n".join([f"#{i+1} **{u.get('name','مقاتل')}** — 🪙 `{u.get('balance',0)+u.get('bank',0):,}` ذهب" for i, u in enumerate(all_u[:10])])
+            title = "🪙 ترتيب أغنى اللاعبين"
+
+        elif v == "top_kills":
+            all_u.sort(key=lambda x: x.get("kills",0), reverse=True)
+            txt = "\n".join([f"#{i+1} **{u.get('name','مقاتل')}** — 🩸 `{u.get('kills',0):,}` قتلة" for i, u in enumerate(all_u[:10])])
+            title = "🩸 ترتيب قاهر اللاعبين"
+
+        elif v == "top_gen_gear":
+            def get_gen_power(u):
+                inv = u.get("inventory", [])
+                return sum(GEN_ITEM_POWER_MAP.get(item, 0) for item in inv)
+
+            all_u.sort(key=get_gen_power, reverse=True)
+            txt = "\n".join([f"#{i+1} **{u.get('name','مقاتل')}** — 🛡️ `{get_gen_power(u):,}` قوة عتاد عادي" for i, u in enumerate(all_u[:10])])
+            title = "🛡️ ترتيب أقوى اللاعبين (المعدات العادية)"
+
+        elif v == "top_dark_gear":
+            def get_dark_power(u):
+                inv = u.get("inventory", [])
+                return sum(DARK_ITEM_POWER_MAP.get(item, 0) for item in inv)
+
+            all_u.sort(key=get_dark_power, reverse=True)
+            txt = "\n".join([f"#{i+1} **{u.get('name','مقاتل')}** — 🔮 `{get_dark_power(u):,}` قوة عتاد محرم" for i, u in enumerate(all_u[:10])])
+            title = "🔮 ترتيب أقوى اللاعبين (المعدات المحرمة)"
+
+        elif v == "top_floors":
             all_u.sort(key=lambda x: x.get("max_floor",1), reverse=True)
             txt = "\n".join([f"#{i+1} **{u.get('name','مقاتل')}** — 🏢 الطابق `{u.get('max_floor',1)}`" for i, u in enumerate(all_u[:10])])
-            title = "🏰 ترتيب الطوابق"
+            title = "🏰 ترتيب غزو الطوابق"
 
-        emb = discord.Embed(title=title, description=txt or "لا توجد بيانات", color=discord.Color.gold())
+        elif v == "top_titles":
+            def get_title_count(u):
+                t = u.get("titles", [])
+                return len(t) if isinstance(t, list) else 0
+
+            all_u.sort(key=get_title_count, reverse=True)
+            txt = "\n".join([f"#{i+1} **{u.get('name','مقاتل')}** — 👑 `{get_title_count(u):,}` ألقاب" for i, u in enumerate(all_u[:10])])
+            title = "👑 ترتيب جامع الألقاب"
+
+        emb = discord.Embed(title=title, description=txt or "لا توجد بيانات مسجلة حالياً", color=discord.Color.gold())
         vw = discord.ui.View()
         vw.add_item(LeaderboardSelect())
         await ctx.response.edit_message(embed=emb, view=vw)
@@ -513,12 +558,12 @@ async def tower_floors_command(ctx: discord.Interaction):
     emb = discord.Embed(title="🏰 برج الطوابق الـ 500", description=f"• الطابق الحالي: `[{u.get('max_floor', 1)}/500]`\n• الطاقة: `{u.get('power', 0):,}` ⚡", color=discord.Color.green())
     await ctx.response.send_message(embed=emb, view=TowerMainView())
 
-@bot.tree.command(name="الليدربورد", description="👑 عرض الترتيب")
+@bot.tree.command(name="الليدربورد", description="👑 عرض قاعة العظماء والتصنيفات")
 async def leaderboard_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
         await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
         return
-    await ctx.response.send_message(embed=discord.Embed(title="👑 قاعة العظماء", color=discord.Color.gold()), view=LeaderboardView())
+    await ctx.response.send_message(embed=discord.Embed(title="👑 قاعة العظماء — اختر التصنيف من القائمة بالأسفل", color=discord.Color.gold()), view=LeaderboardView())
 
 @bot.tree.command(name="لوحة_المطور", description="👑 لوحة التحكم للمطورين")
 async def dev_panel_command(ctx: discord.Interaction):
@@ -598,8 +643,6 @@ async def daily_command(ctx: discord.Interaction):
     dia_reward = 5
     users_col.update_one({"user_id": uid}, {"$inc": {"balance": gold_reward, "diamonds": dia_reward}, "$set": {"last_daily": now}})
     await ctx.response.send_message(f"🎉 تم استلام راتبك اليومي بنجاح!\n🪙 +`{gold_reward:,}` ذهب\n💎 +`{dia_reward}` ألماس")
-
-# ===== أمر البنك الإمبراطوري المتكامل =====
 
 @bot.tree.command(name="البنك_الإمبراطوري", description="🏛️ الخزنة الملكية، إدارة الثروات، القروض والتحويلات")
 async def imperial_bank_cmd(ctx: discord.Interaction):
