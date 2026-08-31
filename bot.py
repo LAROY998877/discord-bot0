@@ -14,6 +14,7 @@ client = MongoClient(MONGO_URI)
 db = client["discord_bot_db"]
 users_col = db["users"]
 devs_col = db["devs"]
+guilds_col = db["guilds"]  # مجموعة بيانات النقابات الجديدة
 
 class BotClient(commands.Bot):
     def __init__(self):
@@ -86,7 +87,6 @@ HEROES_DATA = {
     }
 }
 
-# توليد 25 قطعة لكل فئة في المتجر العادي والمظلم برمجيًا
 CATEGORIES = ["خوذة", "درع", "بنطال", "حذاء", "سيف", "مطرقة", "خنجر", "عصا سحرية"]
 
 def generate_normal_shop_items():
@@ -167,6 +167,160 @@ class DevAddBalanceModal(discord.ui.Modal, title="إضافة رصيد لعضو")
             await interaction.followup.send(f"✅ تم إضافة `{val:,}` 🪙 إلى محفظة المستخدم {self.target_member.mention} بنجاح!", ephemeral=True)
         except:
             await interaction.followup.send("❌ يرجى إدخال رقم صحيح للمبلغ!", ephemeral=True)
+
+# موديل إنشاء النقابة
+class CreateGuildModal(discord.ui.Modal, title="🏰 تأسيس نقابة إمبراطورية جديدة"):
+    guild_name = discord.ui.TextInput(label="اسم النقابة الأسطوري", placeholder="مثال: فرسان الظلام الأبدي", required=True, max_length=50)
+    guild_desc = discord.ui.TextInput(label="شعار أو وصف النقابة المختصر", placeholder="قوة، شجاعة، ولاء مطلق للإمبراطورية...", style=discord.TextStyle.paragraph, required=True, max_length=200)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        
+        # التحقق من تسجيل المستخدم
+        user_data = users_col.find_one({"user_id": user_id})
+        if not user_data:
+            return await interaction.followup.send("❌ لم تقم بالتسجيل بعد في قواعد البيانات! استخدم أمر `/تسجيل` أولاً للانطلاق.", ephemeral=True)
+        
+        # التحقق إذا كان العضو ينتمي لنقابة مسبقاً
+        if user_data.get("guild_id"):
+            return await interaction.followup.send("❌ أنت منضم بالفعل لنقابة أخرى! يجب عليك مغادرة نقابتك الحالية قبل تأسيس صرح جديد.", ephemeral=True)
+        
+        # التحقق من كلفة التأسيس (300 عملة عادية)
+        creation_cost = 300
+        balance = user_data.get("balance", 0)
+        if balance < creation_cost:
+            return await interaction.followup.send(f"❌ رصيدك الحالي (`{balance:,}` 🪙) لا يكفي لتأسيس نقابة! تكلفة التأسيس تتطلب `{creation_cost}` عملة ذهبية عادية.", ephemeral=True)
+        
+        # خصم الرسوم وتوليد بيانات النقابة
+        users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -creation_cost}})
+        
+        guild_id_str = f"guild_{user_id}_{random.randint(1000, 9999)}"
+        new_guild_data = {
+            "guild_id": guild_id_str,
+            "name": self.guild_name.value,
+            "description": self.guild_desc.value,
+            "leader_id": user_id,
+            "level": 1,
+            "treasury": 0,
+            "is_locked": False,
+            "members": [user_id],
+            "warehouse": []
+        }
+        
+        guilds_col.insert_one(new_guild_data)
+        users_col.update_one({"user_id": user_id}, {"$set": {"guild_id": guild_id_str}})
+        
+        embed = discord.Embed(
+            title="🌟 تم تأسيس النقابة بنجاح مذهل!",
+            description=f"لقد أشرق كوكب جديد في سماء الإمبراطورية! تم إعلان قيادة صرح **{self.guild_name.value}** بواسطة الزعيم العظيم {interaction.user.mention}.",
+            color=discord.Color.gold()
+        )
+        embed.add_field(name="📜 الوصف والعهد", value=self.guild_desc.value, inline=False)
+        embed.add_field(name="💰 رسوم التأسيس المخصومة", value=f"`{creation_cost}` 🪙 عملة ذهبية", inline=True)
+        embed.add_field(name="📈 مستوى النقابة الأولي", value="المستوى `1` (أقصى مستوى ممكن هو `500`)", inline=True)
+        embed.set_footer(text="استخدم أمر /نقابتي لإدارة صرحك العظيم واستعراض المزايا والخيارات المتاحة!")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+# موديل التبرع بالعملات
+class GuildDonateCoinsModal(discord.ui.Modal, title="💰 صندوق خزينة النقابة - التبرع بالعملات"):
+    amount_str = discord.ui.TextInput(label="العملات الذهبية المراد التبرع بها", placeholder="مثال: 1500", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id})
+        
+        if not user_data or not user_data.get("guild_id"):
+            return await interaction.followup.send("❌ أنت لست عضواً في أي نقابة حالياً!", ephemeral=True)
+        
+        try:
+            amount = int(self.amount_str.value)
+        except ValueError:
+            return await interaction.followup.send("❌ يرجى إدخال رقم صحيح وموجب للمبلغ المراد التبرع به!", ephemeral=True)
+            
+        if amount <= 0:
+            return await interaction.followup.send("❌ لا يمكنك التبرع بمبلغ صفري أو سالب!", ephemeral=True)
+            
+        balance = user_data.get("balance", 0)
+        if balance < amount:
+            return await interaction.followup.send(f"❌ رصيدك الحالي في المحفظة (`{balance:,}` 🪙) أقل من المبلغ الذي تنوي التبرع به!", ephemeral=True)
+            
+        guild_id = user_data["guild_id"]
+        guild_data = guilds_col.find_one({"guild_id": guild_id})
+        if not guild_data:
+            return await interaction.followup.send("❌ حدث خطأ: لم يتم العثور على بيانات النقابة الخاصة بك.", ephemeral=True)
+            
+        # خصم العملات من المستخدم وإضافتها لخزينة النقابة وتطوير مستواها (كل 10,000 عملة ترفع مستوى النقابة بمقدار 1 وصولاً للحد الأقصى 500)
+        users_col.update_one({"user_id": user_id}, {"$inc": {"balance": -amount}})
+        
+        current_level = guild_data.get("level", 1)
+        new_treasury = guild_data.get("treasury", 0) + amount
+        
+        # حساب تطور المستويات (كل 10000 عملة متبرع بها تزيد مستوى واحد بحد أقصى 500)
+        potential_level = 1 + (new_treasury // 10000)
+        new_level = min(500, potential_level)
+        
+        guilds_col.update_one(
+            {"guild_id": guild_id},
+            {
+                "$set": {"level": new_level},
+                "$inc": {"treasury": amount}
+            }
+        )
+        
+        embed = discord.Embed(
+            title="💎 تم التبرع لخزينة النقابة بنجاح باهر!",
+            description=f"لقد ساهم البطل {interaction.user.mention} بضخ تعزيزات مالية ضخمة لصالح نقابة **{guild_data['name']}**.",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="🪙 المبلغ المتبرع به", value=f"`{amount:,}` عملة ذهبية", inline=True)
+        embed.add_field(name="🏛️ إجمالي الخزينة", value=f"`{new_treasury:,}` 🪙", inline=True)
+        embed.add_field(name="📈 مستوى النقابة الحالي", value=f"المستوى `{new_level}` من أصل `500`", inline=True)
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+# موديل التبرع بالعتاد للمستودع
+class GuildDonateGearModal(discord.ui.Modal, title="⚔️ مستودع النقابة - التبرع بالعتاد"):
+    gear_name = discord.ui.TextInput(label="اسم قطعة العتاد أو السلاح من حقيبتك", placeholder="مثال: سيف التنين الاسطوري أو خوذة إمبراطوري #5", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        user_data = users_col.find_one({"user_id": user_id})
+        
+        if not user_data or not user_data.get("guild_id"):
+            return await interaction.followup.send("❌ أنت لست منضماً لأي نقابة!", ephemeral=True)
+            
+        inventory = user_data.get("inventory", [])
+        item_to_donate = self.gear_name.value.strip()
+        
+        # البحث عن القطعة في حقيبة المستخدم مطابقة دقيقة أو جزئية
+        found_item = None
+        for item in inventory:
+            if item.lower() == item_to_donate.lower():
+                found_item = item
+                break
+                
+        if not found_item:
+            return await interaction.followup.send(f"❌ قطعة العتاد (`{item_to_donate}`) غير موجودة في حقيبتك الشخصية! تأكد من كتابة الاسم بدقة.", ephemeral=True)
+            
+        guild_id = user_data["guild_id"]
+        
+        # إزالة القطعة من حقيبة المستخدم وإضافتها لمستودع النقابة
+        users_col.update_one({"user_id": user_id}, {"$pull": {"inventory": found_item}})
+        guilds_col.update_one({"guild_id": guild_id}, {"$push": {"warehouse": found_item}})
+        
+        embed = discord.Embed(
+            title="🛡️ تبرع بطولي بالعتاد العسكري!",
+            description=f"قام البطل {interaction.user.mention} بالتبرع بقطعة عتاد نادرة وثمينة لمستودع النقابة المشترك ليستفيد منها باقي الإخوة والمقاتلون.",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="⚔️ القطعة المتبرع بها", value=f"`{found_item}`", inline=False)
+        embed.set_footer(text="يمكن لأي عضو في النقابة سحب هذه القطعة من مستودع النقابة متى شئت!")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 # ================== واجهات المتاجر (Views) ==================
 
@@ -343,11 +497,9 @@ async def adventure_command(interaction: discord.Interaction):
     current_max_floor = user_data.get("max_floor", 0)
     power = user_data.get("power", 100)
     
-    # محاكاة نتيجة المعركة بالاعتماد على الطاقة وقليل من الحظ
     target_floor = current_max_floor + 1
     required_power = target_floor * 50
     
-    # فرصة نجاح تعتمد على القوة
     success_chance = min(90, max(30, int((power / (required_power + 1)) * 50)))
     roll = random.randint(1, 100)
     
@@ -378,6 +530,187 @@ async def adventure_command(interaction: discord.Interaction):
         embed.add_field(name="🎯 الطاقة المطلوبة تقريباً", value=f"{required_power:,}", inline=True)
 
     await interaction.followup.send(embed=embed, ephemeral=False)
+
+# ================== نظام النقابات الجديد (إنشاء، نقابتي، المستودع، التبرعات، والتحكم) ==================
+
+@bot.tree.command(name="انشاء_نقابه", description="تأسيس صرح نقابة إمبراطوري خاص بك بتكلفة 300 عملة ذهبية عادية")
+async def create_guild_command(interaction: discord.Interaction):
+    await interaction.response.send_modal(CreateGuildModal())
+
+# واجهة تفاعلية لأوامر الخيارات داخل (/نقابتي)
+class GuildManagementView(discord.ui.View):
+    def __init__(self, guild_id: str, is_leader: bool, is_locked: bool):
+        super().__init__(timeout=180)
+        self.guild_id = guild_id
+        self.is_leader = is_leader
+        self.is_locked = is_locked
+        
+        # تعديل حالة زر القفل والفتح حسب حالة النقابة الفعلية
+        if self.is_leader:
+            self.lock_button.label = "فتح الانضمام 🔓" if self.is_locked else "قفل الانضمام 🔒"
+            self.lock_button.style = discord.ButtonStyle.success if self.is_locked else discord.ButtonStyle.danger
+        else:
+            # تعطيل أزرار التحكم الخاصة بالزعيم إذا لم يكن العضو هو القائد
+            self.lock_button.disabled = True
+
+    @discord.ui.button(label="التبرع بالعملات 💰", style=discord.ButtonStyle.success, emoji="🪙", row=0)
+    async def donate_coins_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(GuildDonateCoinsModal())
+
+    @discord.ui.button(label="التبرع بالعتاد ⚔️", style=discord.ButtonStyle.primary, emoji="🎁", row=0)
+    async def donate_gear_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(GuildDonateGearModal())
+
+    @discord.ui.button(label="مستودع النقابة 📦", style=discord.ButtonStyle.secondary, emoji="🏛️", row=0)
+    async def warehouse_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        guild_data = guilds_col.find_one({"guild_id": self.guild_id})
+        if not guild_data:
+            return await interaction.followup.send("❌ لم يتم العثور على بيانات النقابة.", ephemeral=True)
+            
+        warehouse = guild_data.get("warehouse", [])
+        if not warehouse:
+            embed = discord.Embed(
+                title="📦 مستودع النقابة فارغ حالياً!",
+                description="لا توجد أي قطع عتاد متبرع بها في المستودع حالياً. شجع رفاقك على التبرع بالعتاد عبر زر التبرع بالعتاد!",
+                color=discord.Color.orange()
+            )
+            return await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        # إرسال قائمة العتاد المتاح للسحب
+        view = GuildWarehouseSelectView(warehouse, self.guild_id)
+        embed = discord.Embed(
+            title="📦 مستودع النقابة الإمبراطوري (العتاد المتاح للاستحواذ)",
+            description="اختر القطعة التي تريد سحبها وإضافتها إلى حقيبتك الشخصية من القائمة أدناه:",
+            color=discord.Color.gold()
+        )
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="قفل / فتح الانضمام 🔒", style=discord.ButtonStyle.danger, emoji="⚙️", row=1)
+    async def lock_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.is_leader:
+            return await interaction.response.send_message("❌ عذراً، أمر قفل وفتح الانضمام مخصص لزعيم النقابة فقط!", ephemeral=True)
+            
+        guild_data = guilds_col.find_one({"guild_id": self.guild_id})
+        current_lock = guild_data.get("is_locked", False)
+        new_lock_status = not current_lock
+        
+        guilds_col.update_one({"guild_id": self.guild_id}, {"$set": {"is_locked": new_lock_status}})
+        self.is_locked = new_lock_status
+        
+        button.label = "فتح الانضمام 🔓" if new_lock_status else "قفل الانضمام 🔒"
+        button.style = discord.ButtonStyle.success if new_lock_status else discord.ButtonStyle.danger
+        
+        status_msg = "مغلقة ولن يتمكن أحد من الانضمام إليها" if new_lock_status else "مفتوحة ومتاحة لانضمام الأبطال الجدد"
+        embed = discord.Embed(
+            title="⚙️ تم تحديث حالة بوابات النقابة بنجاح!",
+            description=f"أصبحت بوابات نقابتك الآن **{status_msg}**.",
+            color=discord.Color.blurple()
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="مغادرة النقابة 🚪", style=discord.ButtonStyle.danger, emoji="⚠️", row=1)
+    async def leave_guild_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        guild_data = guilds_col.find_one({"guild_id": self.guild_id})
+        
+        if guild_data.get("leader_id") == user_id:
+            return await interaction.followup.send("❌ لا يمكن لزعيم النقابة مغادرتها وهي تحت إمرته! يجب نقل القيادة أو تفكيك النقابة أولاً.", ephemeral=True)
+            
+        users_col.update_one({"user_id": user_id}, {"$unset": {"guild_id": ""}})
+        guilds_col.update_one({"guild_id": self.guild_id}, {"$pull": {"members": user_id}})
+        
+        await interaction.followup.send("🚪 لقد غادرت النقابة بنجاح وأصبحت حراً طليقاً في أرجاء الإمبراطورية.", ephemeral=True)
+
+# قائمة اختيار العتاد من المستودع للسحب
+class GuildWarehouseSelect(discord.ui.Select):
+    def __init__(self, warehouse_items: list, guild_id: str):
+        self.guild_id = guild_id
+        # عرض أول 25 قطعة كحد أقصى لدعم شروط ديسكورد للقوائم
+        options = [
+            discord.SelectOption(label=item[:99], description="قطعة عتاد متبرع بها في المستودع", value=str(idx))
+            for idx, item in enumerate(warehouse_items[:25])
+        ]
+        super().__init__(placeholder="اختر قطعة عتاد لسحبها لحقيبتك...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user_id = str(interaction.user.id)
+        guild_data = guilds_col.find_one({"guild_id": self.guild_id})
+        if not guild_data:
+            return await interaction.followup.send("❌ حدث خطأ أثناء جلب بيانات المستودع.", ephemeral=True)
+            
+        warehouse = guild_data.get("warehouse", [])
+        idx = int(self.values[0])
+        
+        if idx >= len(warehouse):
+            return await interaction.followup.send("❌ عذراً، هذه القطعة تم سحبها مسبقاً بواسطة مقاتل آخر!", ephemeral=True)
+            
+        chosen_item = warehouse[idx]
+        
+        # إزالة القطعة من المستودع وإضافتها لحقيبة العضو
+        guilds_col.update_one({"guild_id": self.guild_id}, {"$pull": {"warehouse": chosen_item}})
+        users_col.update_one({"user_id": user_id}, {"$push": {"inventory": chosen_item}})
+        
+        await interaction.followup.send(f"🎉 **تم سحب القطعة بنجاح!** حصلت على `{chosen_item}` وأضيفت فوراً إلى حقيبتك الشخصية ⚔️", ephemeral=True)
+
+class GuildWarehouseSelectView(discord.ui.View):
+    def __init__(self, warehouse_items: list, guild_id: str):
+        super().__init__(timeout=120)
+        self.add_item(GuildWarehouseSelect(warehouse_items, guild_id))
+
+@bot.tree.command(name="نقابتي", description="عرض السجل الشامل لنقابتك، مستواها، خزنتها، وخيارات الإدارة والتبرع والاستحواذ")
+async def my_guild_command(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=False)
+    user_id = str(interaction.user.id)
+    user_data = users_col.find_one({"user_id": user_id})
+    
+    if not user_data:
+        return await interaction.followup.send("❌ لم تقم بالتسجيل بعد! استخدم أمر `/تسجيل` أولاً.", ephemeral=False)
+        
+    guild_id = user_data.get("guild_id")
+    if not guild_id:
+        embed_no_guild = discord.Embed(
+            title="🏰 أنت لست عضواً في أي نقابة بعد!",
+            description="الإمبراطورية مليئة بالفرص! يمكنك تأسيس نقابتك الخاصة عبر أمر `/انشاء_نقابه` بتكلفة `300` عملة ذهبية فقط، أو البحث عن أصدقائك للانضمام إليهم.",
+            color=discord.Color.dark_orange()
+        )
+        return await interaction.followup.send(embed=embed_no_guild, ephemeral=False)
+        
+    guild_data = guilds_col.find_one({"guild_id": guild_id})
+    if not guild_data:
+        return await interaction.followup.send("❌ حدث خطأ تقني: النقابة التي تنتمي إليها غير مسجلة في قاعدة البيانات أو تم حذفها.", ephemeral=False)
+        
+    name = guild_data.get("name", "نقابة مجهولة")
+    description = guild_data.get("description", "لا يوجد وصف مدون.")
+    leader_id = guild_data.get("leader_id")
+    level = guild_data.get("level", 1)
+    treasury = guild_data.get("treasury", 0)
+    is_locked = guild_data.get("is_locked", False)
+    members = guild_data.get("members", [])
+    warehouse = guild_data.get("warehouse", [])
+    
+    is_leader = (str(leader_id) == user_id)
+    leader_user = interaction.guild.get_member(int(leader_id)) if leader_id else None
+    leader_mention = leader_user.mention if leader_user else f"مقاتل برقم معرف ({leader_id})"
+    
+    embed = discord.Embed(
+        title=f"🏰 السجل الإمبراطوري لنقابة: {name}",
+        description=f"*{description}*",
+        color=discord.Color.gold()
+    )
+    embed.add_field(name="👑 زعيم النقابة", value=leader_mention, inline=True)
+    embed.add_field(name="📈 مستوى النقابة", value=f"المستوى `{level}` / `500`", inline=True)
+    embed.add_field(name="🛡️ حالة الانضمام", value="مغلقة 🔒" if is_locked else "مفتوحة 🔓", inline=True)
+    embed.add_field(name="💰 خزينة النقابة المالية", value=f"`{treasury:,}` 🪙 عملة ذهبية", inline=True)
+    embed.add_field(name="👥 عدد الأعضاء", value=f"`{len(members)}` مقاتل", inline=True)
+    embed.add_field(name="📦 محتويات المستودع", value=f"`{len(warehouse)}` قطعة عتاد متوفرة", inline=True)
+    
+    embed.set_footer(text="استخدم الأزرار أدناه للتبرع، سحب العتاد، أو إدارة بوابات النقابة:")
+    
+    view = GuildManagementView(guild_id=guild_id, is_leader=is_leader, is_locked=is_locked)
+    await interaction.followup.send(embed=embed, view=view, ephemeral=False)
 
 # ================== قوائم اختيار الأعضاء للمطورين ==================
 
