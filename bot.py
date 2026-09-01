@@ -81,7 +81,7 @@ HERO_STATS_CFG = {
 # ==================== بنك بيانات الألعاب ====================
 
 QUESTIONS_DATA = {
-    "normal": [f"ما هو موهبتك السرية رقم {i}؟" for i in range(1, 51)],
+    "normal": [f"ما هي موهبتك السرية رقم {i}؟" for i in range(1, 51)],
     "medium": [f"ما هو أكبر قرار ندمت عليه في حياتك رقم {i}؟" for i in range(1, 51)],
     "bold": [f"سؤال شديد السرية والجريء رقم {i}: هل خنت ثقة صديق من قبل؟" for i in range(1, 51)]
 }
@@ -105,27 +105,28 @@ MATH_EQUATIONS = [
     ("15 * 3 - 10", "35"), ("81 / 9 + 7", "16")
 ] + [(f"{i} + {i*2}", str(i + i*2)) for i in range(6, 151)]
 
+# قائمة الأنميات مع قبول جميع خيارات الإجابة بالعربية فقط
 ANIME_DATA = [
-    ("بطل يستدعي تنين الجنيهات السبعة بالكرات الأسطورية", ["دراغون بول", "درغون بول", "dragon ball"]),
-    ("نينجا يطمح ليصبح الهوكاجي ويحمل الثعلب ذو التسعة أذيل", ["ناروتو", "ناروتو شيبودن", "naruto"]),
-    ("قرصان قبعة القش يبحث عن الكنز الأسطوري ليكون ملك القراصنة", ["ون بيس", "ونبيس", "one piece"]),
-    ("صياد يبحث عن والده ويخوض امتحان الصيادين مع أصدقائه", ["القناص", "هنتر", "hunter x hunter"]),
-    ("عمالقة يهاجمون الأسوار الشامخة والطفل ينتقم لأمه", ["هجوم العمالقة", "هجوم عمالقة", "attack on titan", "aot"]),
-    ("قاتل شياطين يحمل أخته في صندوق خشبي على ظهره", ["قاتل الشياطين", "ديمون سلاير", "demon slayer"]),
-    ("مستلهم السحر يستدعي كتاب المهارات ذو الخمس أوراق", ["بلاك كلوفر", "Black clover"]),
-    ("أنمي عن الشينجامي والمفكرة السحرية التي تقتل من يُكتب اسمه فيها", ["دفتر الموت", "مذكرة الموت", "ديث نوت", "death note"]),
-    ("طالب يبتلع إصبع ملك اللعنات لينتقل لعالم السحر واللعنات", ["جوجوتسو كايسن", "جوجوتسو", "jujutsu kaisen"]),
-    ("بطل صلب لا يهزم ويقضي على الأعداء بضربة واحدة فقط", ["ون بنش مان", "رجل الضربة الواحدة", "one punch man"]),
-    ("طفل متحري يتقلص حجمه بعد تناول عقار سري ويحل القضايا", ["المحقق كونان", "كونان", "conan"]),
-    ("طبيب نفسي يتعقب قاتلاً متسلسلاً عبقرياً في ألمانيا", ["مونستر", "مانستر", "monster"]),
-    ("مجموعة من النينجا يرتدون زي الشينجامي ويحملون سيوف الزانباكتو", ["بليتش", "bleach"]),
-    ("محارب يرتدي قناع ليلوش ويقود ثورة ضد إمبراطورية بريطانيا", ["كود غياس", "كود جياس", "code geass"]),
-    ("عالم ألعاب افتراضية حيث الموت في اللعبة يعني الموت في الحقيقة", ["سورد آرت أونلاين", "سورد ارت اونلاين", "sao"]),
-    ("لاعب شطرنج وسلاح مظلم يتم استدعاؤه في عالم موازٍ ليصبح الحاكم الأكبر", ["سولو ليفلينج", "سولو ليفلينغ", "solo leveling"]),
-    ("كيميائيان يبحثان عن حجر الفلاسفة لاستعادة أجسادهم المفقودة", ["الكيميائي المعدني", "فل ميتال", "fullmetal alchemist"]),
-    ("فتاة وأخيها يخوضان معركة في عالم الألعاب حيث كل شيء يتقرر باللعب", ["نو جيم نو لايف", "no game no life"]),
-    ("مجموعة من العلماء الهواة يكتشفون طريقة لإرسال رسائل عبر الزمن", ["شتاينز جيت", "شتاينز غيت", "steins gate"]),
-    ("فتى ينتحر في طوكيو فيتحول إلى نصف غول بعد زرع أعضاء له", ["طوكيو غول", "طوكيو جول", "tokyo ghoul"])
+    ("بطل يستدعي تنين الجنيهات السبعة بالكرات الأسطورية", ["دراغون بول", "درغون بول"]),
+    ("نينجا يطمح ليصبح الهوكاجي ويحمل الثعلب ذو التسعة أذيل", ["ناروتو", "ناروتو شيبودن"]),
+    ("قرصان قبعة القش يبحث عن الكنز الأسطوري ليكون ملك القراصنة", ["ون بيس", "ونبيس"]),
+    ("صياد يبحث عن والده ويخوض امتحان الصيادين مع أصدقائه", ["القناص", "هنتر"]),
+    ("عمالقة يهاجمون الأسوار الشامخة والطفل ينتقم لأمه", ["هجوم العمالقة", "هجوم عمالقة"]),
+    ("قاتل شياطين يحمل أخته في صندوق خشبي على ظهره", ["قاتل الشياطين", "ديمون سلاير"]),
+    ("مستلهم السحر يستدعي كتاب المهارات ذو الخمس أوراق", ["بلاك كلوفر"]),
+    ("أنمي عن الشينجامي والمفكرة السحرية التي تقتل من يُكتب اسمه فيها", ["دفتر الموت", "مذكرة الموت", "ديث نوت"]),
+    ("طالب يبتلع إصبع ملك اللعنات لينتقل لعالم السحر واللعنات", ["جوجوتسو كايسن", "جوجوتسو"]),
+    ("بطل صلب لا يهزم ويقضي على الأعداء بضربة واحدة فقط", ["ون بنش مان", "رجل الضربة الواحدة"]),
+    ("طفل متحري يتقلص حجمه بعد تناول عقار سري ويحل القضايا", ["المحقق كونان", "كونان"]),
+    ("طبيب نفسي يتعقب قاتلاً متسلسلاً عبقرياً في ألمانيا", ["مونستر", "مانستر"]),
+    ("مجموعة من النينجا يرتدون زي الشينجامي ويحملون سيوف الزانباكتو", ["بليتش"]),
+    ("محارب يرتدي قناع ليلوش ويقود ثورة ضد إمبراطورية بريطانيا", ["كود غياس", "كود جياس"]),
+    ("عالم ألعاب افتراضية حيث الموت في اللعبة يعني الموت في الحقيقة", ["سورد آرت أونلاين", "سورد ارت اونلاين"]),
+    ("لاعب شطرنج وسلاح مظلم يتم استدعاؤه في عالم موازٍ ليصبح الحاكم الأكبر", ["سولو ليفلينج", "سولو ليفلينغ"]),
+    ("كيميائيان يبحثان عن حجر الفلاسفة لاستعادة أجسادهم المفقودة", ["الكيميائي المعدني", "فل ميتال"]),
+    ("فتاة وأخيها يخوضان معركة في عالم الألعاب حيث كل شيء يتقرر باللعب", ["نو جيم نو لايف"]),
+    ("مجموعة من العلماء الهواة يكتشفون طريقة لإرسال رسائل عبر الزمن", ["شتاينز جيت", "شتاينز غيت"]),
+    ("فتى ينتحر في طوكيو فيتحول إلى نصف غول بعد زرع أعضاء له", ["طوكيو غول", "طوكيو جول"])
 ]
 
 CUT_TWEETS = [
@@ -144,11 +145,13 @@ DECONSTRUCT_WORDS = [
     ("فرسان", "ف ر س ا ن")
 ] + [(f"كلمة{i}", " ".join(list(f"كلمة{i}"))) for i in range(6, 101)]
 
+# كلمات أسرع باللغة العربية فقط
 FASTEST_WORDS = [
-    "الإمبراطورية العظمى", "Dragon", "Shadow Master", "مقاتل الظلال الأسطوري",
-    "Discord Bot", "السفاح القرمزي", "Victory", "القتال الملكي", "King of the World",
-    "سرعة البديهة", "Legendary Hero", "العرش الإمبراطوري", "Champion"
-] + [f"Word_{i}" for i in range(14, 150)]
+    "الإمبراطورية العظمى", "سيد الظلال", "مقاتل الظلال الأسطوري",
+    "بوت الديسكورد", "السفاح القرمزي", "الانتصار الملكي", "القتال الملكي",
+    "ملك العالم", "سرعة البديهة", "البطل الأسطوري", "العرش الإمبراطوري",
+    "البطل الخارق", "حاكم الجحيم", "فرسان الشرف", "درع الفولاذ", "سيف العدالة"
+] + [f"كلمة_سريعة_{i}" for i in range(17, 150)]
 
 # ==================== كلاسات أنظمة الألعاب ====================
 
@@ -354,10 +357,10 @@ class MainGamesSelect(discord.ui.Select):
             discord.SelectOption(label="لعبة الألغاز", value="riddle_game", emoji="🧩", description="150 لغز متدرج الصعوبة"),
             discord.SelectOption(label="لعبة الجواسيس (Spyfall)", value="spy_game", emoji="🕵️‍♂️", description="3+ لاعبين + تصويت وتخمين"),
             discord.SelectOption(label="لعبة الرياضيات", value="math_game", emoji="🧮", description="معادلات سريعة ومؤقت 15 ثانية"),
-            discord.SelectOption(label="لعبة خمن الأنمي", value="anime_game", emoji="🎌", description="500+ أنمي كلاسيكي وحديث"),
+            discord.SelectOption(label="لعبة خمن الأنمي", value="anime_game", emoji="🎌", description="أنميات متنوعة كلاسيكية وحديثة"),
             discord.SelectOption(label="لعبة كت تويت", value="cut_tweet", emoji="💬", description="تغريدات ونقاشات مع أم ضد"),
             discord.SelectOption(label="لعبة فكّك", value="deconstruct", emoji="🔤", description="تفكيك الكلمات بالحروف ومؤقت 15s"),
-            discord.SelectOption(label="لعبة أسرع", value="fastest", emoji="⚡", description="كتابة الكلمات السريعة عربي وانجليزي")
+            discord.SelectOption(label="لعبة أسرع", value="fastest", emoji="⚡", description="كتابة الكلمات السريعة بالعربية فقط")
         ]
         super().__init__(placeholder="🎮 اختر اللعبة المطلوبة لبدء المرح...", options=opts)
 
@@ -464,33 +467,48 @@ class MainGamesSelect(discord.ui.Select):
                 await ctx.channel.send(f"⌛ **خسرتم الوقت!** انتهت الـ 15 ثانية بدون إجابة. الناتج الصحيح كان: **[{ans}]**")
 
         elif v == "anime_game":
-            hint, ans = random.choice(ANIME_DATA)
-            emb = discord.Embed(
-                title="🎌 │ لعبة خمن الأنمي (500+ أنمي)",
-                description=f"💡 **التلميح:**\n`{hint}`\n\n⏱️ **معكم 25 ثانية فقط لمعرفة اسم الأنمي!**",
-                color=discord.Color.gold()
-            )
-            vw = discord.ui.View()
-            cont_btn = discord.ui.Button(label="▶️ استمرار باللعب", style=discord.ButtonStyle.success)
+            async def start_anime_round(interaction_or_ctx):
+                hint, valid_answers = random.choice(ANIME_DATA)
 
-            async def anime_cb(b_ctx: discord.Interaction):
-                nh, na = random.choice(ANIME_DATA)
-                emb.description = f"💡 **التلميح:**\n`{nh}`\n\n⏱️ **معكم 25 ثانية فقط لمعرفة اسم الأنمي!**"
-                await b_ctx.response.send_message(embed=emb, view=vw)
+                emb = discord.Embed(
+                    title="🎌 │ لعبة خمن الأنمي",
+                    description=f"💡 **التلميح:**\n`{hint}`\n\n⏱️ **معكم 25 ثانية فقط لمعرفة اسم الأنمي!**",
+                    color=discord.Color.gold()
+                )
 
-            cont_btn.callback = anime_cb
-            vw.add_item(cont_btn)
-            await ctx.response.send_message(embed=emb, view=vw)
+                class AnimeContView(discord.ui.View):
+                    def __init__(self):
+                        super().__init__(timeout=None)
 
-            def check(m):
-                return m.channel == ctx.channel and ans in m.content.strip()
+                    @discord.ui.button(label="▶️ استمرار باللعب", style=discord.ButtonStyle.success)
+                    async def cont_btn(self, btn_ctx: discord.Interaction, button: discord.ui.Button):
+                        await start_anime_round(btn_ctx)
 
-            try:
-                winner_msg = await bot.wait_for('message', check=check, timeout=25.0)
-                add_game_win(winner_msg.author.id, "anime")
-                await ctx.channel.send(f"🎉 **أوتاكو أسطوري!** {winner_msg.author.mention} عرف الأنمي الصحيح **[{ans}]** بنجاح! 👑")
-            except asyncio.TimeoutError:
-                await ctx.channel.send(f"⌛ **انتهى الوقت!** اسم الأنمي الصحيح كان: **[{ans}]**")
+                view = AnimeContView()
+
+                if isinstance(interaction_or_ctx, discord.Interaction):
+                    if interaction_or_ctx.response.is_done():
+                        msg = await interaction_or_ctx.channel.send(embed=emb, view=view)
+                    else:
+                        await interaction_or_ctx.response.send_message(embed=emb, view=view)
+                        msg = await interaction_or_ctx.original_response()
+                else:
+                    msg = await interaction_or_ctx.send(embed=emb, view=view)
+
+                def check(m):
+                    if m.channel != ctx.channel or m.author.bot:
+                        return False
+                    user_ans = m.content.strip().lower()
+                    return any(ans.lower() in user_ans for ans in valid_answers)
+
+                try:
+                    winner_msg = await bot.wait_for('message', check=check, timeout=25.0)
+                    add_game_win(winner_msg.author.id, "anime")
+                    await ctx.channel.send(f"🎉 **أوتاكو أسطوري!** {winner_msg.author.mention} عرف الأنمي الصحيح **[{valid_answers[0]}]** بنجاح! 👑")
+                except asyncio.TimeoutError:
+                    await ctx.channel.send(f"⌛ **انتهى الوقت!** اسم الأنمي الصحيح كان: **[{valid_answers[0]}]**")
+
+            await start_anime_round(ctx)
 
         elif v == "cut_tweet":
             tweet = random.choice(CUT_TWEETS)
