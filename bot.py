@@ -12,6 +12,7 @@ db = client["game_database"]
 users_col, guilds_col, devs_col = db["users"], db["guilds"], db["devs"]
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+AUTO_BATTLES = {}
 
 def is_user_registered(uid) -> bool:
     return users_col.find_one({"user_id": str(uid)}) is not None
@@ -264,50 +265,181 @@ def render_hp_bar(cur: int, max_hp: int) -> str:
     f = int(pct * 10)
     return f"`[{'█'*f}{'░'*(10-f)}]` {cur:,}/{max_hp:,} HP"
 
-async def process_floor_battle(ctx: discord.Interaction, floor_num: int):
-    uid = str(ctx.user.id)
-    u = users_col.find_one({"user_id": uid}) or {}
+async def process_floor_battle(ctx_or_msg, user_id: str, floor_num: int, is_first: bool = True):
     if floor_num > 500:
-        await ctx.response.send_message("🏆 أتممت الـ 500 طابق بالكامل!", ephemeral=True)
+        AUTO_BATTLES[user_id] = False
+        msg_txt = "🏆 **مبروك! أتممت جميع طوابق البرج الـ 500 بنجاح وصعدت العرش الأسطوري!**"
+        if is_first:
+            await ctx_or_msg.response.send_message(msg_txt, ephemeral=True)
+        else:
+            await ctx_or_msg.edit(content=msg_txt, embed=None, view=None)
         return
 
-    is_b = (floor_num % 10 == 0)
-    e_hp = 500 + (floor_num * 350) if is_b else 150 + (floor_num * 100)
-    e_atk = 40 + (floor_num * 30) if is_b else 15 + (floor_num * 12)
-    e_name = f"👑 BOSS طابق {floor_num}" if is_b else f"🧟 زومبي طابق {floor_num}"
+    AUTO_BATTLES[user_id] = True
+    u = users_col.find_one({"user_id": user_id}) or {}
 
-    p_atk = u.get("attack", 10) * 12 + u.get("power", 100) * 1.2
-    p_hp = p_max = 300 + u.get("defense", 10) * 25 + u.get("power", 100) * 2
+    is_boss = (floor_num % 10 == 0)
 
-    emb = discord.Embed(title=f"⚔️ معركة الطابق [{floor_num}/500]", color=discord.Color.red())
-    emb.add_field(name="👤 اللاعب", value=render_hp_bar(int(p_hp), int(p_max)))
-    emb.add_field(name=f"👾 {e_name}", value=render_hp_bar(e_hp, e_hp))
+    if is_boss:
+        e_name = f"👑 زعيم الطابق {floor_num} — [تنين الجحيم المظلم]" if floor_num % 50 == 0 else f"👹 قائد الظلال (BOSS طابق {floor_num})"
+        e_hp = 600 + (floor_num * 400)
+        e_atk = 50 + (floor_num * 35)
+    else:
+        e_name = random.choice([
+            f"🧟 زومبي الطابق {floor_num}",
+            f"🐺 ذئب الظلال طابق {floor_num}",
+            f"🗿 الحارس الحجري طابق {floor_num}",
+            f"🗡️ مقاتل الموت طابق {floor_num}"
+        ])
+        e_hp = 180 + (floor_num * 120)
+        e_atk = 20 + (floor_num * 15)
 
-    await ctx.response.send_message(embed=emb)
-    msg = await ctx.original_response()
+    p_atk = int(u.get("attack", 10) * 15 + u.get("power", 100) * 1.5)
+    p_max_hp = int(400 + u.get("defense", 10) * 30 + u.get("power", 100) * 2.5)
+    p_cur_hp = p_max_hp
+    e_cur_hp = e_hp
 
-    await asyncio.sleep(1.5)
-    gold = floor_num * 300 + random.randint(100, 500)
-    users_col.update_one({"user_id": uid}, {"$inc": {"balance": gold, "power": 30}, "$set": {"max_floor": floor_num + 1}})
+    p_name = u.get("name", "المقاتل")
+    h_id = u.get("chosen_hero")
+    hero_info = HEROES_CFG.get(h_id, {}) if h_id else {}
+    hero_name = hero_info.get("name", "البطل") if h_id else None
 
-    win_emb = discord.Embed(title=f"🎉 انتصرت في الطابق [{floor_num}]!", description=f"🎁 المكافأة: `{gold:,}` 🪙 ذهب!", color=discord.Color.gold())
-    v = discord.ui.View()
-    btn = discord.ui.Button(label=f"➡️ الطابق التالي [{floor_num+1}]", style=discord.ButtonStyle.success)
+    desc_dialogue = f"⚔️ **بداية المعركة!**\nتقدم **{p_name}** بثقة نحو عرش الطابق `{floor_num}` في مواجهة **{e_name}**!"
 
-    async def b_call(b_ctx: discord.Interaction):
-        if str(b_ctx.user.id) != uid:
-            await b_ctx.response.send_message("❌ المعركة ليست لك!", ephemeral=True)
-            return
-        await process_floor_battle(b_ctx, floor_num + 1)
+    emb = discord.Embed(
+        title=f"🏰 │ معركة ملحمية — الطابق [{floor_num} / 500]",
+        description=desc_dialogue,
+        color=discord.Color.red() if is_boss else discord.Color.dark_orange()
+    )
+    emb.add_field(name=f"👤 {p_name}", value=render_hp_bar(p_cur_hp, p_max_hp), inline=True)
+    emb.add_field(name=f"👾 {e_name}", value=render_hp_bar(e_cur_hp, e_hp), inline=True)
+    emb.set_footer(text="⚔️ القتال والتقدم يعملان تلقائياً... اضغط الزر بالأسفل للإيقاف.")
 
-    btn.callback = b_call
-    v.add_item(btn)
-    await msg.edit(embed=win_emb, view=v)
+    class StopAutoView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=None)
+
+        @discord.ui.button(label="🛑 إيقاف القتال التلقائي", style=discord.ButtonStyle.danger)
+        async def stop_btn(self, btn_ctx: discord.Interaction, button: discord.ui.Button):
+            if str(btn_ctx.user.id) != user_id:
+                await btn_ctx.response.send_message("❌ هذه المعركة ليست لك!", ephemeral=True)
+                return
+            AUTO_BATTLES[user_id] = False
+            await btn_ctx.response.send_message("🛑 تم إيقاف الغزو التلقائي بعد انتهاء هذه الجولة.", ephemeral=True)
+
+    view = StopAutoView()
+
+    if is_first:
+        await ctx_or_msg.response.send_message(embed=emb, view=view)
+        msg = await ctx_or_msg.original_response()
+    else:
+        await ctx_or_msg.edit(embed=emb, view=view)
+        msg = ctx_or_msg
+
+    while p_cur_hp > 0 and e_cur_hp > 0 and AUTO_BATTLES.get(user_id, True):
+        await asyncio.sleep(1.2)
+
+        damage_dealt = random.randint(int(p_atk * 0.8), int(p_atk * 1.2))
+        is_crit = random.random() < 0.2
+        if is_crit:
+            damage_dealt = int(damage_dealt * 1.7)
+            dialogue = f"💥 **ضربة قاضية!** يوجه **{p_name}** سيفه نحو ثغرة **{e_name}** ليسبب `{damage_dealt:,}` ضرر حرج!"
+        else:
+            dialogue = f"⚔️ **هجوم حاسم!** يستغل **{p_name}** سرعته ويضرب **{e_name}** بضرر قدره `{damage_dealt:,}`!"
+
+        if hero_name and random.random() < 0.3:
+            hero_dmg = random.randint(100, 300) + floor_num * 10
+            damage_dealt += hero_dmg
+            dialogue += f"\n✨ **مساندة أسطورية!** ينقض **{hero_name}** ويزيد الضرر بـ `+{hero_dmg:,}` ضرر سحري!"
+
+        e_cur_hp = max(0, e_cur_hp - damage_dealt)
+
+        if e_cur_hp <= 0:
+            dialogue += f"\n💀 **السقوط!** يترنح **{e_name}** ويسقط صريعاً على أرض المعركة!"
+
+        emb.description = dialogue
+        emb.set_field_at(0, name=f"👤 {p_name}", value=render_hp_bar(p_cur_hp, p_max_hp), inline=True)
+        emb.set_field_at(1, name=f"👾 {e_name}", value=render_hp_bar(e_cur_hp, e_hp), inline=True)
+        try:
+            await msg.edit(embed=emb)
+        except:
+            break
+
+        if e_cur_hp <= 0:
+            break
+
+        await asyncio.sleep(1.2)
+        enemy_dmg = random.randint(int(e_atk * 0.7), int(e_atk * 1.1))
+        p_cur_hp = max(0, p_cur_hp - enemy_dmg)
+
+        e_dialogue = f"🔥 **رد الخصم!** يزأر **{e_name}** بقوة وينفذ هجوماً مضاداً يلحق `{enemy_dmg:,}` ضرر بـ **{p_name}**!"
+        if p_cur_hp <= 0:
+            e_dialogue += f"\n💔 **الهزيمة!** خارت قوى **{p_name}** وتراجع لحماية حياته!"
+
+        emb.description = e_dialogue
+        emb.set_field_at(0, name=f"👤 {p_name}", value=render_hp_bar(p_cur_hp, p_max_hp), inline=True)
+        emb.set_field_at(1, name=f"👾 {e_name}", value=render_hp_bar(e_cur_hp, e_hp), inline=True)
+        try:
+            await msg.edit(embed=emb)
+        except:
+            break
+
+    if p_cur_hp > 0 and e_cur_hp <= 0:
+        gold_reward = floor_num * 400 + random.randint(200, 800)
+        power_reward = 40 + (50 if is_boss else 0)
+
+        users_col.update_one(
+            {"user_id": user_id},
+            {
+                "$inc": {"balance": gold_reward, "power": power_reward, "kills": 1},
+                "$set": {"max_floor": floor_num + 1}
+            }
+        )
+
+        win_emb = discord.Embed(
+            title=f"🎉 │ انتصار ساحق في الطابق [{floor_num}]!",
+            description=(
+                f"🏆 تم القضاء على **{e_name}** بنجاح بعد معركة طاحنة!\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🪙 **المكافأة المالية:** `+{gold_reward:,}` ذهب\n"
+                f"⚡ **القوة المكتسبة:** `+{power_reward}` طاقة\n"
+                f"🏰 **الطابق التالي:** `[{floor_num + 1} / 500]`"
+            ),
+            color=discord.Color.gold()
+        )
+
+        if AUTO_BATTLES.get(user_id, True):
+            win_emb.set_footer(text="🚀 جاري الانتقال تلقائياً إلى الطابق التالي خلال 3 ثوانٍ...")
+            try:
+                await msg.edit(embed=win_emb, view=view)
+            except:
+                pass
+            await asyncio.sleep(3)
+
+            if AUTO_BATTLES.get(user_id, True):
+                await process_floor_battle(msg, user_id, floor_num + 1, is_first=False)
+        else:
+            win_emb.set_footer(text="🛑 تم إيقاف القتال التلقائي بنائاً على طلبك.")
+            try:
+                await msg.edit(embed=win_emb, view=None)
+            except:
+                pass
+    else:
+        AUTO_BATTLES[user_id] = False
+        loss_emb = discord.Embed(
+            title=f"💔 │ هزيمة في الطابق [{floor_num}]",
+            description=f"لم تطعك قوتك على هزم **{e_name}**!\nقم بتطوير معدلاتك وعتادك وبطلك من المتجر ثم حاول مجدداً.",
+            color=discord.Color.dark_red()
+        )
+        try:
+            await msg.edit(embed=loss_emb, view=None)
+        except:
+            pass
 
 class TowerMainSelect(discord.ui.Select):
     def __init__(self):
         opts = [
-            discord.SelectOption(label="بدء المغامرة", value="start", emoji="⚔️"),
+            discord.SelectOption(label="بدء المغامرة والتألق", value="start", emoji="⚔️"),
             discord.SelectOption(label="المتجر العادي", value="gen", emoji="🛒"),
             discord.SelectOption(label="المتجر المظلم", value="dark", emoji="🔮"),
             discord.SelectOption(label="تطوير معداتي", value="up", emoji="⚡")
@@ -319,7 +451,7 @@ class TowerMainSelect(discord.ui.Select):
         u = users_col.find_one({"user_id": uid}) or {}
         v = self.values[0]
         if v == "start":
-            await process_floor_battle(ctx, u.get("max_floor", 1))
+            await process_floor_battle(ctx, str(ctx.user.id), u.get("max_floor", 1), is_first=True)
         elif v == "gen":
             await ctx.response.send_message(embed=discord.Embed(title="🏛️ المتجر العام", color=discord.Color.gold()), view=GeneralStoreView(), ephemeral=True)
         elif v == "dark":
@@ -522,6 +654,21 @@ class HeroUpgradeView(discord.ui.View):
         super().__init__()
         self.add_item(HeroStatSelect())
 
+class DevTitleModal(discord.ui.Modal, title="👑 منح/تحديد لقب خاص"):
+    title_in = discord.ui.TextInput(label="اكتب اللقب المطلوب", placeholder="مثال: حاكم العوالم، قاهر الظلال...", min_length=2, max_length=40)
+
+    async def on_submit(self, ctx: discord.Interaction):
+        t_name = self.title_in.value.strip()
+        uid = str(ctx.user.id)
+        users_col.update_one(
+            {"user_id": uid},
+            {
+                "$push": {"titles": t_name},
+                "$set": {"custom_title": t_name}
+            }
+        )
+        await ctx.response.send_message(f"👑 تم إضافة اللقب **[{t_name}]** وتعيينه كـ لقبك الرسمي بنجاح!", ephemeral=True)
+
 class DevAddUserSelect(discord.ui.UserSelect):
     def __init__(self):
         super().__init__(placeholder="👤 اختر العضو لترقيته إلى مطور...", min_values=1, max_values=1)
@@ -654,6 +801,7 @@ class DevActionSelectMenu(discord.ui.Select):
         opts = [
             discord.SelectOption(label="عملات لا نهائية", value="inf", emoji="♾️", description="شحن رصيد عملات لا نهائي لك"),
             discord.SelectOption(label="تفعيل السفاح الخارق", value="assassin", emoji="🩸", description="رفع طاقتك وخصائصك لأقصى حد"),
+            discord.SelectOption(label="الحصول على القاب", value="get_title", emoji="👑", description="إضافة وتعيين أي لقب خاص لبروفايلك"),
             discord.SelectOption(label="إهداء عتاد للاعب", value="gift_gear", emoji="🎁", description="إهداء عتاد محدد للاعب بالمنشن"),
             discord.SelectOption(label="تحويل / إهداء عملات", value="transfer", emoji="💸", description="شحن عملات للاعب بالمنشن"),
             discord.SelectOption(label="إضافة مطور", value="add_dev", emoji="👑", description="منح صلاحية مطور للاعب بالمنشن")
@@ -675,6 +823,9 @@ class DevActionSelectMenu(discord.ui.Select):
             st = {"power": 999999999999, "balance": 999999999999, "diamonds": 999999999, "attack": 999999999, "defense": 999999999}
             users_col.update_one({"user_id": uid}, {"$set": st})
             await ctx.response.send_message("🩸 تم تفعيل شخصية السفاح الخارقة!", ephemeral=True)
+
+        elif v == "get_title":
+            await ctx.response.send_modal(DevTitleModal())
 
         elif v == "gift_gear":
             await ctx.response.send_message("🎁 اختر القسم والنوع للعتاد المراد إهداؤه:", view=DevGearCategoryView(), ephemeral=True)
@@ -800,6 +951,58 @@ class BankTransferSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.add_item(BankTransferUserSelect())
 
+class BankExchangeModal(discord.ui.Modal, title="💎 صرافة الألماس الإمبراطورية"):
+    gold_in = discord.ui.TextInput(label="كمية الذهب للتحويل إلى ألماس (10,000 🪙 = 1 💎)", placeholder="مثال: 50000")
+
+    async def on_submit(self, ctx: discord.Interaction):
+        try:
+            amt = int(self.gold_in.value.strip())
+            if amt < 10000: raise ValueError()
+        except:
+            await ctx.response.send_message("❌ الحد الأدنى للتحويل هو 10,000 🪙!", ephemeral=True)
+            return
+
+        uid = str(ctx.user.id)
+        u = users_col.find_one({"user_id": uid}) or {}
+        if u.get("balance", 0) < amt:
+            await ctx.response.send_message("❌ لا تملك هذا القدر من الذهب في الكاش!", ephemeral=True)
+            return
+
+        d_gained = amt // 10000
+        used_gold = d_gained * 10000
+
+        users_col.update_one({"user_id": uid}, {"$inc": {"balance": -used_gold, "diamonds": d_gained}})
+        await ctx.response.send_message(f"💎 تم تحويل `{used_gold:,}` 🪙 إلى `+{d_gained:,}` 💎 ألماس ملكي بنجاح!", ephemeral=True)
+
+class BankInvestModal(discord.ui.Modal, title="📈 الاستثمار الملكي السريع"):
+    amount_in = discord.ui.TextInput(label="المبلغ المراد استثماره في الأسهم", placeholder="مثال: 20000")
+
+    async def on_submit(self, ctx: discord.Interaction):
+        try:
+            amt = int(self.amount_in.value.strip())
+            if amt < 1000: raise ValueError()
+        except:
+            await ctx.response.send_message("❌ الحد الأدنى للاستثمار هو 1,000 🪙!", ephemeral=True)
+            return
+
+        uid = str(ctx.user.id)
+        u = users_col.find_one({"user_id": uid}) or {}
+        if u.get("balance", 0) < amt:
+            await ctx.response.send_message("❌ لا تملك هذا المبلغ بالرصيد المباشر!", ephemeral=True)
+            return
+
+        roll = random.random()
+        if roll > 0.15:
+            profit_pct = random.randint(15, 45)
+            gain = int(amt * (profit_pct / 100))
+            users_col.update_one({"user_id": uid}, {"$inc": {"balance": gain}})
+            await ctx.response.send_message(f"📈 **نجح استثمارك!** ارتفعت أسهم الإمبراطورية بـ `{profit_pct}%`!\n🎉 الأرباح الصافية: `+{gain:,}` 🪙 ذهب!", ephemeral=True)
+        else:
+            loss_pct = random.randint(5, 12)
+            loss = int(amt * (loss_pct / 100))
+            users_col.update_one({"user_id": uid}, {"$inc": {"balance": -loss}})
+            await ctx.response.send_message(f"📉 **تراجعت السوق!** خسرت `{loss_pct}%` من استثمارك.\n💸 الخسارة: `-{loss:,}` 🪙 ذهب.", ephemeral=True)
+
 class ImperialBankView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -842,10 +1045,6 @@ class ImperialBankView(discord.ui.View):
         users_col.update_one({"user_id": uid}, {"$inc": {"balance": -loan}, "$set": {"loan": 0}})
         await ctx.response.send_message(f"🎉 تم سداد القرض بالكامل بمبلغ `{loan:,}` 🪙! أصبحت خالي الديون.", ephemeral=True)
 
-    @discord.ui.button(label="💸 تحويل بالمنشن", style=discord.ButtonStyle.danger, row=1)
-    async def transfer_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
-        await ctx.response.send_message("👤 اختر العضو المراد التحويل له من القائمة:", view=BankTransferSelectView(), ephemeral=True)
-
     @discord.ui.button(label="📥 إيداع", style=discord.ButtonStyle.secondary, row=1)
     async def deposit_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
         await ctx.response.send_modal(BankDepositModal())
@@ -853,6 +1052,18 @@ class ImperialBankView(discord.ui.View):
     @discord.ui.button(label="📤 سحب", style=discord.ButtonStyle.secondary, row=1)
     async def withdraw_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
         await ctx.response.send_modal(BankWithdrawModal())
+
+    @discord.ui.button(label="💸 تحويل بالمنشن", style=discord.ButtonStyle.danger, row=1)
+    async def transfer_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        await ctx.response.send_message("👤 اختر العضو المراد التحويل له من القائمة:", view=BankTransferSelectView(), ephemeral=True)
+
+    @discord.ui.button(label="💎 صرافة الألماس", style=discord.ButtonStyle.primary, row=2)
+    async def exchange_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        await ctx.response.send_modal(BankExchangeModal())
+
+    @discord.ui.button(label="📈 الاستثمار الملكي", style=discord.ButtonStyle.success, row=2)
+    async def invest_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        await ctx.response.send_modal(BankInvestModal())
 
 class CreateGuildModal(discord.ui.Modal, title="🏰 تأسيس نقابة إمبراطورية جديدة"):
     guild_name_in = discord.ui.TextInput(label="اسم النقابة", placeholder="اكتب اسم النقابة العظيم...", min_length=3, max_length=30)
@@ -1108,13 +1319,13 @@ async def upgrade_stats_command(ctx: discord.Interaction):
         return
     await ctx.response.send_message(embed=discord.Embed(title="✨ تطوير المعدلات", color=discord.Color.red()), view=StatsUpgradeView())
 
-@bot.tree.command(name="الطوابق", description="🏰 دخول برج الطوابق")
+@bot.tree.command(name="الطوابق", description="🏰 دخول برج الطوابق بالقتال والتقدم التلقائي")
 async def tower_floors_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
         await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
         return
     u = users_col.find_one({"user_id": str(ctx.user.id)}) or {}
-    emb = discord.Embed(title="🏰 برج الطوابق الـ 500", description=f"• الطابق الحالي: `[{u.get('max_floor', 1)}/500]`\n• الطاقة: `{u.get('power', 0):,}` ⚡", color=discord.Color.green())
+    emb = discord.Embed(title="🏰 برج الطوابق الـ 500", description=f"• الطابق الحالي: `[{u.get('max_floor', 1)}/500]`\n• الطاقة القتالية: `{u.get('power', 0):,}` ⚡", color=discord.Color.green())
     await ctx.response.send_message(embed=emb, view=TowerMainView())
 
 @bot.tree.command(name="الليدربورد", description="👑 عرض قاعة العظماء والتصنيفات")
@@ -1131,7 +1342,7 @@ async def dev_panel_command(ctx: discord.Interaction):
         return
     await ctx.response.send_message(embed=discord.Embed(title="👑 لوحة التحكم الإدارية — اختر الإجراء المطلوب", color=discord.Color.purple()), view=DevPanelView(), ephemeral=True)
 
-@bot.tree.command(name="الابطال", description="🦸‍♂️ عرض الأبطال الـ 10 (ذكور وإناث) واختيار بطل الخاص بك")
+@bot.tree.command(name="الابطال", description="🦸‍♂️ عرض الأبطال الـ 10 واختيار بطل الخاص بك")
 async def heroes_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
         await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
@@ -1171,7 +1382,7 @@ async def upgrade_hero_command(ctx: discord.Interaction):
 
     await ctx.response.send_message(embed=emb, view=HeroUpgradeView(), ephemeral=True)
 
-@bot.tree.command(name="بروفايل", description="🪪 عرض معلوماتك أو معلومات مقاتل آخر")
+@bot.tree.command(name="بروفايل", description="🪪 عرض بطاقة المقاتل الفخمة")
 async def profile_command(ctx: discord.Interaction, target: discord.User = None):
     if not is_user_registered(ctx.user.id):
         await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
@@ -1184,24 +1395,49 @@ async def profile_command(ctx: discord.Interaction, target: discord.User = None)
         await ctx.response.send_message("❌ هذا المستخدم غير مسجل بعد!", ephemeral=True)
         return
 
-    emb = discord.Embed(title=f"🪪 ملف المقاتل — {u.get('name', 'غير معروف')}", color=discord.Color.blue())
-    emb.set_thumbnail(url=target_user.display_avatar.url)
-    emb.add_field(name="👑 اللقب", value=f"`{u.get('custom_title', 'المبتدئ')}`", inline=True)
-    emb.add_field(name="⌛ العمر", value=f"`{u.get('age', '-')}` سنة", inline=True)
-    emb.add_field(name="🚻 الجنس", value=f"`{u.get('gender', '-')}`", inline=True)
-
     h_id = u.get("chosen_hero")
-    h_name = HEROES_CFG[h_id]["name"] if h_id in HEROES_CFG else "لم يحدد"
-    emb.add_field(name="🦸‍♂️ البطل المعتمد", value=f"`{h_name}`", inline=True)
+    h_info = HEROES_CFG.get(h_id, {}) if h_id else {}
+    h_name = f"{h_info.get('emoji','🦸')} {h_info.get('name','غير محدد')}" if h_id else "لم يحدد بعد"
 
-    emb.add_field(name="⚡ القوة الإجمالية", value=f"`{u.get('power', 0):,}`", inline=False)
-    emb.add_field(name="🪙 الكاش", value=f"`{u.get('balance', 0):,}`", inline=True)
-    emb.add_field(name="🏦 البنك", value=f"`{u.get('bank', 0):,}`", inline=True)
-    emb.add_field(name="💎 الألماس", value=f"`{u.get('diamonds', 0):,}`", inline=True)
-    emb.add_field(name="🏰 أعلى طابق", value=f"`{u.get('max_floor', 1)}`", inline=True)
+    tot_power = u.get('power', 0)
+    if tot_power >= 1_000_000: tier = "🔥 حاكم أسطوري"
+    elif tot_power >= 100_000: tier = "🌟 إمبراطور الحرب"
+    elif tot_power >= 10_000: tier = "⚔️ قائد أسطوري"
+    else: tier = "🟢 مقاتل واعد"
 
-    stats_str = f"🗡️ هجوم: `{u.get('attack', 10)}` | 🛡️ دفاع: `{u.get('defense', 10)}` | 🔮 سحر: `{u.get('magic', 10)}`\n🎯 تصويب: `{u.get('aim', 10)}` | 💨 مراوغة: `{u.get('evasion', 10)}` | 👁️ دقة: `{u.get('accuracy', 10)}`"
-    emb.add_field(name="📊 الخصائص القتالية", value=stats_str, inline=False)
+    emb = discord.Embed(
+        title=f"👑 │ بطاقة المقاتل الإمبراطورية — {u.get('name', 'غير معروف')}",
+        description=f"✨ **اللقب الحالي:** `[ {u.get('custom_title', 'المبتدئ الأسطوري')} ]`\n🔰 **الرتبة:** `{tier}`\n━━━━━━━━━━━━━━━━━━━━",
+        color=discord.Color.gold()
+    )
+    emb.set_thumbnail(url=target_user.display_avatar.url)
+
+    emb.add_field(
+        name="👤 **البيانات الشخصية**",
+        value=f"• **العمر:** `{u.get('age', '-')}` عاماً\n• **الجنس:** `{u.get('gender', '-')}`\n• **البطل المعتمد:** {h_name}\n• **الألقاب المكتسبة:** `{len(u.get('titles', [])):,}`",
+        inline=True
+    )
+
+    total_wealth = u.get('balance', 0) + u.get('bank', 0)
+    emb.add_field(
+        name="💰 **الثروة والخزينة**",
+        value=f"• **الكاش:** `{u.get('balance', 0):,}` 🪙\n• **البنك:** `{u.get('bank', 0):,}` 🪙\n• **الألماس:** `{u.get('diamonds', 0):,}` 💎\n• **إجمالي الثروة:** `{total_wealth:,}` 🪙",
+        inline=True
+    )
+
+    emb.add_field(
+        name="📊 **إحصائيات الإمبراطورية**",
+        value=f"• **القوة الكلية:** `{tot_power:,}` ⚡\n• **أعلى طابق:** `[ {u.get('max_floor', 1)} / 500 ]` 🏰\n• **عدد القتلات:** `{u.get('kills', 0):,}` 🩸",
+        inline=False
+    )
+
+    stats_text = (
+        f"🗡️ **هجوم:** `{u.get('attack', 10):,}` │ 🛡️ **دفاع:** `{u.get('defense', 10):,}` │ 🔮 **سحر:** `{u.get('magic', 10):,}`\n"
+        f"🎯 **تصويب:** `{u.get('aim', 10):,}` │ 💨 **مراوغة:** `{u.get('evasion', 10):,}` │ 👁️ **دقة:** `{u.get('accuracy', 10):,}`\n"
+        f"🧠 **ذكاء:** `{u.get('intelligence', 10):,}` │ 💥 **ضربات قاتلة:** `{u.get('critical', 10):,}`"
+    )
+    emb.add_field(name="⚔️ **الخصائص القتالية التفصيلية**", value=stats_text, inline=False)
+    emb.set_footer(text="👑 الإمبراطورية العظمى • نظام القتال والعرش")
 
     await ctx.response.send_message(embed=emb)
 
@@ -1225,7 +1461,7 @@ async def inventory_command(ctx: discord.Interaction):
     emb = discord.Embed(title="🎒 حقائبك ومعداتك", description=desc_txt, color=discord.Color.dark_green())
     await ctx.response.send_message(embed=emb, ephemeral=True)
 
-@bot.tree.command(name="البنك_الإمبراطوري", description="🏛️ الخزنة الملكية، إدارة الثروات، القروض والتحويلات")
+@bot.tree.command(name="البنك_الإمبراطوري", description="🏛️ الخزنة الملكية، إدارة الثروات والاستثمارات")
 async def imperial_bank_cmd(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
         await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
@@ -1234,20 +1470,24 @@ async def imperial_bank_cmd(ctx: discord.Interaction):
     u = users_col.find_one({"user_id": str(ctx.user.id)}) or {}
 
     emb = discord.Embed(
-        title="🏛️ البنك الإمبراطوري الملكي",
-        description=f"أهلاً بك يا المقاتل **{u.get('name', ctx.user.display_name)}** في النظام المالي للإمبراطورية.\nيمكنك من هنا استلام رواتبك، طلب القروض، أو تحويل الثروات مع بقية المحاربين.",
+        title="🏛️ │ المصرف الملكي والإمبراطوري العظيم",
+        description=(
+            f"مرحباً بك يا صاحب السعادة المقاتل **{u.get('name', ctx.user.display_name)}** في أكبر مركز مالي في الإمبراطورية.\n"
+            f"من هنا يمكنك إدارة ثرواتك، استلام الرواتب الملكية، تحويل الأموال، والاستثمار!\n"
+            f"━━━━━━━━━━━━━━━━━━━━"
+        ),
         color=discord.Color.gold()
     )
     emb.set_thumbnail(url=ctx.user.display_avatar.url)
 
-    emb.add_field(name="🪙 الكاش المباشر", value=f"`{u.get('balance', 0):,}` ذهبة", inline=True)
-    emb.add_field(name="🏦 الخزنة بالبنك", value=f"`{u.get('bank', 0):,}` ذهبة", inline=True)
-    emb.add_field(name="💎 الألماس الملكي", value=f"`{u.get('diamonds', 0):,}` ألماس", inline=True)
+    emb.add_field(name="🪙 **الكاش المتاح**", value=f"`{u.get('balance', 0):,}` ذهبة", inline=True)
+    emb.add_field(name="🏦 **الرصيد بالبنك**", value=f"`{u.get('bank', 0):,}` ذهبة", inline=True)
+    emb.add_field(name="💎 **الألماس الإمبراطوري**", value=f"`{u.get('diamonds', 0):,}` ألماس", inline=True)
 
     loan = u.get("loan", 0)
-    loan_status = f"`{loan:,}` 🪙 (مستحق)" if loan > 0 else "لا توجد ديون ✅"
-    emb.add_field(name="💳 حالة القروض", value=loan_status, inline=False)
-    emb.set_footer(text="استخدم الأزرار بالأسفل للتفاعل السريع مع البنك")
+    loan_status = f"⚠️ `{loan:,}` 🪙 (يتوجب السداد)" if loan > 0 else "✅ خالي من القروض والديون"
+    emb.add_field(name="💳 **وضع القروض والائتمان**", value=loan_status, inline=False)
+    emb.set_footer(text="استخدم الأزرار بالأسفل لتنفيذ كافة العمليات المصرفية")
 
     await ctx.response.send_message(embed=emb, view=ImperialBankView())
 
