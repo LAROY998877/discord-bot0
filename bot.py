@@ -1,13 +1,35 @@
-@bot.tree.command(name="مسح_جميع_الاوامر", description="⚠️ حذف جميع أوامر السلاش المسجلة في ديسكورد")
-async def clear_all_commands(ctx: discord.Interaction):
-    if not is_dev(ctx.user.id):
-        await ctx.response.send_message("❌ هذا الأمر مقتصر على المطورين فقط!", ephemeral=True)
-        return
+import os
+import asyncio
+import discord
+from discord.ext import commands
+
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "ضع_توكن_البوت_هنا")
+
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.default())
+
+@bot.event
+async def on_ready():
+    print(f"تم تسجيل الدخول باسم: {bot.user}")
     
-    # 1. مسح جميع الأوامر المسجلة محلياً في البوت
-    bot.tree.clear_commands(guild=None)
+    try:
+        # مسح جميع الأوامر العامة من ذاكرة البوت
+        bot.tree.clear_commands(guild=None)
+        
+        # مزامنة الشجرة الفارغة مع ديسكورد لحذف الأوامر المباشرة (Global Slash Commands)
+        await bot.tree.sync()
+        print("✅ تم مسح جميع الأوامر العامة (Global Commands) بنجاح من ديسكورد!")
+
+        # مسح الأوامر المسجلة داخل السيرفرات المحددة (إن وجدت)
+        for guild in bot.guilds:
+            bot.tree.clear_commands(guild=guild)
+            await bot.tree.sync(guild=guild)
+        print("✅ تم مسح أوامر السيرفرات الخاصة (Guild Commands) بنجاح!")
+
+    except Exception as e:
+        print(f"❌ حدث خطأ أثناء مسح الأوامر: {e}")
     
-    # 2. إرسال الشجرة الفارغة إلى ديسكورد لحذفها من السيرفرات
-    await bot.tree.sync()
-    
-    await ctx.response.send_message("🗑️ **تم مسح جميع أوامر السلاش من ديسكورد بنجاح!**", ephemeral=True)
+    finally:
+        await bot.close()
+
+if __name__ == "__main__":
+    bot.run(DISCORD_TOKEN)
