@@ -171,7 +171,8 @@ class GamesLeaderboardSelect(discord.ui.Select):
             discord.SelectOption(label="أبطال الرياضيات", value="math", emoji="🧮"),
             discord.SelectOption(label="أبطال خمن الأنمي", value="anime", emoji="🎌"),
             discord.SelectOption(label="أبطال أسرع", value="fastest", emoji="⚡"),
-            discord.SelectOption(label="أبطال فكك", value="deconstruct", emoji="🔤")
+            discord.SelectOption(label="أبطال فكك", value="deconstruct", emoji="🔤"),
+            discord.SelectOption(label="أبطال إكس أوه", value="xo", emoji="❌")
         ]
         super().__init__(placeholder="🏆 اختر ليدربورد الألعاب...", options=opts)
 
@@ -201,6 +202,152 @@ class GamesLeaderboardSelect(discord.ui.Select):
         vw = discord.ui.View()
         vw.add_item(GamesLeaderboardSelect())
         await ctx.response.edit_message(embed=emb, view=vw)
+
+# ==================== كلاسات لعبة إكس أوه (Tic-Tac-Toe) ====================
+
+class TicTacToeButton(discord.ui.Button):
+    def __init__(self, x: int, y: int):
+        super().__init__(style=discord.ButtonStyle.secondary, label="\u200b", row=y)
+        self.x = x
+        self.y = y
+
+    async def callback(self, ctx: discord.Interaction):
+        view: TicTacToeView = self.view
+
+        if ctx.user.id != view.current_player.id:
+            await ctx.response.send_message("❌ ليس دورك الآن في اللعب!", ephemeral=True)
+            return
+
+        idx = self.y * 3 + self.x
+        if view.board[idx] is not None or view.winner is not None:
+            await ctx.response.send_message("❌ المكان اختير بالفعل أو اللعبة انتهت!", ephemeral=True)
+            return
+
+        symbol = "❌" if view.current_player == view.p1 else "⭕"
+        self.label = symbol
+        self.style = discord.ButtonStyle.danger if symbol == "❌" else discord.ButtonStyle.primary
+        self.disabled = True
+        view.board[idx] = symbol
+
+        winner_symbol = view.check_winner()
+        if winner_symbol:
+            view.winner = view.current_player
+            add_game_win(view.winner.id, "xo")
+            view.disable_all_board()
+            emb = discord.Embed(
+                title="❌⭕ │ لعبة إكس أوه (Tic-Tac-Toe)",
+                description=f"🎉 **مبروك الانتصار!**\nفاز المقاتل {view.winner.mention} ({winner_symbol}) بمهارة عالية! 🏆",
+                color=discord.Color.gold()
+            )
+            await ctx.response.edit_message(embed=emb, view=view)
+            return
+
+        if None not in view.board:
+            view.disable_all_board()
+            emb = discord.Embed(
+                title="❌⭕ │ لعبة إكس أوه (Tic-Tac-Toe)",
+                description="🤝 **تعادل أسطوري!** خاض الطرفان معركة متكافئة وانتهت بدون فائز.",
+                color=discord.Color.blue()
+            )
+            await ctx.response.edit_message(embed=emb, view=view)
+            return
+
+        view.current_player = view.p2 if view.current_player == view.p1 else view.p1
+        emb = discord.Embed(
+            title="❌⭕ │ لعبة إكس أوه (Tic-Tac-Toe)",
+            description=f"🎮 **التحدي مستمر!**\n• {view.p1.mention} (❌) **ضد** {view.p2.mention} (⭕)\n• **الدور الآن على:** {view.current_player.mention}",
+            color=discord.Color.gold()
+        )
+        await ctx.response.edit_message(embed=emb, view=view)
+
+class TicTacToeView(discord.ui.View):
+    def __init__(self, p1: discord.User, p2: discord.User):
+        super().__init__(timeout=None)
+        self.p1 = p1
+        self.p2 = p2
+        self.current_player = p1
+        self.board = [None] * 9
+        self.winner = None
+
+        for y in range(3):
+            for x in range(3):
+                self.add_item(TicTacToeButton(x, y))
+
+        restart_btn = discord.ui.Button(label="🔄 إعادة الجولة", style=discord.ButtonStyle.success, row=3)
+        stop_btn = discord.ui.Button(label="🛑 إيقاف اللعبة", style=discord.ButtonStyle.danger, row=3)
+
+        restart_btn.callback = self.restart_cb
+        stop_btn.callback = self.stop_cb
+
+        self.add_item(restart_btn)
+        self.add_item(stop_btn)
+
+    def disable_all_board(self):
+        for item in self.children:
+            if isinstance(item, TicTacToeButton):
+                item.disabled = True
+
+    def check_winner(self):
+        b = self.board
+        wins = [
+            (0,1,2), (3,4,5), (6,7,8),
+            (0,3,6), (1,4,7), (2,5,8),
+            (0,4,8), (2,4,6)
+        ]
+        for x, y, z in wins:
+            if b[x] and b[x] == b[y] == b[z]:
+                return b[x]
+        return None
+
+    async def restart_cb(self, ctx: discord.Interaction):
+        if ctx.user.id not in [self.p1.id, self.p2.id]:
+            await ctx.response.send_message("❌ إعادة الجولة مقتصرة على اللاعبين المشاركين فقط!", ephemeral=True)
+            return
+
+        new_view = TicTacToeView(self.p1, self.p2)
+        emb = discord.Embed(
+            title="❌⭕ │ جولة جديدة في لعبة إكس أوه!",
+            description=f"🎮 **بدأت جولة جديدة!**\n• {self.p1.mention} (❌) **ضد** {self.p2.mention} (⭕)\n• **الدور الأول على:** {self.p1.mention}",
+            color=discord.Color.gold()
+        )
+        await ctx.response.send_message(embed=emb, view=new_view)
+
+    async def stop_cb(self, ctx: discord.Interaction):
+        if ctx.user.id not in [self.p1.id, self.p2.id]:
+            await ctx.response.send_message("❌ إيقاف اللعبة مقتصر على اللاعبين المشاركين فقط!", ephemeral=True)
+            return
+
+        self.disable_all_board()
+        emb = discord.Embed(
+            title="❌⭕ │ تم إيقاف لعبة إكس أوه",
+            description=f"🛑 تم إيقاف اللعبة بطلب من المقاتل {ctx.user.mention}.",
+            color=discord.Color.red()
+        )
+        await ctx.response.edit_message(embed=emb, view=self)
+
+class TicTacToeChallengeView(discord.ui.View):
+    def __init__(self, host: discord.User):
+        super().__init__(timeout=60)
+        self.host = host
+
+    @discord.ui.button(label="⚔️ قبول التحدي والدخول كمنافس", style=discord.ButtonStyle.success)
+    async def join_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        if ctx.user.id == self.host.id:
+            await ctx.response.send_message("❌ لا يمكنك الانضمام والتحدي ضد نفسك!", ephemeral=True)
+            return
+
+        p1 = self.host
+        p2 = ctx.user
+
+        xo_view = TicTacToeView(p1, p2)
+        emb = discord.Embed(
+            title="❌⭕ │ مواجهة إكس أوه (Tic-Tac-Toe)",
+            description=f"⚔️ **بدأت المعركة!**\n• {p1.mention} (❌) **ضد** {p2.mention} (⭕)\n• **الدور الأول على:** {p1.mention}",
+            color=discord.Color.gold()
+        )
+        await ctx.response.edit_message(content=None, embed=emb, view=xo_view)
+
+# ==================== باقي كلاسات الألعاب ====================
 
 class QuestionsGameView(discord.ui.View):
     def __init__(self, channel_id: int, level: str, players: list):
@@ -342,23 +489,29 @@ class SpyVoteSelect(discord.ui.Select):
             else:
                 await ctx.channel.send(f"💀 **خطأ قاتل!** تم طرد المقاتل البريء <@{most_voted_id}>!\n🎉 **فاز الجاسوس المخادع {self.spy_user.mention} بالمعركة!** الكلمة كانت: `[{self.correct_word}]`")
 
-class CutTweetView(discord.ui.View):
-    def __init__(self):
+class CutTweetLoopView(discord.ui.View):
+    def __init__(self, channel_id: int):
         super().__init__(timeout=None)
+        self.channel_id = channel_id
         self.agree = 0
         self.disagree = 0
 
-    @discord.ui.button(label="👍 مـع", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="👍 مـع", style=discord.ButtonStyle.success, row=0)
     async def agree_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
         self.agree += 1
         tot = self.agree + self.disagree
-        await ctx.response.send_message(f"✅ تصويتك: **مـع**! (النسبة: `{int(self.agree/tot*100)}%` مـع | `{int(self.disagree/tot*100)}%` ضـد)", ephemeral=True)
+        await ctx.response.send_message(f"✅ تصويتك: **مـع**! (النسبة حالياً: `{int(self.agree/tot*100)}%` مـع | `{int(self.disagree/tot*100)}%` ضـد)", ephemeral=True)
 
-    @discord.ui.button(label="👎 ضـد", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="👎 ضـد", style=discord.ButtonStyle.danger, row=0)
     async def disagree_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
         self.disagree += 1
         tot = self.agree + self.disagree
-        await ctx.response.send_message(f"❌ تصويتك: **ضـد**! (النسبة: `{int(self.agree/tot*100)}%` مـع | `{int(self.disagree/tot*100)}%` ضـد)", ephemeral=True)
+        await ctx.response.send_message(f"❌ تصويتك: **ضـد**! (النسبة حالياً: `{int(self.agree/tot*100)}%` مـع | `{int(self.disagree/tot*100)}%` ضـد)", ephemeral=True)
+
+    @discord.ui.button(label="🛑 إيقاف اللعبة", style=discord.ButtonStyle.secondary, row=1)
+    async def stop_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        ACTIVE_GAMES[self.channel_id] = False
+        await ctx.response.send_message("🛑 تم إيقاف لعبة كت تويت التلقائية بنجاح!", ephemeral=False)
 
 class MainGamesSelect(discord.ui.Select):
     def __init__(self):
@@ -368,9 +521,10 @@ class MainGamesSelect(discord.ui.Select):
             discord.SelectOption(label="لعبة الجواسيس (Spyfall)", value="spy_game", emoji="🕵️‍♂️", description="3+ لاعبين + تصويت وتخمين"),
             discord.SelectOption(label="لعبة الرياضيات", value="math_game", emoji="🧮", description="معادلات سريعة ومؤقت 15 ثانية (تلقائي)"),
             discord.SelectOption(label="لعبة خمن الأنمي", value="anime_game", emoji="🎌", description="أنميات متنوعة كلاسيكية وحديثة (تلقائي)"),
-            discord.SelectOption(label="لعبة كت تويت", value="cut_tweet", emoji="💬", description="تغريدات ونقاشات مع أم ضد"),
+            discord.SelectOption(label="لعبة كت تويت", value="cut_tweet", emoji="💬", description="تغريدات ونقاشات مع أم ضد (تلقائي)"),
             discord.SelectOption(label="لعبة فكّك", value="deconstruct", emoji="🔤", description="تفكيك الكلمات بالحروف ومؤقت 15s (تلقائي)"),
-            discord.SelectOption(label="لعبة أسرع", value="fastest", emoji="⚡", description="كتابة الكلمات السريعة بالعربية (تلقائي)")
+            discord.SelectOption(label="لعبة أسرع", value="fastest", emoji="⚡", description="كتابة الكلمات السريعة بالعربية (تلقائي)"),
+            discord.SelectOption(label="لعبة إكس أوه (Tic-Tac-Toe)", value="xo_game", emoji="❌", description="تحدي لشخصين في XO مع زر إيقاف وإعادة")
         ]
         super().__init__(placeholder="🎮 اختر اللعبة المطلوبة لبدء المرح...", options=opts)
 
@@ -378,7 +532,15 @@ class MainGamesSelect(discord.ui.Select):
         v = self.values[0]
         cid = ctx.channel.id
 
-        if v == "q_game":
+        if v == "xo_game":
+            emb_invite = discord.Embed(
+                title="❌⭕ │ تحدي إكس أوه (Tic-Tac-Toe)",
+                description=f"👑 أطلق **{ctx.user.mention}** تحدي إكس أوه جديداً!\nاضغط على الزر بالأسفل للانضمام كمنافس (لاعبين اثنين فقط).",
+                color=discord.Color.gold()
+            )
+            await ctx.response.send_message(embed=emb_invite, view=TicTacToeChallengeView(ctx.user))
+
+        elif v == "q_game":
             players = [m for m in ctx.channel.members if not m.bot]
             if len(players) < 2:
                 await ctx.response.send_message("❌ هذه اللعبة تتطلب وجود **لاعبين اثنين (2) على الأقل** في الروم!", ephemeral=True)
@@ -516,13 +678,26 @@ class MainGamesSelect(discord.ui.Select):
                 await asyncio.sleep(2.5)
 
         elif v == "cut_tweet":
-            tweet = random.choice(CUT_TWEETS)
-            emb = discord.Embed(
-                title="💬 │ كت تويت (Cut Tweet)",
-                description=f"📜 **المقولة/النقاش:**\n`{tweet}`\n━━━━━━━━━━━━━━━━━━━━\nهل أنت **مع أم ضد** القول أعلاه؟",
-                color=discord.Color.teal()
-            )
-            await ctx.response.send_message(embed=emb, view=CutTweetView())
+            if ACTIVE_GAMES.get(cid, False):
+                await ctx.response.send_message("⚠️ هناك لعبة جارية بالفعل في هذه القناة! أوقفها أولاً.", ephemeral=True)
+                return
+
+            ACTIVE_GAMES[cid] = True
+            await ctx.response.send_message("🚀 **بدأت لعبة كت تويت التلقائية!** تتغير المقولات تلقائياً كل 20 ثانية.")
+
+            while ACTIVE_GAMES.get(cid, False):
+                tweet = random.choice(CUT_TWEETS)
+                emb = discord.Embed(
+                    title="💬 │ كت تويت (Cut Tweet)",
+                    description=f"📜 **المقولة/النقاش:**\n`{tweet}`\n━━━━━━━━━━━━━━━━━━━━\nهل أنت **مع أم ضد** القول أعلاه؟\n\n⏱️ **تتغير المقولة تلقائياً خلال 20 ثانية!**",
+                    color=discord.Color.teal()
+                )
+                await ctx.channel.send(embed=emb, view=CutTweetLoopView(cid))
+
+                for _ in range(20):
+                    if not ACTIVE_GAMES.get(cid, False):
+                        break
+                    await asyncio.sleep(1)
 
         elif v == "deconstruct":
             if ACTIVE_GAMES.get(cid, False):
@@ -593,7 +768,7 @@ class MainGamesView(discord.ui.View):
 
 # ==================== الأوامر والتسجيل ====================
 
-@bot.tree.command(name="الالعاب", description="🎮 مركز وقاعة الألعاب الإمبراطورية الملكية الـ 8")
+@bot.tree.command(name="الالعاب", description="🎮 مركز وقاعة الألعاب الإمبراطورية الملكية الـ 9")
 async def games_hub_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
         await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
@@ -607,7 +782,7 @@ async def games_hub_command(ctx: discord.Interaction):
             "━━━━━━━━━━━━━━━━━━━━\n"
             "🎲 **الأسئلة والجريئة** │ 🧩 **الألغاز** │ 🕵️‍♂️ **الجواسيس**\n"
             "🧮 **الرياضيات** │ 🎌 **خمن الأنمي** │ 💬 **كت تويت**\n"
-            "🔤 **فكّك** │ ⚡ **أسرع**"
+            "🔤 **فكّك** │ ⚡ **أسرع** │ ❌ **إكس أوه (XO)**"
         ),
         color=discord.Color.gold()
     )
