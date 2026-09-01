@@ -796,14 +796,118 @@ class DevGearCategoryView(discord.ui.View):
         super().__init__(timeout=60)
         self.add_item(DevGearCategorySelect())
 
+class DevGearTakeUserSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(placeholder="☠️ اختر اللاعب لسحب العتاد المحرم T25 منه...", min_values=1, max_values=1)
+
+    async def callback(self, ctx: discord.Interaction):
+        target = self.values[0]
+        t_id = str(target.id)
+        if not is_user_registered(t_id):
+            await ctx.response.send_message("❌ هذا اللاعب غير مسجل باللعبة!", ephemeral=True)
+            return
+
+        u = users_col.find_one({"user_id": t_id}) or {}
+        inv = u.get("inventory", [])
+        removed_power = 0
+        removed_count = 0
+
+        max_dark_items = [it for it in ALL_DARK_ITEMS if it["id"].endswith("_25")]
+
+        for item in max_dark_items:
+            while item["name"] in inv:
+                inv.remove(item["name"])
+                removed_power += item["power"]
+                removed_count += 1
+
+        users_col.update_one(
+            {"user_id": t_id},
+            {
+                "$set": {"inventory": inv},
+                "$inc": {"power": -removed_power}
+            }
+        )
+        await ctx.response.send_message(
+            f"☠️ تم سحب طقم العتاد المحرم (T25) من {target.mention} بنجاح!\n"
+            f"• **عدد القطع المسحوبة:** `{removed_count}`\n"
+            f"• **القوة المخصومة:** `-{removed_power:,}` ⚡",
+            ephemeral=True
+        )
+
+class DevGearGiveUserSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(placeholder="🎁 اختر اللاعب لإهدائه العتاد المحرم الكامل T25...", min_values=1, max_values=1)
+
+    async def callback(self, ctx: discord.Interaction):
+        target = self.values[0]
+        t_id = str(target.id)
+        if not is_user_registered(t_id):
+            await ctx.response.send_message("❌ هذا اللاعب غير مسجل باللعبة!", ephemeral=True)
+            return
+
+        max_dark_items = [it for it in ALL_DARK_ITEMS if it["id"].endswith("_25")]
+        add_names = [it["name"] for it in max_dark_items]
+        add_power = sum(it["power"] for it in max_dark_items)
+
+        users_col.update_one(
+            {"user_id": t_id},
+            {
+                "$push": {"inventory": {"$each": add_names}},
+                "$inc": {"power": add_power}
+            }
+        )
+        await ctx.response.send_message(
+            f"🎁 تم إهداء طقم العتاد المحرم الكامل T25 (8 قطع أسطورية) إلى {target.mention} بنجاح!\n"
+            f"• **إجمالي القوة المضافة:** `+{add_power:,}` ⚡",
+            ephemeral=True
+        )
+
+class DevGearActionView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+
+    @discord.ui.button(label="👑 أخذ العتاد لنفسي فوراً", style=discord.ButtonStyle.success, row=0)
+    async def self_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        uid = str(ctx.user.id)
+        max_dark_items = [it for it in ALL_DARK_ITEMS if it["id"].endswith("_25")]
+        add_names = [it["name"] for it in max_dark_items]
+        add_power = sum(it["power"] for it in max_dark_items)
+
+        users_col.update_one(
+            {"user_id": uid},
+            {
+                "$push": {"inventory": {"$each": add_names}},
+                "$inc": {"power": add_power}
+            }
+        )
+        await ctx.response.send_message(
+            f"☠️ **تم تزويدك بطقم العتاد المحرم الكامل (T25) بنجاح!**\n"
+            f"• **المعدات المضافة:** (خوذة، درع، بنطال، حذاء، سيف، خنجر، مطرقة، عصا سحرية) T25\n"
+            f"• **إجمالي القوة المضافة:** `+{add_power:,}` ⚡",
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="🎁 إهداء العتاد للاعب", style=discord.ButtonStyle.primary, row=0)
+    async def give_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        v = discord.ui.View(timeout=60)
+        v.add_item(DevGearGiveUserSelect())
+        await ctx.response.send_message("👤 اختر اللاعب المراد إهداؤه الطقم المحرم الكامل (T25):", view=v, ephemeral=True)
+
+    @discord.ui.button(label="☠️ سحب العتاد من لاعب", style=discord.ButtonStyle.danger, row=1)
+    async def take_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        v = discord.ui.View(timeout=60)
+        v.add_item(DevGearTakeUserSelect())
+        await ctx.response.send_message("👤 اختر اللاعب المراد سحب الطقم المحرم T25 منه:", view=v, ephemeral=True)
+
 class DevActionSelectMenu(discord.ui.Select):
     def __init__(self):
         opts = [
             discord.SelectOption(label="⚡ تطوير بنقرة واحدة (Max All)", value="one_click_max", emoji="🚀", description="رفع جميع المعدلات والخصائص لرقم خيالي أسطوري"),
+            discord.SelectOption(label="💀 عتاد المطور المحرم (T25)", value="dev_gear_action", emoji="☠️", description="أخذ/إهداء/سحب طقم العتاد المحرم T25 بالكامل"),
             discord.SelectOption(label="عملات لا نهائية", value="inf", emoji="♾️", description="شحن رصيد عملات لا نهائي لك"),
             discord.SelectOption(label="تفعيل السفاح الخارق", value="assassin", emoji="🩸", description="رفع طاقتك وخصائصك لأقصى حد"),
             discord.SelectOption(label="الحصول على القاب", value="get_title", emoji="👑", description="إضافة وتعيين أي لقب خاص لبروفايلك"),
-            discord.SelectOption(label="إهداء عتاد للاعب", value="gift_gear", emoji="🎁", description="إهداء عتاد محدد للاعب بالمنشن"),
+            discord.SelectOption(label="إهداء عتاد فردي للاعب", value="gift_gear", emoji="🎁", description="إهداء عتاد محدد للاعب بالمنشن"),
             discord.SelectOption(label="تحويل / إهداء عملات", value="transfer", emoji="💸", description="شحن عملات للاعب بالمنشن"),
             discord.SelectOption(label="إضافة مطور", value="add_dev", emoji="🔱", description="منح صلاحية مطور للاعب بالمنشن")
         ]
@@ -816,7 +920,27 @@ class DevActionSelectMenu(discord.ui.Select):
         uid = str(ctx.user.id)
         v = self.values[0]
 
-        if v == "one_click_max":
+        if v == "dev_gear_action":
+            emb_gear = discord.Embed(
+                title="☠️ │ إدارة عتاد المطور المحرم (T25)",
+                description=(
+                    "يتضمن هذا الطقم العتاد المحرم الأعلى بالمستوى T25 لجميع الأقسام الـ 8:\n"
+                    "• ☠️ **خوذة** [حاكم الظلمات] T25\n"
+                    "• ☠️ **درع** [حاكم الظلمات] T25\n"
+                    "• ☠️ **بنطال** [حاكم الظلمات] T25\n"
+                    "• ☠️ **حذاء** [حاكم الظلمات] T25\n"
+                    "• ☠️ **سيف** [حاكم الظلمات] T25\n"
+                    "• ☠️ **خنجر** [حاكم الظلمات] T25\n"
+                    "• ☠️ **مطرقة** [حاكم الظلمات] T25\n"
+                    "• ☠️ **عصا سحرية** [حاكم الظلمات] T25\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n"
+                    "اختر الإجراء المطلوب من الأزرار بالأسفل:"
+                ),
+                color=discord.Color.purple()
+            )
+            await ctx.response.send_message(embed=emb_gear, view=DevGearActionView(), ephemeral=True)
+
+        elif v == "one_click_max":
             max_val = 999999999999999
             st = {
                 "power": max_val,
@@ -1386,7 +1510,7 @@ async def dev_panel_command(ctx: discord.Interaction):
         title="⚡ │ غرفة التحكم الإلهية والقدرات المطلقة — DEV CONTROL ROOM",
         description=(
             "أهلاً بك يا سيّد المطورين في القاعة الإدارية العليا للإمبراطورية.\n"
-            "من هنا تملك السلطة الكاملة للتلاعب بالخصائص، شحن الثروات، إهداء العتاد، والتطوير الأسطوري الفوري!\n"
+            "من هنا تملك السلطة الكاملة للتلاعب بالخصائص، شحن الثروات، إهداء العتاد المحرم T25، والتطوير الأسطوري الفوري!\n"
             "━━━━━━━━━━━━━━━━━━━━"
         ),
         color=discord.Color.from_rgb(255, 215, 0)
@@ -1399,7 +1523,7 @@ async def dev_panel_command(ctx: discord.Interaction):
     )
     emb.add_field(
         name="🔥 **أبرز الأوامر المطلقة**",
-        value="• 🚀 **تطوير بنقرة واحدة** (Max Stats)\n• ♾️ **ثروات وعملات لا نهائية**\n• 🩸 **السفاح الخارق**\n• 👑 **توليد الألقاب الخاصة**",
+        value="• 🚀 **تطوير بنقرة واحدة** (Max All)\n• ☠️ **عتاد المطور المحرم T25** (8 قطع)\n• ♾️ **ثروات وعملات لا نهائية**\n• 👑 **توليد الألقاب الخاصة**",
         inline=True
     )
     emb.set_footer(text="⚠️ الأوامر المنفذة هنا فورية وتنعكس مباشرة على الداتابيز")
