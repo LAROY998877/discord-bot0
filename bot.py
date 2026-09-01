@@ -105,7 +105,6 @@ MATH_EQUATIONS = [
     ("15 * 3 - 10", "35"), ("81 / 9 + 7", "16")
 ] + [(f"{i} + {i*2}", str(i + i*2)) for i in range(6, 151)]
 
-# قائمة الأنميات مع قبول جميع خيارات الإجابة بالعربية فقط
 ANIME_DATA = [
     ("بطل يستدعي تنين الجنيهات السبعة بالكرات الأسطورية", ["دراغون بول", "درغون بول"]),
     ("نينجا يطمح ليصبح الهوكاجي ويحمل الثعلب ذو التسعة أذيل", ["ناروتو", "ناروتو شيبودن"]),
@@ -145,7 +144,6 @@ DECONSTRUCT_WORDS = [
     ("فرسان", "ف ر س ا ن")
 ] + [(f"كلمة{i}", " ".join(list(f"كلمة{i}"))) for i in range(6, 101)]
 
-# كلمات أسرع باللغة العربية فقط
 FASTEST_WORDS = [
     "الإمبراطورية العظمى", "سيد الظلال", "مقاتل الظلال الأسطوري",
     "بوت الديسكورد", "السفاح القرمزي", "الانتصار الملكي", "القتال الملكي",
@@ -154,6 +152,16 @@ FASTEST_WORDS = [
 ] + [f"كلمة_سريعة_{i}" for i in range(17, 150)]
 
 # ==================== كلاسات أنظمة الألعاب ====================
+
+class StopGameView(discord.ui.View):
+    def __init__(self, channel_id: int):
+        super().__init__(timeout=None)
+        self.channel_id = channel_id
+
+    @discord.ui.button(label="🛑 إيقاف اللعبة", style=discord.ButtonStyle.danger)
+    async def stop_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        ACTIVE_GAMES[self.channel_id] = False
+        await ctx.response.send_message("🛑 تم إيقاف اللعبة التلقائية بنجاح!", ephemeral=False)
 
 class GamesLeaderboardSelect(discord.ui.Select):
     def __init__(self):
@@ -195,12 +203,11 @@ class GamesLeaderboardSelect(discord.ui.Select):
         await ctx.response.edit_message(embed=emb, view=vw)
 
 class QuestionsGameView(discord.ui.View):
-    def __init__(self, channel, level: str, players: list):
+    def __init__(self, channel_id: int, level: str, players: list):
         super().__init__(timeout=None)
-        self.channel = channel
+        self.channel_id = channel_id
         self.level = level
         self.players = players
-        self.is_running = True
 
     @discord.ui.button(label="💥 طلب عقاب", style=discord.ButtonStyle.danger, row=0)
     async def punish_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
@@ -209,14 +216,14 @@ class QuestionsGameView(discord.ui.View):
 
     @discord.ui.button(label="🛑 إيقاف اللعبة", style=discord.ButtonStyle.secondary, row=0)
     async def stop_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
-        self.is_running = False
-        await ctx.response.send_message("🛑 تم إيقاف جلسة الأسئلة بناءً على طلبك.", ephemeral=False)
+        ACTIVE_GAMES[self.channel_id] = False
+        await ctx.response.send_message("🛑 تم إيقاف جلسة الأسئلة بنجاح.", ephemeral=False)
 
     async def start_loop(self, initial_msg):
         msg = initial_msg
-        while self.is_running:
+        while ACTIVE_GAMES.get(self.channel_id, False):
             await asyncio.sleep(15)
-            if not self.is_running: break
+            if not ACTIVE_GAMES.get(self.channel_id, False): break
 
             target_player = random.choice(self.players)
             question = random.choice(QUESTIONS_DATA.get(self.level, QUESTIONS_DATA["normal"]))
@@ -249,6 +256,9 @@ class QuestionsLevelSelect(discord.ui.Select):
 
     async def callback(self, ctx: discord.Interaction):
         level = self.values[0]
+        cid = ctx.channel.id
+        ACTIVE_GAMES[cid] = True
+
         target_player = random.choice(self.players)
         question = random.choice(QUESTIONS_DATA[level])
 
@@ -264,7 +274,7 @@ class QuestionsLevelSelect(discord.ui.Select):
             color=discord.Color.gold()
         )
 
-        game_view = QuestionsGameView(ctx.channel, level, self.players)
+        game_view = QuestionsGameView(cid, level, self.players)
         await ctx.response.send_message(embed=emb, view=game_view)
         msg = await ctx.original_response()
         asyncio.create_task(game_view.start_loop(msg))
@@ -354,18 +364,19 @@ class MainGamesSelect(discord.ui.Select):
     def __init__(self):
         opts = [
             discord.SelectOption(label="لعبة الأسئلة والجريئة", value="q_game", emoji="🎲", description="3 مستويات + 50 سؤال وعقاب لكل مستوى"),
-            discord.SelectOption(label="لعبة الألغاز", value="riddle_game", emoji="🧩", description="150 لغز متدرج الصعوبة"),
+            discord.SelectOption(label="لعبة الألغاز", value="riddle_game", emoji="🧩", description="150 لغز متدرج الصعوبة (تلقائي)"),
             discord.SelectOption(label="لعبة الجواسيس (Spyfall)", value="spy_game", emoji="🕵️‍♂️", description="3+ لاعبين + تصويت وتخمين"),
-            discord.SelectOption(label="لعبة الرياضيات", value="math_game", emoji="🧮", description="معادلات سريعة ومؤقت 15 ثانية"),
-            discord.SelectOption(label="لعبة خمن الأنمي", value="anime_game", emoji="🎌", description="أنميات متنوعة كلاسيكية وحديثة"),
+            discord.SelectOption(label="لعبة الرياضيات", value="math_game", emoji="🧮", description="معادلات سريعة ومؤقت 15 ثانية (تلقائي)"),
+            discord.SelectOption(label="لعبة خمن الأنمي", value="anime_game", emoji="🎌", description="أنميات متنوعة كلاسيكية وحديثة (تلقائي)"),
             discord.SelectOption(label="لعبة كت تويت", value="cut_tweet", emoji="💬", description="تغريدات ونقاشات مع أم ضد"),
-            discord.SelectOption(label="لعبة فكّك", value="deconstruct", emoji="🔤", description="تفكيك الكلمات بالحروف ومؤقت 15s"),
-            discord.SelectOption(label="لعبة أسرع", value="fastest", emoji="⚡", description="كتابة الكلمات السريعة بالعربية فقط")
+            discord.SelectOption(label="لعبة فكّك", value="deconstruct", emoji="🔤", description="تفكيك الكلمات بالحروف ومؤقت 15s (تلقائي)"),
+            discord.SelectOption(label="لعبة أسرع", value="fastest", emoji="⚡", description="كتابة الكلمات السريعة بالعربية (تلقائي)")
         ]
         super().__init__(placeholder="🎮 اختر اللعبة المطلوبة لبدء المرح...", options=opts)
 
     async def callback(self, ctx: discord.Interaction):
         v = self.values[0]
+        cid = ctx.channel.id
 
         if v == "q_game":
             players = [m for m in ctx.channel.members if not m.bot]
@@ -377,33 +388,35 @@ class MainGamesSelect(discord.ui.Select):
             await ctx.response.send_message("🎲 اختر مستوى صراحة الأسئلة للبدء:", view=vw)
 
         elif v == "riddle_game":
-            riddle, ans = random.choice(RIDDLES)
-            emb = discord.Embed(
-                title="🧩 │ لعبة الألغاز الإمبراطورية",
-                description=f"❓ **اللغز:**\n`{riddle}`\n\n💡 اكتب الإجابة الصحيحة في الشات فوراً!",
-                color=discord.Color.green()
-            )
-            vw = discord.ui.View()
-            cont_btn = discord.ui.Button(label="▶️ استمرار باللعب", style=discord.ButtonStyle.success)
+            if ACTIVE_GAMES.get(cid, False):
+                await ctx.response.send_message("⚠️ هناك لعبة جارية بالفعل في هذه القناة! أوقفها أولاً.", ephemeral=True)
+                return
 
-            async def cont_cb(b_ctx: discord.Interaction):
-                nr, na = random.choice(RIDDLES)
-                emb.description = f"❓ **اللغز:**\n`{nr}`\n\n💡 اكتب الإجابة الصحيحة في الشات فوراً!"
-                await b_ctx.response.send_message(embed=emb, view=vw)
+            ACTIVE_GAMES[cid] = True
+            await ctx.response.send_message("🚀 **بدأت لعبة الألغاز التلقائية!** ستستمر الأسئلة تلقائياً حتى ضغط زر الإيقاف.")
 
-            cont_btn.callback = cont_cb
-            vw.add_item(cont_btn)
-            await ctx.response.send_message(embed=emb, view=vw)
+            while ACTIVE_GAMES.get(cid, False):
+                riddle, ans = random.choice(RIDDLES)
+                emb = discord.Embed(
+                    title="🧩 │ لعبة الألغاز الإمبراطورية",
+                    description=f"❓ **اللغز:**\n`{riddle}`\n\n💡 اكتب الإجابة الصحيحة في الشات فوراً!",
+                    color=discord.Color.green()
+                )
+                await ctx.channel.send(embed=emb, view=StopGameView(cid))
 
-            def check(m):
-                return m.channel == ctx.channel and ans in m.content.strip()
+                def check(m):
+                    return m.channel.id == cid and not m.author.bot and ans in m.content.strip()
 
-            try:
-                winner_msg = await bot.wait_for('message', check=check, timeout=30.0)
-                add_game_win(winner_msg.author.id, "riddles")
-                await ctx.channel.send(f"🎉 **تهنئة ملكية!** إجابة صحيحة يا بطل {winner_msg.author.mention}! 🏆 الإجابة هي: **[{ans}]**")
-            except asyncio.TimeoutError:
-                await ctx.channel.send(f"⌛ **انتهى الوقت!** لم يتمكن أحد من حل اللغز. الإجابة الصحيحة كانت: **[{ans}]**")
+                try:
+                    winner_msg = await bot.wait_for('message', check=check, timeout=30.0)
+                    if not ACTIVE_GAMES.get(cid, False): break
+                    add_game_win(winner_msg.author.id, "riddles")
+                    await ctx.channel.send(f"🎉 **تهنئة ملكية!** إجابة صحيحة يا بطل {winner_msg.author.mention}! 🏆 الإجابة هي: **[{ans}]**")
+                except asyncio.TimeoutError:
+                    if not ACTIVE_GAMES.get(cid, False): break
+                    await ctx.channel.send(f"⌛ **انتهى الوقت!** لم يتمكن أحد من حل اللغز. الإجابة الصحيحة كانت: **[{ans}]**")
+
+                await asyncio.sleep(2.5)
 
         elif v == "spy_game":
             players = [m for m in ctx.channel.members if not m.bot][:6]
@@ -438,77 +451,69 @@ class MainGamesSelect(discord.ui.Select):
             await ctx.response.send_message(embed=emb_spy, view=vw)
 
         elif v == "math_game":
-            eq, ans = random.choice(MATH_EQUATIONS)
-            emb = discord.Embed(
-                title="🧮 │ لعبة الرياضيات والسرعة",
-                description=f"⚡ **احسب الناتج بسرعة خلال 15 ثانية:**\n`{eq} = ؟`",
-                color=discord.Color.blue()
-            )
-            vw = discord.ui.View()
-            cont_btn = discord.ui.Button(label="▶️ استمرار باللعب", style=discord.ButtonStyle.primary)
+            if ACTIVE_GAMES.get(cid, False):
+                await ctx.response.send_message("⚠️ هناك لعبة جارية بالفعل في هذه القناة! أوقفها أولاً.", ephemeral=True)
+                return
 
-            async def math_cb(b_ctx: discord.Interaction):
-                neq, nas = random.choice(MATH_EQUATIONS)
-                emb.description = f"⚡ **احسب الناتج بسرعة خلال 15 ثانية:**\n`{neq} = ؟`"
-                await b_ctx.response.send_message(embed=emb, view=vw)
+            ACTIVE_GAMES[cid] = True
+            await ctx.response.send_message("🚀 **بدأت لعبة الرياضيات التلقائية!** ستستمر المعادلات تلقائياً حتى ضغط زر الإيقاف.")
 
-            cont_btn.callback = math_cb
-            vw.add_item(cont_btn)
-            await ctx.response.send_message(embed=emb, view=vw)
+            while ACTIVE_GAMES.get(cid, False):
+                eq, ans = random.choice(MATH_EQUATIONS)
+                emb = discord.Embed(
+                    title="🧮 │ لعبة الرياضيات والسرعة",
+                    description=f"⚡ **احسب الناتج بسرعة خلال 15 ثانية:**\n`{eq} = ؟`",
+                    color=discord.Color.blue()
+                )
+                await ctx.channel.send(embed=emb, view=StopGameView(cid))
 
-            def check(m):
-                return m.channel == ctx.channel and m.content.strip() == ans
+                def check(m):
+                    return m.channel.id == cid and not m.author.bot and m.content.strip() == ans
 
-            try:
-                winner_msg = await bot.wait_for('message', check=check, timeout=15.0)
-                add_game_win(winner_msg.author.id, "math")
-                await ctx.channel.send(f"🎉 **سرعة أسطورية!** {winner_msg.author.mention} حل المعادلة الصحيحة **[{ans}]** بنجاح! 🏆")
-            except asyncio.TimeoutError:
-                await ctx.channel.send(f"⌛ **خسرتم الوقت!** انتهت الـ 15 ثانية بدون إجابة. الناتج الصحيح كان: **[{ans}]**")
+                try:
+                    winner_msg = await bot.wait_for('message', check=check, timeout=15.0)
+                    if not ACTIVE_GAMES.get(cid, False): break
+                    add_game_win(winner_msg.author.id, "math")
+                    await ctx.channel.send(f"🎉 **سرعة أسطورية!** {winner_msg.author.mention} حل المعادلة الصحيحة **[{ans}]** بنجاح! 🏆")
+                except asyncio.TimeoutError:
+                    if not ACTIVE_GAMES.get(cid, False): break
+                    await ctx.channel.send(f"⌛ **خسرتم الوقت!** انتهت الـ 15 ثانية بدون إجابة. الناتج الصحيح كان: **[{ans}]**")
+
+                await asyncio.sleep(2.5)
 
         elif v == "anime_game":
-            async def start_anime_round(interaction_or_ctx):
-                hint, valid_answers = random.choice(ANIME_DATA)
+            if ACTIVE_GAMES.get(cid, False):
+                await ctx.response.send_message("⚠️ هناك لعبة جارية بالفعل في هذه القناة! أوقفها أولاً.", ephemeral=True)
+                return
 
+            ACTIVE_GAMES[cid] = True
+            await ctx.response.send_message("🚀 **بدأت لعبة خمن الأنمي التلقائية!** ستستمر الأنميات تلقائياً حتى ضغط زر الإيقاف.")
+
+            while ACTIVE_GAMES.get(cid, False):
+                hint, valid_answers = random.choice(ANIME_DATA)
                 emb = discord.Embed(
                     title="🎌 │ لعبة خمن الأنمي",
                     description=f"💡 **التلميح:**\n`{hint}`\n\n⏱️ **معكم 25 ثانية فقط لمعرفة اسم الأنمي!**",
                     color=discord.Color.gold()
                 )
-
-                class AnimeContView(discord.ui.View):
-                    def __init__(self):
-                        super().__init__(timeout=None)
-
-                    @discord.ui.button(label="▶️ استمرار باللعب", style=discord.ButtonStyle.success)
-                    async def cont_btn(self, btn_ctx: discord.Interaction, button: discord.ui.Button):
-                        await start_anime_round(btn_ctx)
-
-                view = AnimeContView()
-
-                if isinstance(interaction_or_ctx, discord.Interaction):
-                    if interaction_or_ctx.response.is_done():
-                        msg = await interaction_or_ctx.channel.send(embed=emb, view=view)
-                    else:
-                        await interaction_or_ctx.response.send_message(embed=emb, view=view)
-                        msg = await interaction_or_ctx.original_response()
-                else:
-                    msg = await interaction_or_ctx.send(embed=emb, view=view)
+                await ctx.channel.send(embed=emb, view=StopGameView(cid))
 
                 def check(m):
-                    if m.channel != ctx.channel or m.author.bot:
+                    if m.channel.id != cid or m.author.bot:
                         return False
                     user_ans = m.content.strip().lower()
                     return any(ans.lower() in user_ans for ans in valid_answers)
 
                 try:
                     winner_msg = await bot.wait_for('message', check=check, timeout=25.0)
+                    if not ACTIVE_GAMES.get(cid, False): break
                     add_game_win(winner_msg.author.id, "anime")
                     await ctx.channel.send(f"🎉 **أوتاكو أسطوري!** {winner_msg.author.mention} عرف الأنمي الصحيح **[{valid_answers[0]}]** بنجاح! 👑")
                 except asyncio.TimeoutError:
+                    if not ACTIVE_GAMES.get(cid, False): break
                     await ctx.channel.send(f"⌛ **انتهى الوقت!** اسم الأنمي الصحيح كان: **[{valid_answers[0]}]**")
 
-            await start_anime_round(ctx)
+                await asyncio.sleep(2.5)
 
         elif v == "cut_tweet":
             tweet = random.choice(CUT_TWEETS)
@@ -520,62 +525,66 @@ class MainGamesSelect(discord.ui.Select):
             await ctx.response.send_message(embed=emb, view=CutTweetView())
 
         elif v == "deconstruct":
-            word, ans = random.choice(DECONSTRUCT_WORDS)
-            emb = discord.Embed(
-                title="🔤 │ لعبة فكّك الكلمات",
-                description=f"🎯 **فكّك الكلمة التالية بحروف بينها مسافات خلال 15 ثانية:**\n`[{word}]`",
-                color=discord.Color.orange()
-            )
-            vw = discord.ui.View()
-            cont_btn = discord.ui.Button(label="▶️ استمرار باللعب", style=discord.ButtonStyle.primary)
+            if ACTIVE_GAMES.get(cid, False):
+                await ctx.response.send_message("⚠️ هناك لعبة جارية بالفعل في هذه القناة! أوقفها أولاً.", ephemeral=True)
+                return
 
-            async def decon_cb(b_ctx: discord.Interaction):
-                nw, na = random.choice(DECONSTRUCT_WORDS)
-                emb.description = f"🎯 **فكّك الكلمة التالية بحروف بينها مسافات خلال 15 ثانية:**\n`[{nw}]`"
-                await b_ctx.response.send_message(embed=emb, view=vw)
+            ACTIVE_GAMES[cid] = True
+            await ctx.response.send_message("🚀 **بدأت لعبة فكّك الكلمات التلقائية!** ستستمر الكلمات تلقائياً حتى ضغط زر الإيقاف.")
 
-            cont_btn.callback = decon_cb
-            vw.add_item(cont_btn)
-            await ctx.response.send_message(embed=emb, view=vw)
+            while ACTIVE_GAMES.get(cid, False):
+                word, ans = random.choice(DECONSTRUCT_WORDS)
+                emb = discord.Embed(
+                    title="🔤 │ لعبة فكّك الكلمات",
+                    description=f"🎯 **فكّك الكلمة التالية بحروف بينها مسافات خلال 15 ثانية:**\n`[{word}]`",
+                    color=discord.Color.orange()
+                )
+                await ctx.channel.send(embed=emb, view=StopGameView(cid))
 
-            def check(m):
-                return m.channel == ctx.channel and m.content.strip() == ans
+                def check(m):
+                    return m.channel.id == cid and not m.author.bot and m.content.strip() == ans
 
-            try:
-                winner_msg = await bot.wait_for('message', check=check, timeout=15.0)
-                add_game_win(winner_msg.author.id, "deconstruct")
-                await ctx.channel.send(f"🎉 **إجابة رائعة!** {winner_msg.author.mention} فكك الكلمة بشكل صحيح **[{ans}]**! 🏆")
-            except asyncio.TimeoutError:
-                await ctx.channel.send(f"⌛ **انتهت الـ 15 ثانية!** التفكيك الصحيح كان: **[{ans}]**")
+                try:
+                    winner_msg = await bot.wait_for('message', check=check, timeout=15.0)
+                    if not ACTIVE_GAMES.get(cid, False): break
+                    add_game_win(winner_msg.author.id, "deconstruct")
+                    await ctx.channel.send(f"🎉 **إجابة رائعة!** {winner_msg.author.mention} فكك الكلمة بشكل صحيح **[{ans}]**! 🏆")
+                except asyncio.TimeoutError:
+                    if not ACTIVE_GAMES.get(cid, False): break
+                    await ctx.channel.send(f"⌛ **انتهت الـ 15 ثانية!** التفكيك الصحيح كان: **[{ans}]**")
+
+                await asyncio.sleep(2.5)
 
         elif v == "fastest":
-            word = random.choice(FASTEST_WORDS)
-            emb = discord.Embed(
-                title="⚡ │ لعبة أسرع كتابة",
-                description=f"🚀 **اكتب الكلمة التالية بسرعة وطابقها بالضبط خلال 15 ثانية:**\n`{word}`",
-                color=discord.Color.magenta()
-            )
-            vw = discord.ui.View()
-            cont_btn = discord.ui.Button(label="▶️ استمرار باللعب", style=discord.ButtonStyle.success)
+            if ACTIVE_GAMES.get(cid, False):
+                await ctx.response.send_message("⚠️ هناك لعبة جارية بالفعل في هذه القناة! أوقفها أولاً.", ephemeral=True)
+                return
 
-            async def fast_cb(b_ctx: discord.Interaction):
-                nw = random.choice(FASTEST_WORDS)
-                emb.description = f"🚀 **اكتب الكلمة التالية بسرعة وطابقها بالضبط خلال 15 ثانية:**\n`{nw}`"
-                await b_ctx.response.send_message(embed=emb, view=vw)
+            ACTIVE_GAMES[cid] = True
+            await ctx.response.send_message("🚀 **بدأت لعبة أسرع كتابة التلقائية!** ستستمر الكلمات تلقائياً حتى ضغط زر الإيقاف.")
 
-            cont_btn.callback = fast_cb
-            vw.add_item(cont_btn)
-            await ctx.response.send_message(embed=emb, view=vw)
+            while ACTIVE_GAMES.get(cid, False):
+                word = random.choice(FASTEST_WORDS)
+                emb = discord.Embed(
+                    title="⚡ │ لعبة أسرع كتابة",
+                    description=f"🚀 **اكتب الكلمة التالية بسرعة وطابقها بالضبط خلال 15 ثانية:**\n`{word}`",
+                    color=discord.Color.magenta()
+                )
+                await ctx.channel.send(embed=emb, view=StopGameView(cid))
 
-            def check(m):
-                return m.channel == ctx.channel and m.content.strip() == word
+                def check(m):
+                    return m.channel.id == cid and not m.author.bot and m.content.strip() == word
 
-            try:
-                winner_msg = await bot.wait_for('message', check=check, timeout=15.0)
-                add_game_win(winner_msg.author.id, "fastest")
-                await ctx.channel.send(f"⚡ **سرعة خارقة!** {winner_msg.author.mention} كتب الكلمة أولاً خلال الثواني الأسرع! 🏆")
-            except asyncio.TimeoutError:
-                await ctx.channel.send(f"⌛ **انتهى الوقت!** لم يكتب أحد الكلمة المطابقة `{word}` في الـ 15 ثانية.")
+                try:
+                    winner_msg = await bot.wait_for('message', check=check, timeout=15.0)
+                    if not ACTIVE_GAMES.get(cid, False): break
+                    add_game_win(winner_msg.author.id, "fastest")
+                    await ctx.channel.send(f"⚡ **سرعة خارقة!** {winner_msg.author.mention} كتب الكلمة أولاً خلال الثواني الأسرع! 🏆")
+                except asyncio.TimeoutError:
+                    if not ACTIVE_GAMES.get(cid, False): break
+                    await ctx.channel.send(f"⌛ **انتهى الوقت!** لم يكتب أحد الكلمة المطابقة `{word}` في الـ 15 ثانية.")
+
+                await asyncio.sleep(2.5)
 
 class MainGamesView(discord.ui.View):
     def __init__(self):
