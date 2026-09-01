@@ -799,14 +799,15 @@ class DevGearCategoryView(discord.ui.View):
 class DevActionSelectMenu(discord.ui.Select):
     def __init__(self):
         opts = [
+            discord.SelectOption(label="⚡ تطوير بنقرة واحدة (Max All)", value="one_click_max", emoji="🚀", description="رفع جميع المعدلات والخصائص لرقم خيالي أسطوري"),
             discord.SelectOption(label="عملات لا نهائية", value="inf", emoji="♾️", description="شحن رصيد عملات لا نهائي لك"),
             discord.SelectOption(label="تفعيل السفاح الخارق", value="assassin", emoji="🩸", description="رفع طاقتك وخصائصك لأقصى حد"),
             discord.SelectOption(label="الحصول على القاب", value="get_title", emoji="👑", description="إضافة وتعيين أي لقب خاص لبروفايلك"),
             discord.SelectOption(label="إهداء عتاد للاعب", value="gift_gear", emoji="🎁", description="إهداء عتاد محدد للاعب بالمنشن"),
             discord.SelectOption(label="تحويل / إهداء عملات", value="transfer", emoji="💸", description="شحن عملات للاعب بالمنشن"),
-            discord.SelectOption(label="إضافة مطور", value="add_dev", emoji="👑", description="منح صلاحية مطور للاعب بالمنشن")
+            discord.SelectOption(label="إضافة مطور", value="add_dev", emoji="🔱", description="منح صلاحية مطور للاعب بالمنشن")
         ]
-        super().__init__(placeholder="⚙️ اختر إجراء المطور...", options=opts)
+        super().__init__(placeholder="⚙️ اختر إجراء المطور الخارق...", options=opts)
 
     async def callback(self, ctx: discord.Interaction):
         if not is_dev(ctx.user.id):
@@ -815,7 +816,47 @@ class DevActionSelectMenu(discord.ui.Select):
         uid = str(ctx.user.id)
         v = self.values[0]
 
-        if v == "inf":
+        if v == "one_click_max":
+            max_val = 999999999999999
+            st = {
+                "power": max_val,
+                "balance": max_val,
+                "bank": max_val,
+                "diamonds": max_val,
+                "attack": max_val,
+                "defense": max_val,
+                "magic": max_val,
+                "aim": max_val,
+                "evasion": max_val,
+                "accuracy": max_val,
+                "critical": max_val,
+                "intelligence": max_val,
+                "max_floor": 500,
+                "kills": 999999
+            }
+            u = users_col.find_one({"user_id": uid}) or {}
+            if u.get("chosen_hero"):
+                for k in HERO_STATS_CFG.keys():
+                    st[f"hero_stats.{k}"] = max_val
+
+            users_col.update_one({"user_id": uid}, {"$set": st})
+
+            emb_res = discord.Embed(
+                title="🚀 │ تم التطوير الخارق بنقرة واحدة!",
+                description=(
+                    "💥 **تم رفع جميع المعدلات إلى الحدود الإلهية الخيالية!**\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n"
+                    f"⚡ **القوة والخصائص:** `999,999,999,999,999`\n"
+                    f"🪙 **الذهب والكاش:** `999,999,999,999,999`\n"
+                    f"💎 **الألماس الملكي:** `999,999,999,999,999`\n"
+                    f"🦸‍♂️ **معدلات البطل:** مكسورة لأقصى حد!\n"
+                    f"🏰 **برج الطوابق:** تم فتح الطابق `500` بالكامل!"
+                ),
+                color=discord.Color.gold()
+            )
+            await ctx.response.send_message(embed=emb_res, ephemeral=True)
+
+        elif v == "inf":
             users_col.update_one({"user_id": uid}, {"$set": {"balance": 999999999999, "diamonds": 999999999}})
             await ctx.response.send_message("♾️ تم شحن عملات لا نهائية لحسابك!", ephemeral=True)
 
@@ -1335,12 +1376,35 @@ async def leaderboard_command(ctx: discord.Interaction):
         return
     await ctx.response.send_message(embed=discord.Embed(title="👑 قاعة العظماء — اختر التصنيف من القائمة بالأسفل", color=discord.Color.gold()), view=LeaderboardView())
 
-@bot.tree.command(name="لوحة_المطور", description="👑 لوحة التحكم الشاملة للمطورين")
+@bot.tree.command(name="لوحة_المطور", description="👑 غرفة التحكم الإلهية والقدرات المطلقة للمطورين")
 async def dev_panel_command(ctx: discord.Interaction):
     if not is_dev(ctx.user.id):
         await ctx.response.send_message("❌ هذا الأمر للمطورين فقط!", ephemeral=True)
         return
-    await ctx.response.send_message(embed=discord.Embed(title="👑 لوحة التحكم الإدارية — اختر الإجراء المطلوب", color=discord.Color.purple()), view=DevPanelView(), ephemeral=True)
+
+    emb = discord.Embed(
+        title="⚡ │ غرفة التحكم الإلهية والقدرات المطلقة — DEV CONTROL ROOM",
+        description=(
+            "أهلاً بك يا سيّد المطورين في القاعة الإدارية العليا للإمبراطورية.\n"
+            "من هنا تملك السلطة الكاملة للتلاعب بالخصائص، شحن الثروات، إهداء العتاد، والتطوير الأسطوري الفوري!\n"
+            "━━━━━━━━━━━━━━━━━━━━"
+        ),
+        color=discord.Color.from_rgb(255, 215, 0)
+    )
+    emb.set_thumbnail(url=ctx.user.display_avatar.url)
+    emb.add_field(
+        name="👑 **حالة المطور**",
+        value=f"• **المطور:** {ctx.user.mention}\n• **الصلاحية:** `ADMIN / DEV GOD`\n• **النظام:** `Active & Operational` 🟢",
+        inline=True
+    )
+    emb.add_field(
+        name="🔥 **أبرز الأوامر المطلقة**",
+        value="• 🚀 **تطوير بنقرة واحدة** (Max Stats)\n• ♾️ **ثروات وعملات لا نهائية**\n• 🩸 **السفاح الخارق**\n• 👑 **توليد الألقاب الخاصة**",
+        inline=True
+    )
+    emb.set_footer(text="⚠️ الأوامر المنفذة هنا فورية وتنعكس مباشرة على الداتابيز")
+
+    await ctx.response.send_message(embed=emb, view=DevPanelView(), ephemeral=True)
 
 @bot.tree.command(name="الابطال", description="🦸‍♂️ عرض الأبطال الـ 10 واختيار بطل الخاص بك")
 async def heroes_command(ctx: discord.Interaction):
