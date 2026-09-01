@@ -42,6 +42,12 @@ def add_game_win(uid: str, game_key: str, pts: int = 1):
         upsert=True
     )
 
+def get_item_category(item_name: str) -> str:
+    for cat in CATEGORIES:
+        if cat in item_name:
+            return cat
+    return "سيف"
+
 # ==================== إعدادات العتاد والمتاجر ====================
 
 CATEGORIES = ["خوذة", "درع", "بنطال", "حذاء", "سيف", "مطرقة", "خنجر", "عصا سحرية"]
@@ -65,19 +71,19 @@ for cat in CATEGORIES:
 GEN_ITEM_POWER_MAP = {it["name"]: it["power"] for it in ALL_GENERAL_ITEMS}
 DARK_ITEM_POWER_MAP = {it["name"]: it["power"] for it in ALL_DARK_ITEMS}
 
-# ==================== إعدادات الأابطال الفانتازية ====================
+# ==================== إعدادات الأبطال الفانتازية ====================
 
 HEROES_CFG = {
-    "valerian": {"name": "فالريان، سيف الشمس", "gender": "ذكر", "emoji": "⚔️", "story": "فارس أسطوري ولد تحت نجم ملتهب.", "base_power": 1200, "stats": {"leadership": 35, "attack": 30, "defense": 25, "aim": 10, "magic": 5, "intelligence": 15, "deception": 5}},
-    "ignis": {"name": "إغنيس، سيد اللهب الأسود", "gender": "ذكر", "emoji": "🔥", "story": "ساحر ظلال قديم تحكم بعناصر النار المظلمة.", "base_power": 1350, "stats": {"magic": 40, "intelligence": 30, "attack": 25, "leadership": 10, "aim": 10, "defense": 10, "deception": 10}},
-    "zephyr": {"name": "زفير، ظل الرماة", "gender": "ذكر", "emoji": "🎯", "story": "قناص الغابات المحرمة الذي لا تخطئ سهامه.", "base_power": 1150, "stats": {"aim": 40, "deception": 25, "attack": 25, "intelligence": 15, "defense": 10, "magic": 5, "leadership": 10}},
-    "lucian": {"name": "لوكيان، حارس العرش الفولاذي", "gender": "ذكر", "emoji": "🛡️", "story": "درع الإمبراطورية الأخير الذي صمد أمام الجيوش.", "base_power": 1250, "stats": {"defense": 45, "leadership": 25, "intelligence": 20, "attack": 15, "aim": 5, "magic": 5, "deception": 5}},
-    "malakai": {"name": "مالاكاي، حائك الأوهام", "gender": "ذكر", "emoji": "🎭", "story": "سيد التجسس والدسائس الذي يتلاعب بالعقول.", "base_power": 1100, "stats": {"deception": 45, "intelligence": 35, "aim": 15, "magic": 15, "leadership": 10, "attack": 10, "defense": 5}},
-    "athena": {"name": "أثينا، قائدة الفرسان الستة", "gender": "أنثى", "emoji": "👑", "story": "إمبراطورة الميدان التي تقود الجيش بذكاء.", "base_power": 1300, "stats": {"leadership": 40, "defense": 25, "attack": 25, "intelligence": 20, "aim": 10, "magic": 5, "deception": 5}},
-    "serene": {"name": "سيرين، كاهنة القمر والبحار", "gender": "أنثى", "emoji": "🔮", "story": "سيدة السحر السماوي لتطهير الأرض.", "base_power": 1400, "stats": {"magic": 45, "intelligence": 30, "leadership": 20, "defense": 15, "aim": 10, "deception": 5, "attack": 10}},
-    "lyra": {"name": "ليرا، عاصفة السهام", "gender": "أنثى", "emoji": "🏹", "story": "صيادة سريعة كالعاصفة بأسلحة ضوئية.", "base_power": 1200, "stats": {"aim": 42, "attack": 28, "deception": 20, "intelligence": 15, "leadership": 10, "defense": 5, "magic": 10}},
-    "morgana": {"name": "مورغانا، ملكة الدسائس", "gender": "أنثى", "emoji": "🖤", "story": "حاكمة الظلال التي تلاعبت بعقول الملوك.", "base_power": 1250, "stats": {"deception": 42, "magic": 30, "intelligence": 28, "aim": 10, "leadership": 10, "attack": 5, "defense": 5}},
-    "hilda": {"name": "هيلدا، جدار الجليد", "gender": "أنثى", "emoji": "❄️", "story": "محاربة الشمال الأسطورية التي تسخر طاقة الجليد.", "base_power": 1280, "stats": {"defense": 40, "attack": 30, "leadership": 20, "intelligence": 15, "magic": 10, "aim": 10, "deception": 5}}
+    "valerian": {"name": "فالريان، سيف الشمس", "gender": "ذكر", "emoji": "⚔️", "story": "فارس أسطوري ولد تحت نجم ملتهب ليدمر أعداء المملكة.", "base_power": 1200, "stats": {"leadership": 35, "attack": 30, "defense": 25, "aim": 10, "magic": 5, "intelligence": 15, "deception": 5}},
+    "ignis": {"name": "إغنيس، سيد اللهب الأسود", "gender": "ذكر", "emoji": "🔥", "story": "ساحر ظلال قديم تحكم بعناصر النار المظلمة ليركع خصومه.", "base_power": 1350, "stats": {"magic": 40, "intelligence": 30, "attack": 25, "leadership": 10, "aim": 10, "defense": 10, "deception": 10}},
+    "zephyr": {"name": "زفير، ظل الرماة", "gender": "ذكر", "emoji": "🎯", "story": "قناص الغابات المحرمة الذي لا تخطئ سهامه القاتلة.", "base_power": 1150, "stats": {"aim": 40, "deception": 25, "attack": 25, "intelligence": 15, "defense": 10, "magic": 5, "leadership": 10}},
+    "lucian": {"name": "لوكيان، حارس العرش الفولاذي", "gender": "ذكر", "emoji": "🛡️", "story": "درع الإمبراطورية الأخير الذي صمد أمام أعظم الجيوش.", "base_power": 1250, "stats": {"defense": 45, "leadership": 25, "intelligence": 20, "attack": 15, "aim": 5, "magic": 5, "deception": 5}},
+    "malakai": {"name": "مالاكاي، حائك الأوهام", "gender": "ذكر", "emoji": "🎭", "story": "سيد التجسس والدسائس الذي يتلاعب بالعقول والخداع.", "base_power": 1100, "stats": {"deception": 45, "intelligence": 35, "aim": 15, "magic": 15, "leadership": 10, "attack": 10, "defense": 5}},
+    "athena": {"name": "أثينا، قائدة الفرسان الستة", "gender": "أنثى", "emoji": "👑", "story": "إمبراطورة الميدان التي تقود الفرسان بنصر محتوم.", "base_power": 1300, "stats": {"leadership": 40, "defense": 25, "attack": 25, "intelligence": 20, "aim": 10, "magic": 5, "deception": 5}},
+    "serene": {"name": "سيرين، كاهنة القمر والبحار", "gender": "أنثى", "emoji": "🔮", "story": "سيدة السحر السماوي لنشر النور وتطهير الأرض.", "base_power": 1400, "stats": {"magic": 45, "intelligence": 30, "leadership": 20, "defense": 15, "aim": 10, "deception": 5, "attack": 10}},
+    "lyra": {"name": "ليرا، عاصفة السهام", "gender": "أنثى", "emoji": "🏹", "story": "صيادة سريعة كالعاصفة تصيب أهدافها بدقة أسطورية.", "base_power": 1200, "stats": {"aim": 42, "attack": 28, "deception": 20, "intelligence": 15, "leadership": 10, "defense": 5, "magic": 10}},
+    "morgana": {"name": "مورغانا، ملكة الدسائس", "gender": "أنثى", "emoji": "🖤", "story": "حاكمة الظلال التي تلاعبت بعقول الملوك والحكام.", "base_power": 1250, "stats": {"deception": 42, "magic": 30, "intelligence": 28, "aim": 10, "leadership": 10, "attack": 5, "defense": 5}},
+    "hilda": {"name": "هيلدا، جدار الجليد", "gender": "أنثى", "emoji": "❄️", "story": "محاربة الشمال الأسطورية التي تسخر طاقة الجليد القاسية.", "base_power": 1280, "stats": {"defense": 40, "attack": 30, "leadership": 20, "intelligence": 15, "magic": 10, "aim": 10, "deception": 5}}
 }
 
 HERO_STATS_CFG = {
@@ -98,9 +104,9 @@ JOBS_CFG = {
         "name": "الملك الإمبراطوري",
         "emoji": "👑",
         "salary": "50,000 - 100,000 🪙 + 25 💎",
-        "desc": "حاكم العرش الأعلى للإمبراطورية العظمى. إدارة شؤون المملكة وإصدار القوانين.",
+        "desc": "حاكم العرش الأعلى للإمبراطورية العظمى. قيادة الملوك وإدارة الاقتصاد والحروب.",
         "req": "👑 يتطلب التزاماً بالمساهمات، التبرعات العالية، الترتيب المتقدم في العرش، والإنجازات.",
-        "perk": "🌟 أعلى راتب ملكي وهيبة سيادية في الإمبراطورية.",
+        "perk": "🌟 أعلى راتب ملكي وهيبة سيادية وتأثير مطلق.",
         "min_gold": 50000, "max_gold": 100000, "diamonds": 25
     },
     "queen": {
@@ -186,7 +192,7 @@ JOBS_CFG = {
     }
 }
 
-# ==================== بيانات ألعاب الترفيه ====================
+# ==================== بيانات الألعاب والترفيه ====================
 
 QUESTIONS_DATA = {
     "normal": [f"ما هي موهبتك السرية رقم {i}؟" for i in range(1, 51)],
@@ -261,8 +267,8 @@ FASTEST_WORDS = [
 
 # ==================== التسجيل والمتجر والخصائص ====================
 
-class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل في الإمبراطورية"):
-    name_in = discord.ui.TextInput(label="الاسم", placeholder="اسم الشخصية...", min_length=2, max_length=30)
+class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل الإمبراطورية الملكية"):
+    name_in = discord.ui.TextInput(label="الاسم الأسطوري", placeholder="اكتب اسم شخصيتك المباركة...", min_length=2, max_length=30)
     age_in = discord.ui.TextInput(label="العمر", placeholder="مثال: 25", min_length=1, max_length=4)
     gen_in = discord.ui.TextInput(label="الجنس", placeholder="ذكر / أنثى", min_length=3, max_length=4)
 
@@ -283,42 +289,47 @@ class RegisterModal(discord.ui.Modal, title="📜 استمارة التسجيل 
         users_col.insert_one({
             "user_id": uid, "name": self.name_in.value.strip(), "age": age, "gender": gender,
             "created_at": datetime.now(timezone.utc), "balance": 5000, "bank": 0, "diamonds": 20,
-            "power": 100, "kills": 0, "max_floor": 1, "inventory": [], "titles": ["المبتدئ الأسطوري"],
+            "power": 100, "kills": 0, "max_floor": 1, "inventory": [], "equipped_gear": {}, "titles": ["المبتدئ الأسطوري"],
             "custom_title": "المبتدئ الأسطوري", "is_dev": (uid == MAIN_DEV_ID),
             "aim": 10, "evasion": 10, "attack": 10, "accuracy": 10, "critical": 10, "magic": 10, "intelligence": 10, "defense": 10,
             "last_daily": None, "loan": 0, "chosen_hero": None, "hero_stats": {}, "guild_id": None, "job": None, "last_work": None
         })
-        emb = discord.Embed(title="👑 تم التسجيل بنجاح!", color=discord.Color.gold())
-        emb.add_field(name="🪪 الاسم", value=f"`{self.name_in.value}`", inline=True)
-        emb.add_field(name="⏳ العمر", value=f"`{age}`", inline=True)
-        emb.add_field(name="🎁 الهدايا", value="5,000 🪙 | 20 💎", inline=False)
+        emb = discord.Embed(
+            title="✨ أهلاً بك في العرش الإمبراطوري العظيم!",
+            description="🎉 **تم تسجـيل اسمك بحروف من ذهب في سجلات المملكة!**\nاستعد لغزو الطوابق، خوض المعارك الدموية، وبناء ثروتك الأسطورية!",
+            color=discord.Color.gold()
+        )
+        emb.add_field(name="🪪 الاسم الملكي", value=f"`{self.name_in.value}`", inline=True)
+        emb.add_field(name="⏳ العمر", value=f"`{age}` عاماً", inline=True)
+        emb.add_field(name="🎁 مكافأة البداية", value="🪙 `5,000` ذهب | 💎 `20` ألماسة أسطورية", inline=False)
+        emb.set_footer(text="✨ استكشف أمر /بروفايل و /الحقيبة للبدء بمغامرتك!")
         await ctx.response.send_message(embed=emb)
 
 class GeneralItemSelect(discord.ui.Select):
     def __init__(self, cat: str):
         self.cat = cat
-        opts = [discord.SelectOption(label=it["name"], value=it["id"], description=f"⚡+{it['power']:,} | 🪙{it['price']:,}", emoji=it["emoji"]) for it in GEAR_DATA[cat] if it["store"] == "general"]
-        super().__init__(placeholder=f"⚔️ عتاد [{cat}]...", options=opts[:25])
+        opts = [discord.SelectOption(label=it["name"], value=it["id"], description=f"⚡+{it['power']:,} طاقة | 🪙{it['price']:,} ذهب", emoji=it["emoji"]) for it in GEAR_DATA[cat] if it["store"] == "general"]
+        super().__init__(placeholder=f"⚔️ اختر العتاد من قسم [{cat}]...", options=opts[:25])
 
     async def callback(self, ctx: discord.Interaction):
         uid = str(ctx.user.id)
         item = next(i for i in GEAR_DATA[self.cat] if i["id"] == self.values[0])
         u = users_col.find_one({"user_id": uid}) or {}
         if u.get("balance", 0) < item["price"]:
-            await ctx.response.send_message("❌ لا تملك ذهباً كافياً!", ephemeral=True)
+            await ctx.response.send_message("❌ خزنتك الذهبية لا تكفي لشراء هذه القطعة الأسطورية!", ephemeral=True)
             return
         users_col.update_one({"user_id": uid}, {"$inc": {"balance": -item["price"], "power": item["power"]}, "$push": {"inventory": item["name"]}})
-        await ctx.response.send_message(f"🛍️ تم شراء **{item['name']}** بـ `{item['price']:,}` 🪙!", ephemeral=True)
+        await ctx.response.send_message(f"🛍️ **مبارك اقتناؤك!** تم شراء **{item['name']}** بـ `{item['price']:,}` 🪙 وأضيفت إلى حقيبتك بنجاح!", ephemeral=True)
 
 class GeneralCategorySelect(discord.ui.Select):
     def __init__(self):
-        super().__init__(placeholder="🏰 اختر قسم العتاد...", options=[discord.SelectOption(label=c, value=c, emoji="🛡️") for c in CATEGORIES])
+        super().__init__(placeholder="🏰 اختر قسم العتاد الملكي...", options=[discord.SelectOption(label=c, value=c, emoji="🛡️") for c in CATEGORIES])
 
     async def callback(self, ctx: discord.Interaction):
         v = discord.ui.View()
         v.add_item(GeneralCategorySelect())
         v.add_item(GeneralItemSelect(self.values[0]))
-        await ctx.response.edit_message(embed=discord.Embed(title=f"🏛️ قسم [{self.values[0]}]", color=discord.Color.gold()), view=v)
+        await ctx.response.edit_message(embed=discord.Embed(title=f"🏛️ │ السوق العام — قسم [{self.values[0]}]", description="اختر العتاد القتالي الأنسب لرفع قوتك وبناء مجدك!", color=discord.Color.gold()), view=v)
 
 class GeneralStoreView(discord.ui.View):
     def __init__(self):
@@ -328,28 +339,28 @@ class GeneralStoreView(discord.ui.View):
 class DarkItemSelect(discord.ui.Select):
     def __init__(self, cat: str):
         self.cat = cat
-        opts = [discord.SelectOption(label=it["name"], value=it["id"], description=f"⚡+{it['power']:,} | 💎{it['price']:,}", emoji=it["emoji"]) for it in GEAR_DATA[cat] if it["store"] == "dark"]
-        super().__init__(placeholder=f"🔮 عتاد ظلال [{cat}]...", options=opts[:25])
+        opts = [discord.SelectOption(label=it["name"], value=it["id"], description=f"⚡+{it['power']:,} طاقة ظلال | 💎{it['price']:,} ألماس", emoji=it["emoji"]) for it in GEAR_DATA[cat] if it["store"] == "dark"]
+        super().__init__(placeholder=f"🔮 اختر عتاد الظلال من [{cat}]...", options=opts[:25])
 
     async def callback(self, ctx: discord.Interaction):
         uid = str(ctx.user.id)
         item = next(i for i in GEAR_DATA[self.cat] if i["id"] == self.values[0])
         u = users_col.find_one({"user_id": uid}) or {}
         if u.get("diamonds", 0) < item["price"]:
-            await ctx.response.send_message("❌ لا تملك ألماساً كافياً!", ephemeral=True)
+            await ctx.response.send_message("❌ رصيدك من الألماس الملكي غير كافٍ لاقتناء عتاد الظلال!", ephemeral=True)
             return
         users_col.update_one({"user_id": uid}, {"$inc": {"diamonds": -item["price"], "power": item["power"]}, "$push": {"inventory": item["name"]}})
-        await ctx.response.send_message(f"⚡ تم شراء **{item['name']}** بـ `{item['price']:,}` 💎!", ephemeral=True)
+        await ctx.response.send_message(f"⚡ **قوة جبارة تتملكك!** تم امتلاك **{item['name']}** بـ `{item['price']:,}` 💎 ألماس!", ephemeral=True)
 
 class DarkCategorySelect(discord.ui.Select):
     def __init__(self):
-        super().__init__(placeholder="👁️ اختر قسم الظلال...", options=[discord.SelectOption(label=c, value=c, emoji="🌑") for c in CATEGORIES])
+        super().__init__(placeholder="👁️ اختر قسم خزنة الظلال...", options=[discord.SelectOption(label=c, value=c, emoji="🌑") for c in CATEGORIES])
 
     async def callback(self, ctx: discord.Interaction):
         v = discord.ui.View()
         v.add_item(DarkCategorySelect())
         v.add_item(DarkItemSelect(self.values[0]))
-        await ctx.response.edit_message(embed=discord.Embed(title=f"🖤 خزنة الظلال — [{self.values[0]}]", color=discord.Color.purple()), view=v)
+        await ctx.response.edit_message(embed=discord.Embed(title=f"🖤 │ خزنة الظلال المحرمة — [{self.values[0]}]", description="المعدات المحرمة تمنح أصحابها قوة الملوك والقتلة!", color=discord.Color.purple()), view=v)
 
 class DarkStoreView(discord.ui.View):
     def __init__(self):
@@ -360,8 +371,8 @@ class StatUpgradeModal(discord.ui.Modal):
     def __init__(self, key: str):
         self.key = key
         name, _ = STATS_CFG[key]
-        super().__init__(title=f"🚀 ترقية: {name}")
-        self.pts_in = discord.ui.TextInput(label="عدد النقاط (النقطة = 100 🪙)", placeholder="مثال: 10")
+        super().__init__(title=f"🚀 ترقية الخصائص: {name}")
+        self.pts_in = discord.ui.TextInput(label="عدد النقاط المطلوبة (النقطة = 100 🪙)", placeholder="مثال: 10 أو 100")
         self.add_item(self.pts_in)
 
     async def on_submit(self, ctx: discord.Interaction):
@@ -376,17 +387,17 @@ class StatUpgradeModal(discord.ui.Modal):
         uid = str(ctx.user.id)
         u = users_col.find_one({"user_id": uid}) or {}
         if u.get("balance", 0) < cost:
-            await ctx.response.send_message(f"❌ تكلفة الترقية `{cost:,}` 🪙 وغير متوفرة برصيدك!", ephemeral=True)
+            await ctx.response.send_message(f"❌ تكلفة الترقية `{cost:,}` 🪙 وغير متوفرة برصيدك المباشر!", ephemeral=True)
             return
 
         users_col.update_one({"user_id": uid}, {"$inc": {"balance": -cost, self.key: pts, "power": pts * 10}})
         name, emo = STATS_CFG[self.key]
-        await ctx.response.send_message(f"🔥 تم زيادة {emo} **{name}** بـ `+{pts:,}` نقطة!")
+        await ctx.response.send_message(f"🔥 **زيادة خارقة!** ارتفع معدل {emo} **{name}** بـ `+{pts:,}` نقطة!\n⚡ زادت طاقتك الإجمالية بـ `+{pts*10:,}`!")
 
 class StatSelect(discord.ui.Select):
     def __init__(self):
-        opts = [discord.SelectOption(label=name, value=k, emoji=emo, description="100 🪙 للنقطة") for k, (name, emo) in STATS_CFG.items()]
-        super().__init__(placeholder="🔥 اختر المعدل لتطويره...", options=opts)
+        opts = [discord.SelectOption(label=name, value=k, emoji=emo, description="100 🪙 للنقطة الواحدة") for k, (name, emo) in STATS_CFG.items()]
+        super().__init__(placeholder="🔥 اختر الخصائص القتالية لتطويرها...", options=opts)
 
     async def callback(self, ctx: discord.Interaction):
         await ctx.response.send_modal(StatUpgradeModal(self.values[0]))
@@ -395,6 +406,67 @@ class StatsUpgradeView(discord.ui.View):
     def __init__(self):
         super().__init__()
         self.add_item(StatSelect())
+
+# ==================== كلاسات الحقيبة وارتداء العتاد الفخمة ====================
+
+class EquipGearSelect(discord.ui.Select):
+    def __init__(self, inv_items: list):
+        counts = {}
+        for it in inv_items:
+            counts[it] = counts.get(it, 0) + 1
+
+        opts = [
+            discord.SelectOption(label=f"{item_name} (x{count})", value=item_name, emoji="🗡️", description=f"ارتداء في خانة [{get_item_category(item_name)}]")
+            for item_name, count in counts.items()
+        ][:25]
+
+        super().__init__(placeholder="🛡️ اختر العتاد من حقيبتك لارتدائه وتجهيزه...", options=opts if opts else [discord.SelectOption(label="لا يوجد عتاد بالحقيبة", value="none")])
+
+    async def callback(self, ctx: discord.Interaction):
+        if self.values[0] == "none":
+            await ctx.response.send_message("❌ حقيبتك فارغة من المعدات!", ephemeral=True)
+            return
+
+        item_name = self.values[0]
+        uid = str(ctx.user.id)
+        cat = get_item_category(item_name)
+
+        users_col.update_one({"user_id": uid}, {"$set": {f"equipped_gear.{cat}": item_name}})
+
+        emb = discord.Embed(
+            title="⚔️ │ تم ارتداء العتاد القتالي بنجاح!",
+            description=f"🎉 **ارتديت الآن:** **{item_name}**\n🛡️ **الخانة المجهزة:** `[{cat}]`\n✨ صبحت جاهزاً لمواجهة أعتى الأعداء في ساحات المعارك وطوابق البرج!",
+            color=discord.Color.gold()
+        )
+        await ctx.response.send_message(embed=emb, ephemeral=True)
+
+class UnequipGearSelect(discord.ui.Select):
+    def __init__(self, equipped_dict: dict):
+        opts = [
+            discord.SelectOption(label=f"خلع {cat}: {item_name}", value=cat, emoji="❌")
+            for cat, item_name in equipped_dict.items() if item_name
+        ]
+        super().__init__(placeholder="❌ اختر العتاد المرتدى لخلعه من الخانة...", options=opts if opts else [discord.SelectOption(label="لا يوجد عتاد مرتدى حالياً", value="none")])
+
+    async def callback(self, ctx: discord.Interaction):
+        if self.values[0] == "none":
+            await ctx.response.send_message("❌ أنت لا ترتدي أي عتاد حالياً لخلعه!", ephemeral=True)
+            return
+
+        cat = self.values[0]
+        uid = str(ctx.user.id)
+
+        users_col.update_one({"user_id": uid}, {"$unset": {f"equipped_gear.{cat}": ""}})
+
+        await ctx.response.send_message(f"🎒 تم خلع العتاد من خانة **[{cat}]** وإعادته للحقيبة بنجاح!", ephemeral=True)
+
+class InventoryMainView(discord.ui.View):
+    def __init__(self, inv_items: list, equipped_dict: dict):
+        super().__init__(timeout=None)
+        if inv_items:
+            self.add_item(EquipGearSelect(inv_items))
+        if equipped_dict:
+            self.add_item(UnequipGearSelect(equipped_dict))
 
 # ==================== كلاسات الوظائف الإمبراطورية ====================
 
@@ -408,7 +480,7 @@ class JobActionView(discord.ui.View):
         uid = str(ctx.user.id)
         j = JOBS_CFG[self.job_key]
         users_col.update_one({"user_id": uid}, {"$set": {"job": self.job_key}})
-        await ctx.response.send_message(f"🎉 **تهانينا!** أصبحت الآن تعمل رسمياً كـ **{j['emoji']} {j['name']}**!", ephemeral=True)
+        await ctx.response.send_message(f"🎉 **تهانينا للمملكة!** أصبحت الآن تعمل رسمياً كـ **{j['emoji']} {j['name']}**!", ephemeral=True)
 
     @discord.ui.button(label="🪙 ممارسة العمل (استلام الراتب)", style=discord.ButtonStyle.primary, row=0)
     async def work_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
@@ -425,7 +497,7 @@ class JobActionView(discord.ui.View):
         if last_w and (now - last_w.replace(tzinfo=timezone.utc if last_w.tzinfo is None else last_w.tzinfo)).total_seconds() < 1800:
             rem_sec = int(1800 - (now - last_w.replace(tzinfo=timezone.utc if last_w.tzinfo is None else last_w.tzinfo)).total_seconds())
             mins, secs = rem_sec // 60, rem_sec % 60
-            await ctx.response.send_message(f"⏳ أنت متعب من أداء مهامك الملكية! يمكنك العمل مجدداً بعد: `{mins}` دقيقة و `{secs}` ثانية.", ephemeral=True)
+            await ctx.response.send_message(f"⏳ أديت واجبك الملكي مؤخراً! يمكنك العمل مجدداً بعد: `{mins}` دقيقة و `{secs}` ثانية.", ephemeral=True)
             return
 
         j = JOBS_CFG[self.job_key]
@@ -536,7 +608,7 @@ async def process_floor_battle(ctx_or_msg, user_id: str, floor_num: int, is_firs
     hero_info = HEROES_CFG.get(h_id, {}) if h_id else {}
     hero_name = hero_info.get("name", "البطل") if h_id else None
 
-    desc_dialogue = f"⚔️ **بداية المعركة!**\nتقدم **{p_name}** بثقة نحو عرش الطابق `{floor_num}` في مواجهة **{e_name}**!"
+    desc_dialogue = f"⚔️ **بداية المعركة الملحمية!**\nتقدم المقاتل **{p_name}** بثقة نحو عرش الطابق `{floor_num}` في مواجهة **{e_name}**!"
 
     emb = discord.Embed(
         title=f"🏰 │ معركة ملحمية — الطابق [{floor_num} / 500]",
@@ -2527,54 +2599,83 @@ async def on_ready():
     except Exception as e:
         print(f"❌ خطأ المزامنة: {e}")
 
-@bot.tree.command(name="تسجيل", description="📜 تسجيل حساب جديد")
+@bot.tree.command(name="تسجيل", description="📜 تسجيل حساب أسطوري جديد في الإمبراطورية")
 async def register_command(ctx: discord.Interaction):
     if is_user_registered(ctx.user.id):
-        await ctx.response.send_message("⚠️ أنت مسجل بالفعل!", ephemeral=True)
+        await ctx.response.send_message("⚠️ أنت مسجل بالفعل وبطل من أبطال المملكة!", ephemeral=True)
         return
     await ctx.response.send_modal(RegisterModal())
 
-@bot.tree.command(name="المتجر_العام", description="🏛️ فتح المتجر العام")
+@bot.tree.command(name="المتجر_العام", description="🏛️ فتح المتجر العام لشراء الأسلحة والدروع")
 async def general_store(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لتفتح أبواب المتجر!", ephemeral=True)
         return
-    await ctx.response.send_message(embed=discord.Embed(title="🏛️ المتجر العام", color=discord.Color.gold()), view=GeneralStoreView())
+    emb = discord.Embed(
+        title="🏛️ │ سوق الإمبراطورية العام للمعدات",
+        description="أهلاً بك يا صاحب الهمة! هنا تجد أفضل الأسلحة والدروع الفولاذية والأسطورية لرفع قوتك القتالية.",
+        color=discord.Color.gold()
+    )
+    await ctx.response.send_message(embed=emb, view=GeneralStoreView())
 
-@bot.tree.command(name="المتجر_المظلم", description="👁️ فتح المتجر المظلم")
+@bot.tree.command(name="المتجر_المظلم", description="👁️ فتح المتجر المظلم لاقتناء عتاد الظلال بالألماس")
 async def dark_store(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لتصل لخزائن الظلال!", ephemeral=True)
         return
-    await ctx.response.send_message(embed=discord.Embed(title="🔮 المتجر المظلم", color=discord.Color.purple()), view=DarkStoreView())
+    emb = discord.Embed(
+        title="🔮 │ خزنة الظلال المحرمة والألماس",
+        description="مرحباً بك في عالم القوة المطلقة! هنا يقتني السلاطين والقتلة عتاد الظلال الأسطوري بالماس الملكي.",
+        color=discord.Color.purple()
+    )
+    await ctx.response.send_message(embed=emb, view=DarkStoreView())
 
-@bot.tree.command(name="تطوير_المعدلات", description="⚡ تطوير المعدلات والخصائص")
+@bot.tree.command(name="تطوير_المعدلات", description="⚡ تطوير المعدلات والخصائص القتالية بالشخصية")
 async def upgrade_stats_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لتبدأ تطوير قدراتك!", ephemeral=True)
         return
-    await ctx.response.send_message(embed=discord.Embed(title="✨ تطوير المعدلات", color=discord.Color.red()), view=StatsUpgradeView())
+    emb = discord.Embed(
+        title="✨ │ قاعة تطوير القدرات والخصائص",
+        description="طور الهجوم، الدفاع، المراوغة، والدقة لتصبح المقاتل الذي لا يقهر في ساحات الحروب!",
+        color=discord.Color.red()
+    )
+    await ctx.response.send_message(embed=emb, view=StatsUpgradeView())
 
-@bot.tree.command(name="الطوابق", description="🏰 دخول برج الطوابق بالقتال والتقدم التلقائي")
+@bot.tree.command(name="الطوابق", description="🏰 دخول برج الطوابق الـ 500 بالقتال والتقدم التلقائي")
 async def tower_floors_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لغزو برج الطوابق!", ephemeral=True)
         return
     u = users_col.find_one({"user_id": str(ctx.user.id)}) or {}
-    emb = discord.Embed(title="🏰 برج الطوابق الـ 500", description=f"• الطابق الحالي: `[{u.get('max_floor', 1)}/500]`\n• الطاقة القتالية: `{u.get('power', 0):,}` ⚡", color=discord.Color.green())
+    emb = discord.Embed(
+        title="🏰 │ قلعة وبرج الطوابق الـ 500 العظيم",
+        description=(
+            f"مرحباً بك يا غازي القلاع! البرج ينتظر صولتك القادمة للإطاحة بالوحوش والزعماء:\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 **الطابق الحالي:** `[{u.get('max_floor', 1)} / 500]`\n"
+            f"⚡ **الطاقة القتالية:** `{u.get('power', 0):,}` ⚡"
+        ),
+        color=discord.Color.green()
+    )
     await ctx.response.send_message(embed=emb, view=TowerMainView())
 
-@bot.tree.command(name="الليدربورد", description="👑 عرض قاعة العظماء والتصنيفات")
+@bot.tree.command(name="الليدربورد", description="👑 عرض قاعة العظماء والتصنيفات الملكية")
 async def leaderboard_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لترى اسمك بين أبطال العرش!", ephemeral=True)
         return
-    await ctx.response.send_message(embed=discord.Embed(title="👑 قاعة العظماء — اختر التصنيف من القائمة بالأسفل", color=discord.Color.gold()), view=LeaderboardView())
+    emb = discord.Embed(
+        title="👑 │ قاعة العظماء والأساطير بالإمبراطورية",
+        description="استعرض أقوى فرسان المملكة، أغنى أصحاب الثروات، وقادة الحروب من المنيو بالأسفل!",
+        color=discord.Color.gold()
+    )
+    await ctx.response.send_message(embed=emb, view=LeaderboardView())
 
 @bot.tree.command(name="لوحة_المطور", description="👑 غرفة التحكم الإلهية والقدرات المطلقة للمطورين")
 async def dev_panel_command(ctx: discord.Interaction):
     if not is_dev(ctx.user.id):
-        await ctx.response.send_message("❌ هذا الأمر للمطورين فقط!", ephemeral=True)
+        await ctx.response.send_message("❌ هذا الأمر للمطورين أصحاب الصلاحية العليا فقط!", ephemeral=True)
         return
 
     emb = discord.Embed(
@@ -2601,14 +2702,19 @@ async def dev_panel_command(ctx: discord.Interaction):
 
     await ctx.response.send_message(embed=emb, view=DevPanelView(), ephemeral=True)
 
-@bot.tree.command(name="الابطال", description="🦸‍♂️ عرض الأبطال الـ 10 واختيار بطل الخاص بك")
+@bot.tree.command(name="الابطال", description="🦸‍♂️ عرض الأبطال الـ 10 الفانتازية واختيار بطل الخاص بك")
 async def heroes_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لاختيار بطلك الأسطوري!", ephemeral=True)
         return
-    await ctx.response.send_message(embed=discord.Embed(title="🦸‍♂️ قاعة الأبطال الفانتازية (5 ذكور | 5 إناث)", description="اختر بطلاً من القائمة بالأسفل للتعرف على قصته ومعدلاته واختياره!", color=discord.Color.gold()), view=HeroesView())
+    emb = discord.Embed(
+        title="🦸‍♂️ │ قاعة الأبطال الفانتازية (5 ذكور | 5 إناث)",
+        description="اختر بطلاً أسطورياً يرافقك في الحروب والغزوات ويزيد طاقتك ومعدلاتك السحرية والقتالية!",
+        color=discord.Color.gold()
+    )
+    await ctx.response.send_message(embed=emb, view=HeroesView())
 
-@bot.tree.command(name="تطوير_البطل", description="🚀 تطوير معدلات بطلتك/بطلك بدون حد أقصى")
+@bot.tree.command(name="تطوير_البطل", description="🚀 تطوير معدلات بطلتك/بطلك المختار بدون حد أقصى")
 async def upgrade_hero_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
         await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
@@ -2626,8 +2732,8 @@ async def upgrade_hero_command(ctx: discord.Interaction):
     user_h_stats = u.get("hero_stats", {})
 
     emb = discord.Embed(
-        title=f"🚀 تطوير البطل: {h['emoji']} {h['name']}",
-        description="اختر المعدل القتالي الذي تريد ترقيته من القائمة بالأسفل. **(التطوير مفتوح بلا حد أقصى!)**",
+        title=f"🚀 │ تطوير البطل الأسطوري: {h['emoji']} {h['name']}",
+        description="اختر المعدل القتالي الذي تريد ترقيته لبطلك من القائمة بالأسفل. **(التطوير مفتوح بلا حد أقصى!)**",
         color=discord.Color.blue()
     )
 
@@ -2641,10 +2747,10 @@ async def upgrade_hero_command(ctx: discord.Interaction):
 
     await ctx.response.send_message(embed=emb, view=HeroUpgradeView(), ephemeral=True)
 
-@bot.tree.command(name="بروفايل", description="🪪 عرض بطاقة المقاتل الفخمة")
+@bot.tree.command(name="بروفايل", description="🪪 عرض بطاقة المقاتل الفخمة والشاملة")
 async def profile_command(ctx: discord.Interaction, target: discord.User = None):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` للوصول لبروفايلك الملكي!", ephemeral=True)
         return
 
     target_user = target or ctx.user
@@ -2703,30 +2809,52 @@ async def profile_command(ctx: discord.Interaction, target: discord.User = None)
 
     await ctx.response.send_message(embed=emb)
 
-@bot.tree.command(name="الحقيبة", description="🎒 عرض المعدات والعتاد الممتلك")
+@bot.tree.command(name="الحقيبة", description="🎒 عرض العتاد الممتلك وخانات الارتداء الفخمة")
 async def inventory_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لتفتح حقيبة عتادك!", ephemeral=True)
         return
 
-    u = users_col.find_one({"user_id": str(ctx.user.id)}) or {}
+    uid = str(ctx.user.id)
+    u = users_col.find_one({"user_id": uid}) or {}
     inv = u.get("inventory", [])
+    equipped = u.get("equipped_gear", {})
+
+    slots_txt = []
+    for cat in CATEGORIES:
+        eq_item = equipped.get(cat)
+        val = f"**{eq_item}**" if eq_item else "`[فارغ]`"
+        slots_txt.append(f"• **{cat}:** {val}")
 
     if not inv:
-        desc_txt = "لا تملك أي عتاد حالياً. يمكنك الشراء من المتجر!"
+        inv_txt = "🎒 **الحقيبة فارغة:** لا تملك معدات إضافية حالياً. يمكنك الشراء من المتجر!"
     else:
         counts = {}
         for item in inv:
             counts[item] = counts.get(item, 0) + 1
-        desc_txt = "\n".join([f"• **{k}** (x{v})" for k, v in counts.items()])
+        inv_txt = "\n".join([f"• **{k}** (x{v})" for k, v in counts.items()])
 
-    emb = discord.Embed(title="🎒 حقائبك ومعداتك", description=desc_txt, color=discord.Color.dark_green())
-    await ctx.response.send_message(embed=emb, ephemeral=True)
+    emb = discord.Embed(
+        title=f"🎒 │ حقيبة المقاتل وخانات التجهيز والارتداء",
+        description=(
+            f"مرحباً بك في خزنة عتادك القتالي الملكية!\n"
+            f"اختر أي قطعة من حقيبتك لارتدائها وتجهيزها في خانتها القتالية المناسبة:\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🛡️ **العتاد المرتدى حالياً:**\n" + "\n".join(slots_txt) + "\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📦 **محتويات الحقيبة:**\n{inv_txt}"
+        ),
+        color=discord.Color.gold()
+    )
+    emb.set_thumbnail(url=ctx.user.display_avatar.url)
+    emb.set_footer(text="✨ ارتداء العتاد يجعلك مستعداً لخوض المعارك وغزو البرج!")
+
+    await ctx.response.send_message(embed=emb, view=InventoryMainView(inv, equipped), ephemeral=True)
 
 @bot.tree.command(name="البنك_الإمبراطوري", description="🏛️ الخزنة الملكية، إدارة الثروات والاستثمارات")
 async def imperial_bank_cmd(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لتصل لخزنتك المصرفية!", ephemeral=True)
         return
 
     u = users_col.find_one({"user_id": str(ctx.user.id)}) or {}
@@ -2756,7 +2884,7 @@ async def imperial_bank_cmd(ctx: discord.Interaction):
 @bot.tree.command(name="انشاء_نقابتي", description="🏰 تأسيس نقابة إمبراطورية جديدة (الكلفة: 400 🪙)")
 async def create_guild_cmd(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لتؤسس راية نقابتك!", ephemeral=True)
         return
     await ctx.response.send_modal(CreateGuildModal())
 
@@ -2792,7 +2920,7 @@ async def list_guilds_cmd(ctx: discord.Interaction):
 @bot.tree.command(name="نقابتي", description="🛡️ لوحة معلومات وإدارة نقابتك والتبرع لها")
 async def my_guild_cmd(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لتصل لقلعة نقابتك!", ephemeral=True)
         return
 
     uid = str(ctx.user.id)
@@ -2833,7 +2961,7 @@ async def my_guild_cmd(ctx: discord.Interaction):
 @bot.tree.command(name="الالعاب", description="🎮 مركز وقاعة الألعاب الإمبراطورية الملكية الـ 9")
 async def games_hub_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لتلعب وتكسب الأرباح!", ephemeral=True)
         return
 
     emb = discord.Embed(
@@ -2866,7 +2994,7 @@ async def games_leaderboard_command(ctx: discord.Interaction):
 @bot.tree.command(name="الوظيفة", description="💼 سوق الوظائف والمهن الإمبراطورية الـ 10")
 async def jobs_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لتبدأ العمل والربح!", ephemeral=True)
         return
 
     u = users_col.find_one({"user_id": str(ctx.user.id)}) or {}
@@ -2890,7 +3018,7 @@ async def jobs_command(ctx: discord.Interaction):
 @bot.tree.command(name="المعارك", description="⚔️ قاعة المعارك المباشرة والقتال الجماعي (1v1 / 2v2 / 3v3)")
 async def pvp_battles_command(ctx: discord.Interaction):
     if not is_user_registered(ctx.user.id):
-        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل` لتشارك في ساحة المعارك!", ephemeral=True)
         return
 
     emb = discord.Embed(
