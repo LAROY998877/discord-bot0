@@ -1,4 +1,3 @@
-
 import os, random, asyncio, pymongo, discord
 from discord import app_commands
 from discord.ext import commands
@@ -66,7 +65,7 @@ for cat in CATEGORIES:
 GEN_ITEM_POWER_MAP = {it["name"]: it["power"] for it in ALL_GENERAL_ITEMS}
 DARK_ITEM_POWER_MAP = {it["name"]: it["power"] for it in ALL_DARK_ITEMS}
 
-# ==================== إعدادات الأبطال الفانتازية ====================
+# ==================== إعدادات الأابطال الفانتازية ====================
 
 HEROES_CFG = {
     "valerian": {"name": "فالريان، سيف الشمس", "gender": "ذكر", "emoji": "⚔️", "story": "فارس أسطوري ولد تحت نجم ملتهب.", "base_power": 1200, "stats": {"leadership": 35, "attack": 30, "defense": 25, "aim": 10, "magic": 5, "intelligence": 15, "deception": 5}},
@@ -92,7 +91,7 @@ STATS_CFG = {
     "intelligence": ("الذكاء", "🧠"), "defense": ("الدفاع", "🛡️")
 }
 
-# ==================== بيانات الوظائف الإمبراطورية المحدثة ====================
+# ==================== بيانات الوظائف الإمبراطورية ====================
 
 JOBS_CFG = {
     "king": {
@@ -397,7 +396,7 @@ class StatsUpgradeView(discord.ui.View):
         super().__init__()
         self.add_item(StatSelect())
 
-# ==================== كلاسات الوظائف الإمبراطورية الفاخرة المحدثة ====================
+# ==================== كلاسات الوظائف الإمبراطورية ====================
 
 class JobActionView(discord.ui.View):
     def __init__(self, job_key: str):
@@ -491,7 +490,7 @@ class JobsMainView(discord.ui.View):
         super().__init__()
         self.add_item(JobSelect())
 
-# ==================== برج الطوابق بالقتال والتقدم التلقائي ====================
+# ==================== كلاسات برج الطوابق ====================
 
 def render_hp_bar(cur: int, max_hp: int) -> str:
     pct = max(0.0, min(1.0, cur / max_hp)) if max_hp > 0 else 0
@@ -686,7 +685,7 @@ class TowerMainView(discord.ui.View):
         super().__init__()
         self.add_item(TowerMainSelect())
 
-# ==================== الليدربورد الشامل ====================
+# ==================== كلاسات الليدربورد العام والابطال ====================
 
 class LeaderboardSelect(discord.ui.Select):
     def __init__(self):
@@ -761,8 +760,6 @@ class LeaderboardView(discord.ui.View):
     def __init__(self):
         super().__init__()
         self.add_item(LeaderboardSelect())
-
-# ==================== الأبطال الفانتازية وتطويرهم ====================
 
 class HeroSelect(discord.ui.Select):
     def __init__(self):
@@ -2279,6 +2276,247 @@ class MainGamesView(discord.ui.View):
         super().__init__()
         self.add_item(MainGamesSelect())
 
+# ==================== كلاسات ومحرك ساحة المعارك الجماعية (PVP) ====================
+
+def build_player_pvp_profile(uid, user_obj):
+    u = users_col.find_one({"user_id": str(uid)}) or {}
+    h_id = u.get("chosen_hero")
+    h_info = HEROES_CFG.get(h_id, {}) if h_id else {}
+    hero_stats = u.get("hero_stats", {})
+
+    power = u.get("power", 100)
+    atk = u.get("attack", 10) * 20 + power * 2 + hero_stats.get("attack", 0) * 15
+    def_stat = u.get("defense", 10) * 15 + hero_stats.get("defense", 0) * 10
+    max_hp = 1000 + def_stat * 5 + power * 5
+    crit_chance = min(0.5, (u.get("critical", 10) + hero_stats.get("aim", 0)) / 100)
+    evasion_chance = min(0.4, (u.get("evasion", 10) + hero_stats.get("deception", 0)) / 100)
+
+    return {
+        "user": user_obj,
+        "name": u.get("name", user_obj.display_name),
+        "max_hp": int(max_hp),
+        "hp": int(max_hp),
+        "atk": int(atk),
+        "def": int(def_stat),
+        "crit": crit_chance,
+        "evasion": evasion_chance,
+        "hero_name": h_info.get("name"),
+        "hero_emoji": h_info.get("emoji", "🦸"),
+        "is_alive": True
+    }
+
+async def start_pvp_battle(ctx, team1_users, team2_users, mode):
+    t1_profiles = [build_player_pvp_profile(p.id, p) for p in team1_users]
+    t2_profiles = [build_player_pvp_profile(p.id, p) for p in team2_users]
+
+    channel = ctx.channel
+
+    battle_emb = discord.Embed(
+        title=f"⚔️ │ بدء الملحمة الدموية — طور [{mode}]",
+        description="🩸 **الفرسان يتواجهون في الساحة! الدم يغطي الأرض والسلاسل تشتعل!**",
+        color=discord.Color.dark_red()
+    )
+
+    t1_status = "\n".join([f"{p['hero_emoji']} **{p['name']}**: {render_hp_bar(p['hp'], p['max_hp'])} (⚔️`{p['atk']:,}`)" for p in t1_profiles])
+    t2_status = "\n".join([f"{p['hero_emoji']} **{p['name']}**: {render_hp_bar(p['hp'], p['max_hp'])} (⚔️`{p['atk']:,}`)" for p in t2_profiles])
+
+    battle_emb.add_field(name="🔴 الفريق الأول (A)", value=t1_status, inline=False)
+    battle_emb.add_field(name="🔵 الفريق الثاني (B)", value=t2_status, inline=False)
+
+    battle_msg = await channel.send(embed=battle_emb)
+
+    turn_counter = 0
+    while any(p["is_alive"] for p in t1_profiles) and any(p["is_alive"] for p in t2_profiles):
+        await asyncio.sleep(2.5)
+        turn_counter += 1
+
+        if turn_counter % 2 != 0:
+            attacker_team = [p for p in t1_profiles if p["is_alive"]]
+            defender_team = [p for p in t2_profiles if p["is_alive"]]
+            atk_team_name, def_team_name = "🔴 الفريق الأول", "🔵 الفريق الثاني"
+        else:
+            attacker_team = [p for p in t2_profiles if p["is_alive"]]
+            defender_team = [p for p in t1_profiles if p["is_alive"]]
+            atk_team_name, def_team_name = "🔵 الفريق الثاني", "🔴 الفريق الأول"
+
+        if not attacker_team or not defender_team:
+            break
+
+        attacker = random.choice(attacker_team)
+        defender = random.choice(defender_team)
+
+        if random.random() < defender["evasion"]:
+            dialogue = f"💨 **مراوغة خاطفة!** حاول **{attacker['name']}** تسديد ضربة قاضية لـ **{defender['name']}**، لكن الأخير تفاداها بخفة ورشاقة 💨!"
+        else:
+            is_crit = random.random() < attacker["crit"]
+            raw_dmg = random.randint(int(attacker["atk"] * 0.8), int(attacker["atk"] * 1.2))
+            dmg = max(50, raw_dmg - int(defender["def"] * 0.3))
+
+            if is_crit:
+                dmg = int(dmg * 1.8)
+                dialogue = f"🩸💥 **قطع نـازف وضربة حاسمة!** اندفع **{attacker['name']}** بسيفه وشق درع **{defender['name']}** بضرر حاد قدره `{dmg:,}` HP 🩸!"
+            else:
+                dialogue = f"🗡️ **هجوم مدمي!** وجه **{attacker['name']}** ضربة مباشرة إلى **{defender['name']}** بضرر قدره `{dmg:,}` HP 🩸!"
+
+            if attacker["hero_name"] and random.random() < 0.35:
+                hero_dmg = random.randint(300, 800)
+                dmg += hero_dmg
+                dialogue += f"\n{attacker['hero_emoji']} **تدخل أسطوري!** استدعى البطل **{attacker['hero_name']}** قوته السحرية وضرب بـ `+{hero_dmg:,}` ضرر إضافي 🔮!"
+
+            defender["hp"] = max(0, defender["hp"] - dmg)
+
+            if defender["hp"] <= 0:
+                defender["is_alive"] = False
+                dialogue += f"\n💀 **سقوط المقاتل!** جثا المقاتل **{defender['name']}** على أرض الساحة مضرخاً بالدماء وفقد الوعي!"
+
+        t1_status = "\n".join([f"{'☠️' if not p['is_alive'] else p['hero_emoji']} **{p['name']}**: {render_hp_bar(p['hp'], p['max_hp'])}" for p in t1_profiles])
+        t2_status = "\n".join([f"{'☠️' if not p['is_alive'] else p['hero_emoji']} **{p['name']}**: {render_hp_bar(p['hp'], p['max_hp'])}" for p in t2_profiles])
+
+        emb_update = discord.Embed(
+            title=f"⚔️ │ ساحة الملحمة — الجولة [{turn_counter}]",
+            description=f"⚔️ **جريان الدماء في القتال ({atk_team_name} ➔ {def_team_name}):**\n\n{dialogue}\n━━━━━━━━━━━━━━━━━━━━",
+            color=discord.Color.red()
+        )
+        emb_update.add_field(name="🔴 الفريق الأول (A)", value=t1_status, inline=False)
+        emb_update.add_field(name="🔵 الفريق الثاني (B)", value=t2_status, inline=False)
+        emb_update.set_footer(text="🩸 القتال مستمر حتى إبادة الفريق المنافس بالكامل...")
+
+        try: await battle_msg.edit(embed=emb_update)
+        except: break
+
+    t1_won = any(p["is_alive"] for p in t1_profiles)
+    winning_team = t1_profiles if t1_won else t2_profiles
+    winning_name = "🔴 الفريق الأول (A)" if t1_won else "🔵 الفريق الثاني (B)"
+
+    gold_reward = 15000 if mode == "1v1" else (25000 if mode == "2v2" else 40000)
+    dia_reward = 5 if mode == "1v1" else (10 if mode == "2v2" else 15)
+
+    winners_mentions = []
+    for p in winning_team:
+        winners_mentions.append(p["user"].mention)
+        users_col.update_one(
+            {"user_id": str(p["user"].id)},
+            {"$inc": {"balance": gold_reward, "diamonds": dia_reward, "power": 100, "kills": 1}}
+        )
+
+    win_emb = discord.Embed(
+        title="🏆 │ انتصار أسطوري في ساحة المعارك!",
+        description=(
+            f"🎉 **انتصر {winning_name} في هذه الملحمة الدموية العظيمة!**\n"
+            f"👑 **الأبطال الفائزون:** {', '.join(winners_mentions)}\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🪙 **الراتب والمكافأة لكل فائز:** `+{gold_reward:,}` ذهب | `+{dia_reward}` 💎 ألماسة\n"
+            f"⚡ **القوة والقتلات:** `+100` طاقة | `+1` قتلة مسجلة"
+        ),
+        color=discord.Color.gold()
+    )
+    try: await battle_msg.edit(embed=win_emb)
+    except: pass
+
+class PvPBattleLobbyView(discord.ui.View):
+    def __init__(self, host: discord.User, mode: str):
+        super().__init__(timeout=120)
+        self.host = host
+        self.mode = mode
+        self.required_per_team = 1 if mode == "1v1" else (2 if mode == "2v2" else 3)
+        self.team1 = [host]
+        self.team2 = []
+
+    @discord.ui.button(label="⚔️ الانضمام للفريق الأول (A)", style=discord.ButtonStyle.primary, row=0)
+    async def join_t1(self, ctx: discord.Interaction, button: discord.ui.Button):
+        uid = str(ctx.user.id)
+        if not is_user_registered(uid):
+            await ctx.response.send_message("❌ يجب تسجيل حسابك أولاً عبر `/تسجيل`!", ephemeral=True)
+            return
+        if ctx.user in self.team1 or ctx.user in self.team2:
+            await ctx.response.send_message("❌ أنت منضم بالفعل لهذه المعركة!", ephemeral=True)
+            return
+        if len(self.team1) >= self.required_per_team:
+            await ctx.response.send_message("❌ الفريق الأول مكتمل!", ephemeral=True)
+            return
+
+        self.team1.append(ctx.user)
+        await self.update_lobby(ctx)
+
+    @discord.ui.button(label="⚔️ الانضمام للفريق الثاني (B)", style=discord.ButtonStyle.danger, row=0)
+    async def join_t2(self, ctx: discord.Interaction, button: discord.ui.Button):
+        uid = str(ctx.user.id)
+        if not is_user_registered(uid):
+            await ctx.response.send_message("❌ يجب تسجيل حسابك أولاً عبر `/تسجيل`!", ephemeral=True)
+            return
+        if ctx.user in self.team1 or ctx.user in self.team2:
+            await ctx.response.send_message("❌ أنت منضم بالفعل لهذه المعركة!", ephemeral=True)
+            return
+        if len(self.team2) >= self.required_per_team:
+            await ctx.response.send_message("❌ الفريق الثاني مكتمل!", ephemeral=True)
+            return
+
+        self.team2.append(ctx.user)
+        await self.update_lobby(ctx)
+
+    @discord.ui.button(label="🚀 بدء المعركة فوراً", style=discord.ButtonStyle.success, row=1)
+    async def start_btn(self, ctx: discord.Interaction, button: discord.ui.Button):
+        if ctx.user.id != self.host.id:
+            await ctx.response.send_message("❌ القائد صاحب التحدي فقط هو من يستطيع بدء القتال!", ephemeral=True)
+            return
+        if len(self.team1) != self.required_per_team or len(self.team2) != self.required_per_team:
+            await ctx.response.send_message(f"❌ الفرق غير مكتملة! يلزم {self.required_per_team} لاعب في كل فريق.", ephemeral=True)
+            return
+
+        for child in self.children:
+            child.disabled = True
+        await ctx.response.edit_message(view=self)
+        await start_pvp_battle(ctx, self.team1, self.team2, self.mode)
+
+    async def update_lobby(self, ctx: discord.Interaction):
+        t1_str = "\n".join([f"• {p.mention}" for p in self.team1]) or "لا يوجد"
+        t2_str = "\n".join([f"• {p.mention}" for p in self.team2]) or "لا يوجد"
+
+        emb = discord.Embed(
+            title=f"⚔️ │ ساحة المعارك الإمبراطورية — طور [{self.mode}]",
+            description=(
+                f"🔥 **تحدي ساحة القتال المباشرة!**\n"
+                f"انضم إلى أحد الفريقين للبدء في الملحمة الدموية الواقعية.\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🔴 **الفريق الأول (A) [{len(self.team1)}/{self.required_per_team}]:**\n{t1_str}\n\n"
+                f"🔵 **الفريق الثاني (B) [{len(self.team2)}/{self.required_per_team}]:**\n{t2_str}\n"
+                f"━━━━━━━━━━━━━━━━━━━━"
+            ),
+            color=discord.Color.red()
+        )
+        await ctx.response.edit_message(embed=emb, view=self)
+
+class BattlesModeSelect(discord.ui.Select):
+    def __init__(self):
+        opts = [
+            discord.SelectOption(label="مواجهة 1v1 (قتال فردي مدمي)", value="1v1", emoji="🗡️", description="قتال مباشر بين مقاتلين اثنين مع الأبطال والعتاد"),
+            discord.SelectOption(label="مواجهة 2v2 (قتال ثنائي دامي)", value="2v2", emoji="⚔️", description="معركة ثنائية بين فريقين بكل إحصائيات المقاتلين"),
+            discord.SelectOption(label="مواجهة 3v3 (ملحمة الفرسان)", value="3v3", emoji="🛡️", description="حرب طاحنة بين 6 مقاتلين بانتظار الناجي الأخير")
+        ]
+        super().__init__(placeholder="⚔️ اختر نمط المعركة للبدء...", options=opts)
+
+    async def callback(self, ctx: discord.Interaction):
+        mode = self.values[0]
+        lobby_view = PvPBattleLobbyView(ctx.user, mode)
+
+        emb = discord.Embed(
+            title=f"⚔️ │ ساحة المعارك الإمبراطورية — طور [{mode}]",
+            description=(
+                f"🔥 أطلق **{ctx.user.mention}** معركة جديدة في طور **[{mode}]**!\n"
+                f"انضم إلى أحد الفريقين عبر الأزرار بالأسفل، وعند اكتمل العدد سيتم بدء القتال المباشر.\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🔴 **الفريق الأول (A) [1/{lobby_view.required_per_team}]:**\n• {ctx.user.mention}\n\n"
+                f"🔵 **الفريق الثاني (B) [0/{lobby_view.required_per_team}]:**\nلا يوجد محاربين بعد"
+            ),
+            color=discord.Color.red()
+        )
+        await ctx.response.send_message(embed=emb, view=lobby_view)
+
+class BattlesMainView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(BattlesModeSelect())
+
 # ==================== تسجيل كافة الأوامر للبوت ====================
 
 @bot.event
@@ -2648,6 +2886,28 @@ async def jobs_command(ctx: discord.Interaction):
     )
     emb.set_thumbnail(url=ctx.user.display_avatar.url)
     await ctx.response.send_message(embed=emb, view=JobsMainView())
+
+@bot.tree.command(name="المعارك", description="⚔️ قاعة المعارك المباشرة والقتال الجماعي (1v1 / 2v2 / 3v3)")
+async def pvp_battles_command(ctx: discord.Interaction):
+    if not is_user_registered(ctx.user.id):
+        await ctx.response.send_message("❌ سجل أولاً عبر `/تسجيل`!", ephemeral=True)
+        return
+
+    emb = discord.Embed(
+        title="⚔️ │ ساحة المعارك والقتال الجماعي — IMPERIAL ARENA",
+        description=(
+            "مرحباً بك في أدمى ساحة قتال في الإمبراطورية!\n"
+            "اختر نمط المعركة المطلوبة من المنيو بالأسفل، واجمع حلفاءك لخوض القتال التلقائي المباشر بالدماء والأبطال:\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "🗡️ **1v1** │ قتال فردي مدمي ومواجهة نارية بين لاعبين اثنين\n"
+            "⚔️ **2v2** │ قتال ثنائي دامي بتوزيع الهجمات والضربات الحرجة\n"
+            "🛡️ **3v3** │ ملحمة الفرسان الستة بانتظار الفريق الناجي الأخير"
+        ),
+        color=discord.Color.red()
+    )
+    emb.set_thumbnail(url=ctx.user.display_avatar.url)
+    emb.set_footer(text="⚔️ جهز عتادك وبطلك جيداً قبل الدخول في الساحة!")
+    await ctx.response.send_message(embed=emb, view=BattlesMainView())
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
