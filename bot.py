@@ -6,7 +6,7 @@ from discord.ui import Select, View
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# قائمة الألعاب المنسقة والتفاعلية
+# قائمة الألعاب التفاعلية
 class GamesSelect(Select):
     def __init__(self):
         options = [
@@ -37,8 +37,12 @@ async def games_menu(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
+    print(f"تم تسجيل الدخول بنجاح: {bot.user}")
+    
+    # مسح الأوامر القديمة المتراكمة وإجبار ديسكورد على تحديثها فوراً
+    bot.tree.clear_commands(guild=None)
     await bot.tree.sync()
-    print(f"تم تسجيل الدخول بنجاح: {bot.user} والأوامر تعمل بكفاءة!")
+    print("تم مسح الأوامر القديمة ومزامنة الأوامر الجديدة بنجاح!")
 
 token = os.getenv("DISCORD_TOKEN")
 if not token:
