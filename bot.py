@@ -4,10 +4,9 @@ from discord.ext import commands
 from discord.ui import Select, View
 
 intents = discord.Intents.default()
-intents.message_content = True  # تفعيل محتوى الرسائل لتجنب أي تحذيرات
+intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# إيدي سيرفرك المعتمد حصراً
 MY_GUILD_ID = discord.Object(id=456075967165890562)
 
 class GamesSelect(Select):
@@ -40,4 +39,20 @@ async def games_menu(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
-    print(f"تم تسجيل الدخول بنجاح: {bot
+    print(f"تم تسجيل الدخول بنجاح: {bot.user}")
+    
+    # مسح الأوامر العالمية القديمة من ديسكورد
+    bot.tree.clear_commands(guild=None)
+    await bot.tree.sync(guild=None)
+    
+    # تفريغ الأوامر وزرع أمر الألعاب حصراً في سيرفرك
+    bot.tree.clear_commands(guild=MY_GUILD_ID)
+    bot.tree.copy_global_to(guild=MY_GUILD_ID)
+    await bot.tree.sync(guild=MY_GUILD_ID)
+    print("تم تنظيف السيرفر ونسف الأوامر القديمة وزرع أمر الألعاب بنجاح!")
+
+token = os.getenv("DISCORD_TOKEN")
+if not token:
+    raise ValueError("تباً! لم يتم العثور على متغير البيئة DISCORD_TOKEN.")
+
+bot.run(token)
