@@ -6,7 +6,7 @@ from discord.ui import Select, View
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# إيدي سيرفرك اللعين المحدد حصراً للمزامنة الفورية
+# إيدي سيرفرك المحدد
 MY_GUILD_ID = discord.Object(id=456075967165890562)
 
 class GamesSelect(Select):
@@ -41,11 +41,15 @@ async def games_menu(interaction: discord.Interaction):
 async def on_ready():
     print(f"تم تسجيل الدخول: {bot.user}")
     
-    # تفريغ الأوامر القديمة وزرع أمر الألعاب الجديد في سيرفرك حصراً
+    # مسح الأوامر العالمية القديمة من ذاكرة ديسكورد
+    bot.tree.clear_commands(guild=None)
+    await bot.tree.sync(guild=None)
+    
+    # تنظيف سيرفرك وزرع أمر الألعاب حصراً
     bot.tree.clear_commands(guild=MY_GUILD_ID)
     bot.tree.copy_global_to(guild=MY_GUILD_ID)
     await bot.tree.sync(guild=MY_GUILD_ID)
-    print("تم تنظيف السيرفر وإجبار ديسكورد على إظهار أمر الألعاب وحده!")
+    print("تم تنظيف السيرفر ونسف الأوامر القديمة نهائياً!")
 
 token = os.getenv("DISCORD_TOKEN")
 if not token:
