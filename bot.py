@@ -4,9 +4,10 @@ from discord.ext import commands
 from discord.ui import Select, View
 
 intents = discord.Intents.default()
+intents.message_content = True  # تفعيل محتوى الرسائل لتجنب أي تحذيرات
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# إيدي سيرفرك المحدد
+# إيدي سيرفرك المعتمد حصراً
 MY_GUILD_ID = discord.Object(id=456075967165890562)
 
 class GamesSelect(Select):
@@ -16,11 +17,11 @@ class GamesSelect(Select):
             discord.SelectOption(label="حجر ورقة مقص", description="اللعبة السريعة الشهيرة", emoji="✂️"),
             discord.SelectOption(label="تخمين الرقم", description="اختبر حظك وذكائك", emoji="🔢"),
         ]
-        super().__init__(placeholder="اختر اللعبة اللعينة التي تريدها...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="اختر اللعبة التي تريدها...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         game_name = self.values[0]
-        await interaction.response.send_message(f"لقد اخترت: **{game_name}**! سيتم تفعيلها قريباً يا العظيم لار.", ephemeral=True)
+        await interaction.response.send_message(f"لقد اخترت لعبة: **{game_name}**! سيتم تفعيلها قريباً يا العظيم لار.", ephemeral=True)
 
 class GamesView(View):
     def __init__(self):
@@ -39,20 +40,4 @@ async def games_menu(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
-    print(f"تم تسجيل الدخول: {bot.user}")
-    
-    # مسح الأوامر العالمية القديمة من ذاكرة ديسكورد
-    bot.tree.clear_commands(guild=None)
-    await bot.tree.sync(guild=None)
-    
-    # تنظيف سيرفرك وزرع أمر الألعاب حصراً
-    bot.tree.clear_commands(guild=MY_GUILD_ID)
-    bot.tree.copy_global_to(guild=MY_GUILD_ID)
-    await bot.tree.sync(guild=MY_GUILD_ID)
-    print("تم تنظيف السيرفر ونسف الأوامر القديمة نهائياً!")
-
-token = os.getenv("DISCORD_TOKEN")
-if not token:
-    raise ValueError("تباً! لم يتم العثور على متغير DISCORD_TOKEN.")
-
-bot.run(token)
+    print(f"تم تسجيل الدخول بنجاح: {bot
