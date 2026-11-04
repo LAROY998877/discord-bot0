@@ -6,7 +6,9 @@ from discord.ui import Select, View
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# قائمة الألعاب التفاعلية
+# إيدي سيرفرك اللعين المحدد حصراً للمزامنة الفورية
+MY_GUILD_ID = discord.Object(id=456075967165890562)
+
 class GamesSelect(Select):
     def __init__(self):
         options = [
@@ -37,15 +39,16 @@ async def games_menu(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
-    print(f"تم تسجيل الدخول بنجاح: {bot.user}")
+    print(f"تم تسجيل الدخول: {bot.user}")
     
-    # مسح الأوامر القديمة المتراكمة وإجبار ديسكورد على تحديثها فوراً
-    bot.tree.clear_commands(guild=None)
-    await bot.tree.sync()
-    print("تم مسح الأوامر القديمة ومزامنة الأوامر الجديدة بنجاح!")
+    # تفريغ الأوامر القديمة وزرع أمر الألعاب الجديد في سيرفرك حصراً
+    bot.tree.clear_commands(guild=MY_GUILD_ID)
+    bot.tree.copy_global_to(guild=MY_GUILD_ID)
+    await bot.tree.sync(guild=MY_GUILD_ID)
+    print("تم تنظيف السيرفر وإجبار ديسكورد على إظهار أمر الألعاب وحده!")
 
 token = os.getenv("DISCORD_TOKEN")
 if not token:
-    raise ValueError("تباً! لم يتم العثور على متغير DISCORD_TOKEN في البيئة.")
+    raise ValueError("تباً! لم يتم العثور على متغير DISCORD_TOKEN.")
 
 bot.run(token)
